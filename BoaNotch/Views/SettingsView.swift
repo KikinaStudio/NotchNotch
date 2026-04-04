@@ -4,7 +4,6 @@ struct SettingsView: View {
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var hermesConfig: HermesConfig
-    var onSessionChanged: (String?) -> Void
 
     var body: some View {
         ScrollView {
@@ -161,56 +160,22 @@ struct SettingsView: View {
                     }
                 }
 
-                // ── Sessions ──
-                settingsSection("Sessions") {
-                    if !sessionStore.sources.isEmpty {
-                        HStack(spacing: 6) {
-                            ForEach(sessionStore.sources, id: \.self) { source in
-                                Button {
-                                    sessionStore.selectedSource = sessionStore.selectedSource == source ? nil : source
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: iconForSource(source))
-                                            .font(.system(size: 10))
-                                        Text(source.capitalized)
-                                            .font(.system(size: 11, weight: .medium))
-                                    }
-                                    .foregroundStyle(sessionStore.selectedSource == source ? .white : .white.opacity(0.5))
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(sessionStore.selectedSource == source ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                                    .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                                .pointingHandCursor()
-                            }
-
-                            if sessionStore.selectedSessionId != nil {
-                                Spacer()
-                                Button {
-                                    sessionStore.disconnect()
-                                    onSessionChanged(nil)
-                                } label: {
-                                    Text("Disconnect")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.red.opacity(0.6))
-                                }
-                                .buttonStyle(.plain)
-                                .pointingHandCursor()
-                            }
-                        }
-
-                        if sessionStore.selectedSource != nil {
-                            VStack(spacing: 2) {
-                                ForEach(sessionStore.sessions) { session in
-                                    sessionRow(session)
-                                }
-                            }
-                        }
-                    } else {
-                        Text("No external sessions found")
+                // ── Session ──
+                settingsSection("Session") {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(sessionStore.isLinked ? AppColors.accent : .white.opacity(0.3))
+                        Text(sessionStore.isLinked ? "Telegram linked" : "No Telegram session")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(sessionStore.isLinked ? .white.opacity(0.6) : .white.opacity(0.3))
+                        if sessionStore.isLinked {
+                            Spacer()
+                            Text(sessionStore.selectedSessionId ?? "")
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundStyle(.white.opacity(0.2))
+                                .lineLimit(1)
+                        }
                     }
                 }
             }
@@ -243,55 +208,4 @@ struct SettingsView: View {
         }
     }
 
-    private func sessionRow(_ session: HermesSession) -> some View {
-        let isSelected = sessionStore.selectedSessionId == session.id
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        formatter.locale = Locale(identifier: "fr-FR")
-
-        return Button {
-            sessionStore.selectedSessionId = session.id
-            onSessionChanged(session.id)
-        } label: {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title.isEmpty ? session.id : session.title)
-                        .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? AppColors.accent : .white.opacity(0.7))
-                        .lineLimit(1)
-                    HStack(spacing: 8) {
-                        Text(formatter.string(from: session.startedAt))
-                            .font(.system(size: 9))
-                        Text("\(session.messageCount) msgs")
-                            .font(.system(size: 9))
-                    }
-                    .foregroundStyle(.white.opacity(0.3))
-                }
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppColors.accent)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(isSelected ? AppColors.accent.opacity(0.1) : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-    }
-
-    private func iconForSource(_ source: String) -> String {
-        switch source {
-        case "telegram": return "paperplane.fill"
-        case "slack": return "number"
-        case "discord": return "bubble.left.and.bubble.right.fill"
-        case "whatsapp": return "phone.fill"
-        case "signal": return "lock.fill"
-        default: return "message.fill"
-        }
-    }
 }

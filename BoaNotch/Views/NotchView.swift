@@ -110,9 +110,7 @@ struct NotchView: View {
                     }
 
                     if notchVM.isSettingsOpen {
-                        SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig) { sessionId in
-                            chatVM.sessionId = sessionId
-                        }
+                        SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
                         .padding(.top, 12)
                         .padding(.horizontal, 30)
                         .padding(.bottom, 18)
@@ -183,17 +181,15 @@ struct NotchView: View {
             Spacer()
 
             // Session indicator
-            if let sid = sessionStore.selectedSessionId,
-               let session = sessionStore.sessions.first(where: { $0.id == sid }) {
+            if sessionStore.isLinked {
                 HStack(spacing: 4) {
                     Image(systemName: "paperplane.fill")
                         .font(.system(size: 9))
-                    Text(session.title.isEmpty ? "Linked" : session.title)
+                    Text("Telegram")
                         .font(.system(size: 11))
                         .lineLimit(1)
                 }
                 .foregroundStyle(AppColors.accent.opacity(0.6))
-                .frame(maxWidth: 150)
             }
 
             Spacer()
