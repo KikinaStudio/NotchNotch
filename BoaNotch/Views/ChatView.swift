@@ -53,14 +53,14 @@ struct ChatView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: 220)
-                            .opacity(0.12)
+                            .opacity(0.2)
                     }
-                    Text("Notch Notch ! Who's there ? Your future.")
+                    Text("Notch Notch ! Who's there ? Your futchure.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.12))
+                        .foregroundStyle(.white.opacity(0.2))
                         .multilineTextAlignment(.center)
                 }
-                .padding(.bottom, 8)
+                .padding(.bottom, 60)
             }
 
             // Connection error indicator
