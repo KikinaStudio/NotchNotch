@@ -48,7 +48,7 @@ struct ChatView: View {
                 VStack(spacing: 10) {
                     Text("Notch Notch ! Who's there ? Your futchure.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.2))
+                        .foregroundStyle(.white.opacity(0.35))
                         .multilineTextAlignment(.center)
                     if let resourceURL = Bundle.main.resourceURL,
                        let logoData = try? Data(contentsOf: resourceURL.appendingPathComponent("logo-white.png")),
@@ -57,10 +57,10 @@ struct ChatView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(maxWidth: 220)
-                            .opacity(0.2)
+                            .opacity(0.35)
                     }
                 }
-                .padding(.bottom, 60)
+                .padding(.bottom, 100)
             }
 
             // Connection error indicator
