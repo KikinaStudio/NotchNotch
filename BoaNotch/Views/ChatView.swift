@@ -45,19 +45,19 @@ struct ChatView: View {
             }
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
                     if let resourceURL = Bundle.main.resourceURL,
-                       let iconData = try? Data(contentsOf: resourceURL.appendingPathComponent("menubar-icon.png")),
-                       let nsImage = NSImage(data: iconData) {
+                       let logoData = try? Data(contentsOf: resourceURL.appendingPathComponent("logo-white.png")),
+                       let nsImage = NSImage(data: logoData) {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 32, height: 32)
-                            .opacity(0.15)
+                            .frame(maxWidth: 220)
+                            .opacity(0.12)
                     }
                     Text("Notch Notch ! Who's there ? Your future.")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.15))
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.12))
                         .multilineTextAlignment(.center)
                 }
                 .padding(.bottom, 8)
