@@ -4,21 +4,28 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-# Build
-swift build
+# Kill existing instance
+pkill -f "BoaNotch.app" 2>/dev/null || true
+sleep 0.3
 
-# Create .app bundle
+# Build release
+echo "Building BoaNotch..."
+swift build -c release 2>&1
+
 APP_DIR=".build/BoaNotch.app/Contents"
+rm -rf ".build/BoaNotch.app"
 mkdir -p "$APP_DIR/MacOS"
 
 # Copy binary
-cp .build/debug/BoaNotch "$APP_DIR/MacOS/BoaNotch"
+cp .build/release/BoaNotch "$APP_DIR/MacOS/BoaNotch"
 
-# Copy Info.plist
+# Copy Info.plist — critical for ATS localhost exception
 cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
 
-echo "Built BoaNotch.app"
-echo "Launching..."
+# Sign with entitlements (network.client)
+codesign --force --sign - \
+    --entitlements BoaNotch/BoaNotch.entitlements \
+    ".build/BoaNotch.app" 2>/dev/null || true
 
-# Launch the app
+echo "Launching BoaNotch.app..."
 open .build/BoaNotch.app

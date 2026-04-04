@@ -1,14 +1,20 @@
 import Foundation
 
 class HermesClient {
-    private let baseURL = "http://127.0.0.1:8642/v1/chat/completions"
-    private let parser = SSEParser()
+    private let baseURL = "http://localhost:8642/v1/chat/completions"
 
-    func streamCompletion(messages: [[String: String]]) -> AsyncThrowingStream<String, Error> {
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 300
+        config.timeoutIntervalForResource = 600
+        return URLSession(configuration: config)
+    }()
+
+    func streamCompletion(messages: [[String: String]]) -> AsyncThrowingStream<SSEEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    guard let url = URL(string: baseURL) else {
+                    guard let url = URL(string: self.baseURL) else {
                         continuation.finish(throwing: HermesError.invalidURL)
                         return
                     }
@@ -24,7 +30,7 @@ class HermesClient {
                     ]
                     request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let (bytes, response) = try await self.session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
                         continuation.finish(throwing: HermesError.invalidResponse)
@@ -36,21 +42,24 @@ class HermesClient {
                         return
                     }
 
+                    var parser = SSEParser()
+
                     for try await line in bytes.lines {
                         guard !Task.isCancelled else { break }
 
-                        switch parser.parse(line: line) {
-                        case .delta(let content):
-                            continuation.yield(content)
-                        case .done:
-                            break
-                        case nil:
-                            continue
+                        if let event = parser.parse(line: line) {
+                            switch event {
+                            case .done:
+                                break
+                            default:
+                                continuation.yield(event)
+                            }
                         }
                     }
 
                     continuation.finish()
                 } catch {
+                    print("[BoaNotch] Stream error: \(error)")
                     continuation.finish(throwing: error)
                 }
             }
@@ -62,11 +71,19 @@ class HermesClient {
     }
 
     func healthCheck() async -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:8642/health") else { return false }
+        guard let url = URL(string: "http://localhost:8642/health") else { return false }
         do {
-            let (_, response) = try await URLSession.shared.data(from: url)
-            return (response as? HTTPURLResponse)?.statusCode == 200
+            let (data, response) = try await session.data(from: url)
+            let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            if !ok {
+                let body = String(data: data, encoding: .utf8) ?? "empty"
+                print("[BoaNotch] Health check failed: status=\((response as? HTTPURLResponse)?.statusCode ?? -1) body=\(body)")
+            } else {
+                print("[BoaNotch] Health check OK")
+            }
+            return ok
         } catch {
+            print("[BoaNotch] Health check error: \(error)")
             return false
         }
     }
@@ -79,9 +96,9 @@ enum HermesError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid Hermes API URL"
-        case .invalidResponse: return "Invalid response from Hermes"
-        case .httpError(let code): return "Hermes returned HTTP \(code)"
+        case .invalidURL: return "Invalid API URL"
+        case .invalidResponse: return "Bad response"
+        case .httpError(let code): return "HTTP \(code)"
         }
     }
 }

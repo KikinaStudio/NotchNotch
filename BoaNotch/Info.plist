@@ -16,6 +16,10 @@
     <string>APPL</string>
     <key>CFBundleExecutable</key>
     <string>BoaNotch</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>BoaNotch needs microphone access to record voice memos for Hermes.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>BoaNotch uses speech recognition to transcribe voice memos before sending to Hermes.</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>

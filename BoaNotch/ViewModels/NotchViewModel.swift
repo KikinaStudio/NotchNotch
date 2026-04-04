@@ -18,12 +18,13 @@ enum NotchState: Equatable {
 class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .closed
     @Published var isDragTargeted = false
+    @Published var isRecording = false
 
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
 
-    /// The fully open size for chat
-    let openSize: CGSize = CGSize(width: 620, height: 500)
+    /// The fully open size for chat — wide and compact
+    let openSize: CGSize = CGSize(width: 580, height: 340)
 
     var onStateChange: ((NotchState) -> Void)?
 
@@ -45,8 +46,16 @@ class NotchViewModel: ObservableObject {
 
     // MARK: - Current animated size
 
+    /// Whether to show the thinking indicator on the closed notch
+    var isThinkingClosed: Bool {
+        !isOpen && isStreaming
+    }
+
+    @Published var isStreaming = false
+
     var currentWidth: CGFloat {
-        isOpen ? openSize.width : closedSize.width
+        if isOpen { return openSize.width }
+        return isThinkingClosed ? closedSize.width + 36 : closedSize.width
     }
 
     var currentHeight: CGFloat {
@@ -55,8 +64,8 @@ class NotchViewModel: ObservableObject {
 
     // MARK: - Corner radii (from BoringNotch source)
 
-    var topCornerRadius: CGFloat    { isOpen ? 19 : 6 }
-    var bottomCornerRadius: CGFloat { isOpen ? 24 : 14 }
+    var topCornerRadius: CGFloat    { isOpen ? 14 : 6 }
+    var bottomCornerRadius: CGFloat { isOpen ? 18 : 10 }
 
     // MARK: - Hover
 
@@ -93,6 +102,7 @@ class NotchViewModel: ObservableObject {
     }
 
     func close() {
+        isDragTargeted = false
         withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)) {
             state = .closed
         }

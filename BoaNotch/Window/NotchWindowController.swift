@@ -5,11 +5,12 @@ class NotchWindowController {
     private var panel: NotchPanel?
     private let chatVM: ChatViewModel
     private let notchVM: NotchViewModel
+    private var dragMonitor: Any?
+    private var dragEndMonitor: Any?
 
     // Fixed panel size — never changes, like BoringNotch
-    // Wide enough for the open state (640pt), tall enough for chat + shadow padding
-    static let panelWidth: CGFloat = 640
-    static let panelHeight: CGFloat = 560  // chat open height
+    static let panelWidth: CGFloat = 620
+    static let panelHeight: CGFloat = 380
     static let shadowPadding: CGFloat = 20
 
     init(chatVM: ChatViewModel, notchVM: NotchViewModel) {
@@ -59,6 +60,41 @@ class NotchWindowController {
         }
 
         panel.orderFrontRegardless()
+        setupDragMonitor(for: screen)
+    }
+
+    // MARK: - Global drag monitor
+
+    /// Monitors system-wide drag events. When a file drag enters the notch region, opens the notch.
+    private func setupDragMonitor(for screen: NSScreen) {
+        let notchWidth = Self.closedNotchSize(for: screen).width + 100
+        let screenFrame = screen.frame
+
+        dragMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged]) { [weak self] event in
+            guard let self else { return }
+            let mouseLocation = NSEvent.mouseLocation
+            let mouseFromTop = screenFrame.maxY - mouseLocation.y
+
+            let inNotchRegion = abs(mouseLocation.x - screenFrame.midX) < notchWidth / 2
+                && mouseFromTop < 80
+
+            DispatchQueue.main.async {
+                if inNotchRegion && !self.notchVM.isOpen {
+                    self.notchVM.isDragTargeted = true
+                    self.notchVM.open()
+                }
+            }
+        }
+
+        // When mouse button is released, clear drag state
+        dragEndMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            guard let self else { return }
+            DispatchQueue.main.async {
+                if self.notchVM.isDragTargeted {
+                    self.notchVM.isDragTargeted = false
+                }
+            }
+        }
     }
 
     private func positionPanel(on screen: NSScreen) {
@@ -87,12 +123,10 @@ class NotchWindowController {
         return NSScreen.main
     }
 
-    /// Calculate the exact hardware notch dimensions using macOS APIs
     static func closedNotchSize(for screen: NSScreen) -> CGSize {
         var width: CGFloat = 185
         var height: CGFloat = 32
 
-        // Use auxiliaryTopLeftArea / TopRightArea to get exact notch width
         if let leftPadding = screen.auxiliaryTopLeftArea?.width,
            let rightPadding = screen.auxiliaryTopRightArea?.width {
             width = screen.frame.width - leftPadding - rightPadding + 4
@@ -103,5 +137,10 @@ class NotchWindowController {
         }
 
         return CGSize(width: width, height: height)
+    }
+
+    deinit {
+        if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
+        if let dragEndMonitor { NSEvent.removeMonitor(dragEndMonitor) }
     }
 }

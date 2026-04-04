@@ -3,21 +3,15 @@ import SwiftUI
 struct DropOverlay: View {
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(
-                    style: StrokeStyle(lineWidth: 2, dash: [6, 4])
-                )
-                .foregroundStyle(.blue.opacity(0.8))
+            Color(red: 0.45, green: 0.2, blue: 0.8).opacity(0.85)
 
-            VStack(spacing: 4) {
+            VStack(spacing: 8) {
                 Image(systemName: "arrow.down.doc.fill")
-                    .font(.system(size: 16))
+                    .font(.system(size: 32, weight: .medium))
                 Text("Drop to attach")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 16, weight: .semibold))
             }
-            .foregroundStyle(.blue)
+            .foregroundStyle(.white)
         }
-        .background(.blue.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
