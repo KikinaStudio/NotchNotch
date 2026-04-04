@@ -95,7 +95,9 @@ struct NotchView: View {
 
             if notchVM.isOpen {
                 VStack(spacing: 0) {
-                    if notchVM.isRecording {
+                    if notchVM.isSettingsOpen {
+                        settingsTopBar
+                    } else if notchVM.isRecording {
                         recordingIndicator
                             .transition(.opacity)
                     } else if notchVM.isSearchOpen {
@@ -111,7 +113,7 @@ struct NotchView: View {
                         SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig) { sessionId in
                             chatVM.sessionId = sessionId
                         }
-                        .padding(.top, 4)
+                        .padding(.top, 12)
                         .padding(.horizontal, 30)
                         .padding(.bottom, 18)
                         .background(Color.white.opacity(0.08))
@@ -143,6 +145,29 @@ struct NotchView: View {
         // no overlay here — KITT scanner placed in VStack below
     }
 
+    // MARK: - Settings top bar (close + gear filled)
+
+    private var settingsTopBar: some View {
+        HStack {
+            Button { notchVM.isSettingsOpen = false } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            Spacer()
+
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(AppColors.accent)
+        }
+        .padding(.horizontal, 46)
+        .padding(.top, 36)
+        .padding(.bottom, 4)
+    }
+
     // MARK: - Top bar (search + session indicator)
 
     private var notchTopBar: some View {
@@ -172,6 +197,14 @@ struct NotchView: View {
             }
 
             Spacer()
+
+            Button { notchVM.isSettingsOpen.toggle() } label: {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
         }
         .padding(.horizontal, 46)
         .padding(.top, 36)

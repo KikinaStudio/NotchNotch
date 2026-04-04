@@ -87,18 +87,18 @@ struct ExpandedBarView: View {
             .background(.white.opacity(0.06))
             .clipShape(Capsule())
 
-            // Memory toggle
+            // Incognito toggle
             Button {
                 config.skipMemory.toggle()
                 config.setImmediate("skip_memory", value: config.skipMemory)
             } label: {
-                Image(systemName: "clock.arrow.circlepath")
+                Image(systemName: config.skipMemory ? "eye.slash.fill" : "eye.slash")
                     .font(.system(size: 11))
-                    .foregroundStyle(config.skipMemory ? .white.opacity(0.2) : .blue)
+                    .foregroundStyle(config.skipMemory ? AppColors.accent : .white.opacity(0.25))
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
-            .help(config.skipMemory ? "Memory OFF" : "Memory ON")
+            .help(config.skipMemory ? "Incognito" : "Incognito")
 
             Spacer()
 

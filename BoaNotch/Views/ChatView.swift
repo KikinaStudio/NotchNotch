@@ -138,14 +138,14 @@ struct ChatView: View {
 
                 micButton
 
-                // Brain icon — toggles expanded bar
+                // More icon — toggles expanded bar
                 Button {
                     withAnimation(.easeOut(duration: 0.2)) {
                         notchVM.isExpandedBarOpen.toggle()
                     }
                 } label: {
-                    Image(systemName: "brain.head.profile")
-                        .font(.system(size: 14))
+                    Image(systemName: notchVM.isExpandedBarOpen ? "ellipsis.circle.fill" : "ellipsis.circle")
+                        .font(.system(size: 15))
                         .foregroundStyle(notchVM.isExpandedBarOpen ? AppColors.accent : .white.opacity(0.4))
                 }
                 .buttonStyle(.plain)
@@ -168,15 +168,7 @@ struct ChatView: View {
                     .pointingHandCursor()
                 }
 
-                // Gear icon — opens settings panel
-                Button { notchVM.isSettingsOpen.toggle() } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13))
-                        .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.4))
-                }
-                .buttonStyle(.plain)
-                .pointingHandCursor()
-            }
+}
             .padding(.horizontal, 2)
             .padding(.vertical, 6)
         }
