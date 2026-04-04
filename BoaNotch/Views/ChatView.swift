@@ -45,10 +45,22 @@ struct ChatView: View {
             }
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
-                Text("Ask Hermes anything")
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.2))
-                    .padding(.bottom, 8)
+                VStack(spacing: 8) {
+                    if let resourceURL = Bundle.main.resourceURL,
+                       let iconData = try? Data(contentsOf: resourceURL.appendingPathComponent("menubar-icon.png")),
+                       let nsImage = NSImage(data: iconData) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 32, height: 32)
+                            .opacity(0.15)
+                    }
+                    Text("Notch Notch ! Who's there ? Your future.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.15))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, 8)
             }
 
             // Connection error indicator
