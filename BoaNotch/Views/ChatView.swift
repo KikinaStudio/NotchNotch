@@ -45,7 +45,11 @@ struct ChatView: View {
             }
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
+                    Text("Notch Notch ! Who's there ? Your futchure.")
+                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.2))
+                        .multilineTextAlignment(.center)
                     if let resourceURL = Bundle.main.resourceURL,
                        let logoData = try? Data(contentsOf: resourceURL.appendingPathComponent("logo-white.png")),
                        let nsImage = NSImage(data: logoData) {
@@ -55,10 +59,6 @@ struct ChatView: View {
                             .frame(maxWidth: 220)
                             .opacity(0.2)
                     }
-                    Text("Notch Notch ! Who's there ? Your futchure.")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.2))
-                        .multilineTextAlignment(.center)
                 }
                 .padding(.bottom, 60)
             }
