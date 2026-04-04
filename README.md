@@ -177,15 +177,45 @@ On first use, macOS will prompt for:
 
 ---
 
-## Build & Run
+## Install
+
+### Download DMG
+
+Download `BoaNotch-vX.Y.Z.dmg` from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag BoaNotch.app to Applications.
+
+**Gatekeeper will block it** (unsigned app). Fix:
 
 ```bash
-git clone https://github.com/your-org/boanotch.git
-cd boanotch
+xattr -cr /Applications/BoaNotch.app
+```
+
+Then open normally. You only need to do this once.
+
+### Homebrew (coming soon)
+
+```bash
+brew install --cask KikinaStudio/tap/boanotch --no-quarantine
+```
+
+The `--no-quarantine` flag bypasses Gatekeeper automatically.
+
+### Build from source
+
+```bash
+git clone https://github.com/KikinaStudio/BoaNotch.git
+cd BoaNotch
 bash scripts/run.sh
 ```
 
-The `run.sh` script: builds release binary via SwiftPM, creates `.app` bundle with Info.plist, code-signs with entitlements, launches. No Xcode required — only the Command Line Tools.
+No Xcode required — only the Command Line Tools.
+
+### Build universal binary + DMG
+
+```bash
+bash scripts/release.sh
+```
+
+Builds for Apple Silicon + Intel, creates a DMG in `.build/`.
 
 ---
 
