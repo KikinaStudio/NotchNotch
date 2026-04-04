@@ -48,12 +48,8 @@ class HermesClient {
                         guard !Task.isCancelled else { break }
 
                         if let event = parser.parse(line: line) {
-                            switch event {
-                            case .done:
-                                break
-                            default:
-                                continuation.yield(event)
-                            }
+                            if case .done = event { break }
+                            continuation.yield(event)
                         }
                     }
 

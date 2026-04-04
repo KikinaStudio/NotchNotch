@@ -20,10 +20,14 @@ class SpeechTranscriber {
         request.shouldReportPartialResults = false
 
         return await withCheckedContinuation { cont in
+            var resumed = false
             recognizer.recognitionTask(with: request) { result, error in
+                guard !resumed else { return }
                 if let result, result.isFinal {
+                    resumed = true
                     cont.resume(returning: result.bestTranscription.formattedString)
                 } else if error != nil {
+                    resumed = true
                     cont.resume(returning: nil)
                 }
             }

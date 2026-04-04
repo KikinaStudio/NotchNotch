@@ -63,7 +63,7 @@ struct MessageBubble: View {
                 .foregroundStyle(.white.opacity(0.35))
             }
             .buttonStyle(.plain)
-            .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .pointingHandCursor()
 
             if showThinking {
                 Text(message.thinkingContent)
@@ -100,7 +100,7 @@ struct MessageBubble: View {
                 .foregroundStyle(.white.opacity(0.35))
             }
             .buttonStyle(.plain)
-            .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .pointingHandCursor()
 
             if showToolCalls {
                 Text(message.toolCallContent)
@@ -133,7 +133,7 @@ struct MessageBubble: View {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
                                     .font(.system(size: 14))
-                                    .foregroundStyle(isUser ? Color(red: 0.75, green: 0.6, blue: 1.0) : .white.opacity(0.88))
+                                    .foregroundStyle(isUser ? AppColors.accent : .white.opacity(0.88))
                                     .textSelection(.enabled)
 
                                 if message.isStreaming && idx == blocks.count - 1 && part == parts.last {
@@ -260,9 +260,7 @@ struct MessageBubble: View {
             .frame(maxWidth: 300)
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .pointingHandCursor()
     }
 
     // MARK: - Attachment card (same style, subtler)
@@ -385,20 +383,6 @@ struct MessageBubble: View {
             ?? AttributedString(text)
     }
 
-    private func sfIconForFileType(_ type: String) -> String {
-        switch type {
-        case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff", "bmp": return "photo"
-        case "pdf": return "doc.richtext"
-        case "txt", "md": return "doc.text"
-        case "swift", "py", "js", "ts", "rs", "go", "c", "cpp", "h", "java", "rb": return "chevron.left.forwardslash.chevron.right"
-        case "json", "yaml", "yml", "toml", "xml": return "curlybraces"
-        case "csv": return "tablecells"
-        case "mp3", "wav", "m4a", "aac", "ogg", "flac": return "waveform"
-        case "mp4", "mov", "avi", "mkv": return "film"
-        case "zip", "tar", "gz", "rar": return "archivebox"
-        default: return "doc"
-        }
-    }
 }
 
 // MARK: - Animated streaming dot

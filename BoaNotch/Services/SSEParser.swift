@@ -11,6 +11,7 @@ struct SSEParser {
     private var insideThink = false
     private var toolMode = false
     private var sawCleanResponse = false
+    private var pendingRegular = ""
 
     mutating func parse(line: String) -> SSEEvent? {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -23,6 +24,7 @@ struct SSEParser {
             insideThink = false
             toolMode = false
             sawCleanResponse = false
+            pendingRegular = ""
             return .done
         }
 
@@ -63,7 +65,8 @@ struct SSEParser {
 
     private mutating func routeContent(_ text: String) -> SSEEvent? {
         var thinkBuf = ""
-        var regularBuf = ""
+        var regularBuf = pendingRegular
+        pendingRegular = ""
         var remaining = text
 
         while !remaining.isEmpty {
@@ -89,6 +92,7 @@ struct SSEParser {
         }
 
         if !thinkBuf.isEmpty {
+            if !regularBuf.isEmpty { pendingRegular = regularBuf }
             return .thinking(thinkBuf)
         }
 

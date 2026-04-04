@@ -90,7 +90,7 @@ struct ChatView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(.white)
-                .tint(Color(red: 0.75, green: 0.6, blue: 1.0))
+                .tint(AppColors.accent)
                 .lineLimit(1...4)
                 .focused($isInputFocused)
                 .onSubmit { chatVM.send() }
@@ -101,7 +101,7 @@ struct ChatView: View {
                     .foregroundStyle(.white.opacity(0.5))
             }
             .buttonStyle(.plain)
-            .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .pointingHandCursor()
 
             micButton
 
@@ -112,7 +112,7 @@ struct ChatView: View {
                         .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
-                .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                .pointingHandCursor()
             } else {
                 Button { chatVM.send() } label: {
                     Image(systemName: "arrow.up.circle.fill")
@@ -121,7 +121,7 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend)
-                .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                .pointingHandCursor()
             }
         }
         .padding(.horizontal, 2)
@@ -140,17 +140,17 @@ struct ChatView: View {
                     .foregroundStyle(.white.opacity(0.5))
             }
             .buttonStyle(.plain)
-            .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .pointingHandCursor()
 
         case .recording:
             Button { chatVM.toggleVoiceRecord() } label: {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 14))
-                    .foregroundStyle(Color(red: 0.75, green: 0.6, blue: 1.0))
+                    .foregroundStyle(AppColors.accent)
             }
             .buttonStyle(.plain)
             .modifier(PulsingModifier())
-            .onHover { h in if h { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            .pointingHandCursor()
 
         case .transcribing:
             SpinningRing()
@@ -195,7 +195,7 @@ struct SpinningRing: View {
     var body: some View {
         Circle()
             .trim(from: 0, to: 0.7)
-            .stroke(Color(red: 0.75, green: 0.6, blue: 1.0), lineWidth: 1.5)
+            .stroke(AppColors.accent, lineWidth: 1.5)
             .frame(width: 14, height: 14)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isSpinning)
@@ -209,7 +209,7 @@ struct PendingAttachmentChip: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: sfIconForType(attachment.fileType))
+            Image(systemName: sfIconForFileType(attachment.fileType))
                 .font(.system(size: 9))
             Text(attachment.fileName)
                 .font(.system(size: 10))
@@ -227,13 +227,4 @@ struct PendingAttachmentChip: View {
         .clipShape(Capsule())
     }
 
-    private func sfIconForType(_ type: String) -> String {
-        switch type {
-        case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg": return "photo"
-        case "pdf": return "doc.richtext"
-        case "txt", "md": return "doc.text"
-        case "mp3", "wav", "m4a", "aac": return "waveform"
-        default: return "doc"
-        }
-    }
 }

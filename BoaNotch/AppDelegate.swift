@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Self.shared = self
 
         chatVM.notchVM = notchVM
+        chatVM.audioRecorder = audioRecorder
 
         panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM)
         panelController?.showPanel()
@@ -71,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }, 1, &eventType, nil, nil)
 
         // Ctrl+Shift+R — toggle recording
-        var recID = EventHotKeyID(signature: OSType(0x424E4348), id: 1)
+        let recID = EventHotKeyID(signature: OSType(0x424E4348), id: 1)
         RegisterEventHotKey(UInt32(kVK_ANSI_R), UInt32(controlKey | shiftKey), recID, GetApplicationEventTarget(), 0, &hotKeyRef)
 
         // Enter — confirm and send recording (registered dynamically in toggleRecording)
@@ -79,7 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func registerEnterHotkey() {
         guard enterHotKeyRef == nil else { return }
-        var enterID = EventHotKeyID(signature: OSType(0x424E4348), id: 2)
+        let enterID = EventHotKeyID(signature: OSType(0x424E4348), id: 2)
         RegisterEventHotKey(UInt32(kVK_Return), 0, enterID, GetApplicationEventTarget(), 0, &enterHotKeyRef)
     }
 

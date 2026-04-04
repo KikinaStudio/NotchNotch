@@ -124,13 +124,13 @@ struct NotchView: View {
     private var recordingIndicator: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color(red: 0.65, green: 0.3, blue: 1.0))
+                .fill(AppColors.recordingDot)
                 .frame(width: 10, height: 10)
                 .modifier(PulsingModifier())
 
             Text("Recording...")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color(red: 0.75, green: 0.5, blue: 1.0))
+                .foregroundStyle(AppColors.recordingLabel)
 
             Text("Ctrl+Shift+R to stop")
                 .font(.system(size: 10))
@@ -140,8 +140,7 @@ struct NotchView: View {
         .padding(.bottom, 4)
     }
 
-    @discardableResult
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+    private func handleDrop(_ providers: [NSItemProvider]) {
         for provider in providers {
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
                 guard let data = data as? Data,
@@ -155,7 +154,6 @@ struct NotchView: View {
                 }
             }
         }
-        return true
     }
 }
 
@@ -163,7 +161,6 @@ struct NotchView: View {
 
 struct KITTScanner: View {
     let width: CGFloat
-    @State private var t: CGFloat = 0
 
     var body: some View {
         TimelineView(.animation) { timeline in
@@ -186,7 +183,7 @@ struct KITTScanner: View {
                     (6,  0.9),   // hot center
                 ]
 
-                let violet = Color(red: 0.55, green: 0.15, blue: 1.0)
+                let violet = AppColors.kittViolet
 
                 for (spread, alpha) in layers {
                     let rect = CGRect(
@@ -237,17 +234,14 @@ struct KITTScanner: View {
 
 struct BrailleSpinner: View {
     private static let frames: [String] = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
-    @State private var index = 0
 
     var body: some View {
-        Text(Self.frames[index])
-            .font(.system(size: 14, weight: .medium, design: .monospaced))
-            .foregroundStyle(Color(red: 0.75, green: 0.6, blue: 1.0))
-            .onAppear {
-                Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
-                    index = (index + 1) % Self.frames.count
-                }
-            }
+        TimelineView(.periodic(from: .now, by: 0.08)) { timeline in
+            let idx = Int(timeline.date.timeIntervalSinceReferenceDate / 0.08) % Self.frames.count
+            Text(Self.frames[idx])
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(AppColors.accent)
+        }
     }
 }
 

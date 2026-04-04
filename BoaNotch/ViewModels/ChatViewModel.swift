@@ -16,7 +16,7 @@ class ChatViewModel: ObservableObject {
     @Published var voiceState: VoiceState = .idle
 
     private let client = HermesClient()
-    private let voiceRecorder = AudioRecorder()
+    var audioRecorder: AudioRecorder?
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?
 
@@ -33,8 +33,6 @@ class ChatViewModel: ObservableObject {
     init() {
         Task { @MainActor in
             let ok = await client.healthCheck()
-            let msg = ok ? "CONNECTED" : "OFFLINE"
-            try? msg.write(toFile: "/tmp/boanotch-health.log", atomically: true, encoding: .utf8)
             if !ok {
                 connectionError = "Hermes offline"
             }
@@ -116,10 +114,6 @@ class ChatViewModel: ObservableObject {
             } catch {
                 if !Task.isCancelled {
                     let desc = error.localizedDescription
-                    // Log to file so we can debug
-                    let logMsg = "SEND ERROR: \(desc)\n\(error)"
-                    try? logMsg.write(toFile: "/tmp/boanotch-send-error.log", atomically: true, encoding: .utf8)
-
                     if desc.contains("Could not connect") || desc.contains("Connection refused") {
                         connectionError = "Hermes offline"
                     } else if desc.contains("timed out") || desc.contains("Timeout") {
@@ -202,10 +196,10 @@ class ChatViewModel: ObservableObject {
     func toggleVoiceRecord() {
         switch voiceState {
         case .idle:
-            voiceRecorder.startRecording()
+            audioRecorder?.startRecording()
             voiceState = .recording
         case .recording:
-            guard let url = voiceRecorder.stopRecording() else {
+            guard let url = audioRecorder?.stopRecording() else {
                 voiceState = .idle
                 return
             }

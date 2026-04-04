@@ -3,7 +3,7 @@ import SwiftUI
 struct DropOverlay: View {
     var body: some View {
         ZStack {
-            Color(red: 0.45, green: 0.2, blue: 0.8).opacity(0.85)
+            AppColors.dropOverlay.opacity(0.85)
 
             VStack(spacing: 8) {
                 Image(systemName: "arrow.down.doc.fill")

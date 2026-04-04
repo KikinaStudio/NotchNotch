@@ -1,18 +1,9 @@
 import SwiftUI
-import Combine
 
 enum NotchState: Equatable {
     case closed
     case open
     case toast(String)
-
-    static func == (lhs: NotchState, rhs: NotchState) -> Bool {
-        switch (lhs, rhs) {
-        case (.closed, .closed), (.open, .open): return true
-        case (.toast(let a), .toast(let b)): return a == b
-        default: return false
-        }
-    }
 }
 
 class NotchViewModel: ObservableObject {
