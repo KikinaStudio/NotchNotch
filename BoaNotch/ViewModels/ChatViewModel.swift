@@ -14,6 +14,7 @@ class ChatViewModel: ObservableObject {
     @Published var isStreaming = false
     @Published var connectionError: String?
     @Published var voiceState: VoiceState = .idle
+    @Published var showNewConversationConfirm = false
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -136,6 +137,14 @@ class ChatViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    func confirmNewConversation() {
+        showNewConversationConfirm = false
+        cancelStream()
+        messages.removeAll()
+        draft = "/new"
+        send()
     }
 
     func cancelStream() {

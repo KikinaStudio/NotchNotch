@@ -8,7 +8,8 @@ let package = Package(
         .executableTarget(
             name: "BoaNotch",
             path: "BoaNotch",
-            exclude: ["Info.plist", "BoaNotch.entitlements"]
+            exclude: ["Info.plist", "BoaNotch.entitlements"],
+            resources: [.copy("Resources")]
         )
     ]
 )

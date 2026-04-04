@@ -182,8 +182,37 @@ struct NotchView: View {
 
             Spacer()
 
-            // Session indicator
-            if let sid = sessionStore.selectedSessionId,
+            // Center: session indicator or new conversation confirmation
+            if chatVM.showNewConversationConfirm {
+                HStack(spacing: 8) {
+                    Text("New conversation?")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { chatVM.confirmNewConversation() }
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.green.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) { chatVM.showNewConversationConfirm = false }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.red.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(.white.opacity(0.06))
+                .clipShape(Capsule())
+                .transition(.opacity)
+            } else if let sid = sessionStore.selectedSessionId,
                let session = sessionStore.sessions.first(where: { $0.id == sid }) {
                 HStack(spacing: 4) {
                     Image(systemName: "paperplane.fill")
@@ -197,6 +226,24 @@ struct NotchView: View {
             }
 
             Spacer()
+
+            // New conversation
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { chatVM.showNewConversationConfirm = true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(3))
+                    if chatVM.showNewConversationConfirm {
+                        withAnimation(.easeOut(duration: 0.15)) { chatVM.showNewConversationConfirm = false }
+                    }
+                }
+            } label: {
+                Image(systemName: "plus.bubble")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+            .padding(.trailing, 6)
 
             Button { notchVM.isSettingsOpen.toggle() } label: {
                 Image(systemName: "gearshape")
