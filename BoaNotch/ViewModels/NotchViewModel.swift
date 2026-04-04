@@ -10,6 +10,9 @@ class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .closed
     @Published var isDragTargeted = false
     @Published var isRecording = false
+    @Published var isSettingsOpen = false
+    @Published var isSearchOpen = false
+    @Published var isExpandedBarOpen = false
 
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)

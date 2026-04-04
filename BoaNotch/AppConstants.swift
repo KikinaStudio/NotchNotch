@@ -9,6 +9,7 @@ enum AppColors {
     static let recordingLabel = Color(red: 0.75, green: 0.5, blue: 1.0)
     static let kittViolet = Color(red: 0.55, green: 0.15, blue: 1.0)
     static let dropOverlay = Color(red: 0.45, green: 0.2, blue: 0.8)
+    static let searchHighlight = Color(red: 0.75, green: 0.6, blue: 1.0).opacity(0.3)
 }
 
 // MARK: - File type icons

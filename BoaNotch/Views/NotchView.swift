@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 struct NotchView: View {
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var notchVM: NotchViewModel
+    @ObservedObject var sessionStore: SessionStore
+    @ObservedObject var searchVM: SearchViewModel
+    @ObservedObject var hermesConfig: HermesConfig
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -95,12 +98,33 @@ struct NotchView: View {
                     if notchVM.isRecording {
                         recordingIndicator
                             .transition(.opacity)
+                    } else if notchVM.isSearchOpen {
+                        SearchBarView(searchVM: searchVM) {
+                            searchVM.close()
+                            notchVM.isSearchOpen = false
+                        }
+                    } else {
+                        notchTopBar
                     }
 
-                    ChatView(chatVM: chatVM, notchVM: notchVM)
-                        .padding(.top, notchVM.isRecording ? 8 : 40)
-                        .padding(.horizontal, 38)
+                    if notchVM.isSettingsOpen {
+                        SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig) { sessionId in
+                            chatVM.sessionId = sessionId
+                        }
+                        .padding(.top, 4)
+                        .padding(.horizontal, 30)
                         .padding(.bottom, 18)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .padding(.horizontal, 30)
+                        .padding(.bottom, 18)
+                        .transition(.opacity)
+                    } else {
+                        ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
+                            .padding(.top, notchVM.isRecording ? 8 : 4)
+                            .padding(.horizontal, 38)
+                            .padding(.bottom, 18)
+                    }
                 }
                 .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
             }
@@ -117,6 +141,41 @@ struct NotchView: View {
             )
         )
         // no overlay here — KITT scanner placed in VStack below
+    }
+
+    // MARK: - Top bar (search + session indicator)
+
+    private var notchTopBar: some View {
+        HStack {
+            Button { notchVM.isSearchOpen = true } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            Spacer()
+
+            // Session indicator
+            if let sid = sessionStore.selectedSessionId,
+               let session = sessionStore.sessions.first(where: { $0.id == sid }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 9))
+                    Text(session.title.isEmpty ? "Linked" : session.title)
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(AppColors.accent.opacity(0.6))
+                .frame(maxWidth: 150)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 46)
+        .padding(.top, 36)
+        .padding(.bottom, 4)
     }
 
     // MARK: - Recording indicator (inside open notch)
@@ -234,13 +293,15 @@ struct KITTScanner: View {
 
 struct BrailleSpinner: View {
     private static let frames: [String] = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+    var size: CGFloat = 14
+    var color: Color = AppColors.accent
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.08)) { timeline in
             let idx = Int(timeline.date.timeIntervalSinceReferenceDate / 0.08) % Self.frames.count
             Text(Self.frames[idx])
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
-                .foregroundStyle(AppColors.accent)
+                .font(.system(size: size, weight: .medium, design: .monospaced))
+                .foregroundStyle(color)
         }
     }
 }

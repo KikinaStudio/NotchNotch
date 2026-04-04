@@ -17,6 +17,11 @@ class ChatViewModel: ObservableObject {
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
+
+    var sessionId: String? {
+        get { client.sessionId }
+        set { client.sessionId = newValue }
+    }
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?
 

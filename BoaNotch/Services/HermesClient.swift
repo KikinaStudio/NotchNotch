@@ -2,6 +2,7 @@ import Foundation
 
 class HermesClient {
     private let baseURL = "http://localhost:8642/v1/chat/completions"
+    var sessionId: String?
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -22,6 +23,9 @@ class HermesClient {
                     var request = URLRequest(url: url)
                     request.httpMethod = "POST"
                     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    if let sessionId = self.sessionId, !sessionId.isEmpty {
+                        request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
+                    }
 
                     let body: [String: Any] = [
                         "model": "hermes-agent",

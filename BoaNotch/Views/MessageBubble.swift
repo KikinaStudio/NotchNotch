@@ -3,6 +3,7 @@ import AppKit
 
 struct MessageBubble: View {
     let message: ChatMessage
+    var searchQuery: String? = nil
 
     private var isUser: Bool { message.role == .user }
 
@@ -378,9 +379,23 @@ struct MessageBubble: View {
     }
 
     private func markdownString(_ text: String) -> AttributedString {
-        // inlineOnly preserves whitespace/newlines — .full eats them
-        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+        var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+
+        // Apply search highlighting
+        if let query = searchQuery, !query.isEmpty {
+            let lower = String(result.characters).lowercased()
+            let q = query.lowercased()
+            var searchStart = lower.startIndex
+            while let range = lower.range(of: q, range: searchStart..<lower.endIndex) {
+                let attrStart = result.characters.index(result.startIndex, offsetBy: lower.distance(from: lower.startIndex, to: range.lowerBound))
+                let attrEnd = result.characters.index(attrStart, offsetBy: q.count)
+                result[attrStart..<attrEnd].backgroundColor = .purple.opacity(0.35)
+                searchStart = range.upperBound
+            }
+        }
+
+        return result
     }
 
 }

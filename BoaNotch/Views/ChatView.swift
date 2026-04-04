@@ -3,6 +3,8 @@ import SwiftUI
 struct ChatView: View {
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var notchVM: NotchViewModel
+    @ObservedObject var searchVM: SearchViewModel
+    @ObservedObject var hermesConfig: HermesConfig
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
@@ -16,7 +18,7 @@ struct ChatView: View {
                                 .frame(maxHeight: .infinity)
 
                             ForEach(chatVM.messages) { message in
-                                MessageBubble(message: message)
+                                MessageBubble(message: message, searchQuery: searchVM.query)
                                     .id(message.id)
                             }
                         }
@@ -28,6 +30,8 @@ struct ChatView: View {
                     .defaultScrollAnchor(.bottom)
                     .onChange(of: chatVM.messages.count) { scrollToBottom(proxy) }
                     .onChange(of: chatVM.messages.last?.content) { scrollToBottom(proxy) }
+                    .onChange(of: searchVM.currentMatchIndex) { scrollToSearch(proxy) }
+                    .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
                 }
 
                 // Fade to black at the bottom of the scroll area
@@ -77,6 +81,26 @@ struct ChatView: View {
                 }
             }
 
+            // Iteration warning banner
+            if hermesConfig.iterationPercentage >= 0.80 {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                    Text(hermesConfig.iterationPercentage >= 0.95
+                         ? "Iteration limit reached (\(hermesConfig.currentIteration)/\(hermesConfig.effectiveMaxIterations))"
+                         : "Approaching iteration limit (\(hermesConfig.currentIteration)/\(hermesConfig.effectiveMaxIterations))")
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundStyle(hermesConfig.iterationPercentage >= 0.95 ? .red : .orange)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .frame(maxWidth: .infinity)
+                .background((hermesConfig.iterationPercentage >= 0.95 ? Color.red : .orange).opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 2)
+                .transition(.opacity)
+            }
+
             inputBar
         }
         .onAppear { isInputFocused = true }
@@ -85,47 +109,86 @@ struct ChatView: View {
     // MARK: - Input bar (bare text field, buttons on right)
 
     private var inputBar: some View {
-        HStack(alignment: .center, spacing: 10) {
-            TextField("", text: $chatVM.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(size: 13))
-                .foregroundStyle(.white)
-                .tint(AppColors.accent)
-                .lineLimit(1...4)
-                .focused($isInputFocused)
-                .onSubmit { chatVM.send() }
-
-            Button { openFilePicker() } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
+        VStack(spacing: 0) {
+            // Expanded bar (brain toggle)
+            if notchVM.isExpandedBarOpen {
+                ExpandedBarView(config: hermesConfig, notchVM: notchVM)
+                    .padding(.horizontal, 2)
+                    .padding(.bottom, 6)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
 
-            micButton
+            HStack(alignment: .center, spacing: 10) {
+                TextField("", text: $chatVM.draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.white)
+                    .tint(AppColors.accent)
+                    .lineLimit(1...4)
+                    .focused($isInputFocused)
+                    .onSubmit { sendAndCloseBar() }
 
-            if chatVM.isStreaming {
-                Button { chatVM.cancelStream() } label: {
-                    Image(systemName: "stop.circle.fill")
+                Button { openFilePicker() } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.5))
-                        .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
-            } else {
-                Button { chatVM.send() } label: {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .foregroundStyle(canSend ? .white.opacity(0.85) : .white.opacity(0.15))
-                        .font(.system(size: 18))
+
+                micButton
+
+                // Brain icon — toggles expanded bar
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        notchVM.isExpandedBarOpen.toggle()
+                    }
+                } label: {
+                    Image(systemName: "brain.head.profile")
+                        .font(.system(size: 14))
+                        .foregroundStyle(notchVM.isExpandedBarOpen ? AppColors.accent : .white.opacity(0.4))
                 }
                 .buttonStyle(.plain)
-                .disabled(!canSend)
                 .pointingHandCursor()
+
+                if chatVM.isStreaming {
+                    Button { chatVM.cancelStream() } label: {
+                        BrailleSpinner(size: 16, color: .white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                } else {
+                    Button { sendAndCloseBar() } label: {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .foregroundStyle(canSend ? .white.opacity(0.85) : .white.opacity(0.15))
+                            .font(.system(size: 18))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canSend)
+                    .pointingHandCursor()
+                }
+
+                // Gear icon — opens settings panel
+                Button { notchVM.isSettingsOpen.toggle() } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13))
+                        .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 6)
+        }
+    }
+
+    private func sendAndCloseBar() {
+        chatVM.send()
+        if notchVM.isExpandedBarOpen {
+            withAnimation(.easeOut(duration: 0.2)) {
+                notchVM.isExpandedBarOpen = false
             }
         }
-        .padding(.horizontal, 2)
-        .padding(.vertical, 6)
     }
 
     // MARK: - Mic button (idle / recording / transcribing)
@@ -166,6 +229,14 @@ struct ChatView: View {
         if let lastId = chatVM.messages.last?.id {
             withAnimation(.easeOut(duration: 0.15)) {
                 proxy.scrollTo(lastId, anchor: .bottom)
+            }
+        }
+    }
+
+    private func scrollToSearch(_ proxy: ScrollViewProxy) {
+        if let msgId = searchVM.currentMessageId {
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(msgId, anchor: .center)
             }
         }
     }

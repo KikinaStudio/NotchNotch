@@ -7,6 +7,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let chatVM = ChatViewModel()
     let notchVM = NotchViewModel()
     let audioRecorder = AudioRecorder()
+    let sessionStore = SessionStore()
+    let searchVM = SearchViewModel()
+    let hermesConfig = HermesConfig()
     private var statusItem: NSStatusItem?
     private var hotKeyRef: EventHotKeyRef?
     private var enterHotKeyRef: EventHotKeyRef?
@@ -18,8 +21,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         chatVM.notchVM = notchVM
         chatVM.audioRecorder = audioRecorder
+        chatVM.sessionId = sessionStore.selectedSessionId
+        searchVM.chatVM = chatVM
 
-        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM)
+        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig)
         panelController?.showPanel()
 
         registerGlobalHotkey()
