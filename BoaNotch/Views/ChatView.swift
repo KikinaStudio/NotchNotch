@@ -50,9 +50,7 @@ struct ChatView: View {
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
                         .multilineTextAlignment(.center)
-                    if let resourceURL = Bundle.main.resourceURL,
-                       let logoData = try? Data(contentsOf: resourceURL.appendingPathComponent("logo-white.png")),
-                       let nsImage = NSImage(data: logoData) {
+                    if let nsImage = Self.loadLogo() {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -227,6 +225,22 @@ struct ChatView: View {
     private var canSend: Bool {
         !chatVM.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !chatVM.pendingAttachments.isEmpty
+    }
+
+    private static func loadLogo() -> NSImage? {
+        // Try Bundle.main.resourceURL (Contents/Resources/)
+        if let url = Bundle.main.resourceURL?.appendingPathComponent("logo-white.png"),
+           let img = NSImage(contentsOf: url) { return img }
+        // Try resourcePath
+        if let path = Bundle.main.resourcePath {
+            let url = URL(fileURLWithPath: path).appendingPathComponent("logo-white.png")
+            if let img = NSImage(contentsOf: url) { return img }
+        }
+        // Try next to executable
+        if let execURL = Bundle.main.executableURL?.deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Resources/logo-white.png"),
+           let img = NSImage(contentsOf: execURL) { return img }
+        return nil
     }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
