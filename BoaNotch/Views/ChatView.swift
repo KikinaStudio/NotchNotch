@@ -46,7 +46,7 @@ struct ChatView: View {
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
                 VStack(spacing: 10) {
-                    Text("Notch Notch ! Who's there ? Your futchure.")
+                    Text("notch notch ! Who's there ? Your futchure.")
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
                         .multilineTextAlignment(.center)
@@ -228,15 +228,12 @@ struct ChatView: View {
     }
 
     private static func loadLogo() -> NSImage? {
-        // Try Bundle.main.resourceURL (Contents/Resources/)
+        // SPM resource bundle
+        if let url = Bundle.module.url(forResource: "logo-white", withExtension: "png", subdirectory: "Resources"),
+           let img = NSImage(contentsOf: url) { return img }
+        // Fallbacks for .app bundle
         if let url = Bundle.main.resourceURL?.appendingPathComponent("logo-white.png"),
            let img = NSImage(contentsOf: url) { return img }
-        // Try resourcePath
-        if let path = Bundle.main.resourcePath {
-            let url = URL(fileURLWithPath: path).appendingPathComponent("logo-white.png")
-            if let img = NSImage(contentsOf: url) { return img }
-        }
-        // Try next to executable
         if let execURL = Bundle.main.executableURL?.deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Resources/logo-white.png"),
            let img = NSImage(contentsOf: execURL) { return img }

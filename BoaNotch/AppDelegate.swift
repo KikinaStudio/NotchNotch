@@ -10,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let sessionStore = SessionStore()
     let searchVM = SearchViewModel()
     let hermesConfig = HermesConfig()
+    let onboardingVM = OnboardingViewModel()
     private var statusItem: NSStatusItem?
     private var hotKeyRef: EventHotKeyRef?
     private var enterHotKeyRef: EventHotKeyRef?
@@ -24,8 +25,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         chatVM.sessionId = sessionStore.selectedSessionId
         searchVM.chatVM = chatVM
 
-        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig)
+        onboardingVM.notchVM = notchVM
+        onboardingVM.hermesConfig = hermesConfig
+
+        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM)
         panelController?.showPanel()
+
+        // If onboarding is needed, open notch immediately and suppress auto-close
+        if onboardingVM.needsOnboarding {
+            notchVM.suppressAutoClose = true
+            notchVM.open()
+        }
 
         registerGlobalHotkey()
         setupMenuBarItem()
@@ -37,21 +47,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            if let resourceURL = Bundle.main.resourceURL,
-               let image = NSImage(contentsOf: resourceURL.appendingPathComponent("menubar-icon.png")) {
+            // Try SPM resource bundle first, then .app bundle fallback
+            let image: NSImage? = {
+                if let url = Bundle.module.url(forResource: "menubar-icon", withExtension: "png", subdirectory: "Resources"),
+                   let img = NSImage(contentsOf: url) { return img }
+                if let url = Bundle.main.resourceURL?.appendingPathComponent("menubar-icon.png"),
+                   let img = NSImage(contentsOf: url) { return img }
+                return nil
+            }()
+
+            if let image {
                 image.size = NSSize(width: 16, height: 16)
                 image.isTemplate = true
                 button.image = image
             } else {
-                button.image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "BoaNotch")
+                button.image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "notchnotch")
                 button.image?.size = NSSize(width: 16, height: 16)
             }
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Open BoaNotch", action: #selector(openNotch), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Open notchnotch", action: #selector(openNotch), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit BoaNotch", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit notchnotch", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem?.menu = menu
     }
 
@@ -142,6 +160,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 chatVM.pendingAttachments = [attachment]
                 chatVM.draft = "[Voice memo — transcription failed]"
                 chatVM.send()
+            }
+        }
+    }
+
+    // MARK: - OAuth URL handler
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            if url.scheme == "boanotch" && url.host == "oauth" {
+                onboardingVM.handleOAuthCallback(url: url)
             }
         }
     }

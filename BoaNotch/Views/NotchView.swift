@@ -7,6 +7,7 @@ struct NotchView: View {
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var searchVM: SearchViewModel
     @ObservedObject var hermesConfig: HermesConfig
+    @ObservedObject var onboardingVM: OnboardingViewModel
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -94,39 +95,47 @@ struct NotchView: View {
             }
 
             if notchVM.isOpen {
-                VStack(spacing: 0) {
-                    if notchVM.isSettingsOpen {
-                        settingsTopBar
-                    } else if notchVM.isRecording {
-                        recordingIndicator
-                            .transition(.opacity)
-                    } else if notchVM.isSearchOpen {
-                        SearchBarView(searchVM: searchVM) {
-                            searchVM.close()
-                            notchVM.isSearchOpen = false
+                if onboardingVM.needsOnboarding {
+                    OnboardingContainerView(onboardingVM: onboardingVM)
+                        .padding(.top, 36)
+                        .padding(.horizontal, 38)
+                        .padding(.bottom, 18)
+                        .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
+                } else {
+                    VStack(spacing: 0) {
+                        if notchVM.isSettingsOpen {
+                            settingsTopBar
+                        } else if notchVM.isRecording {
+                            recordingIndicator
+                                .transition(.opacity)
+                        } else if notchVM.isSearchOpen {
+                            SearchBarView(searchVM: searchVM) {
+                                searchVM.close()
+                                notchVM.isSearchOpen = false
+                            }
+                        } else {
+                            notchTopBar
                         }
-                    } else {
-                        notchTopBar
-                    }
 
-                    if notchVM.isSettingsOpen {
-                        SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
-                        .padding(.top, 12)
-                        .padding(.horizontal, 30)
-                        .padding(.bottom, 18)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .padding(.horizontal, 30)
-                        .padding(.bottom, 18)
-                        .transition(.opacity)
-                    } else {
-                        ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
-                            .padding(.top, notchVM.isRecording ? 8 : 4)
-                            .padding(.horizontal, 38)
+                        if notchVM.isSettingsOpen {
+                            SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 30)
                             .padding(.bottom, 18)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .padding(.horizontal, 30)
+                            .padding(.bottom, 18)
+                            .transition(.opacity)
+                        } else {
+                            ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
+                                .padding(.top, notchVM.isRecording ? 8 : 4)
+                                .padding(.horizontal, 38)
+                                .padding(.bottom, 18)
+                        }
                     }
+                    .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
                 }
-                .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
             }
 
             if notchVM.isDragTargeted {
@@ -177,20 +186,6 @@ struct NotchView: View {
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
-
-            Spacer()
-
-            // Session indicator
-            if sessionStore.isLinked {
-                HStack(spacing: 4) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 9))
-                    Text("Telegram")
-                        .font(.system(size: 11))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(AppColors.accent.opacity(0.6))
-            }
 
             Spacer()
 

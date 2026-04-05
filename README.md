@@ -1,12 +1,14 @@
-# BoaNotch
+# notchnotch
 
 A native macOS app that lives in your MacBook's notch, providing instant access to your [Hermes](https://github.com/NousResearch/hermes-agent) AI agent without switching windows.
+
+**No terminal required.** notchnotch includes a guided onboarding that installs the Hermes agent, connects your AI provider, picks a model, and optionally sets up Telegram — all from a visual interface. Your non-technical friends can use it too.
 
 Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
-![Version](https://img.shields.io/badge/version-0.7.0-violet)
+![Version](https://img.shields.io/badge/version-0.8.0-violet)
 
 ---
 
@@ -14,7 +16,7 @@ Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBore
 
 ### Download DMG
 
-Download `BoaNotch-v0.7.0.dmg` from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag BoaNotch.app to Applications.
+Download from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag to Applications.
 
 **Gatekeeper will block it** (unsigned app). Run this once:
 
@@ -44,6 +46,20 @@ bash scripts/run.sh
 
 No Xcode required — only Command Line Tools (`xcode-select --install`).
 
+### First launch
+
+On first launch (when Hermes is not installed), notchnotch walks you through setup:
+
+1. **Welcome** — the notchnotch logo
+2. **Privacy** — explains what stays local, what goes to your AI provider
+3. **Connect** — sign in to OpenRouter (free, one click) or paste an API key (OpenAI, Anthropic)
+4. **Install** — Hermes agent installs automatically in the background
+5. **Model** — pick a free or paid AI model
+6. **Telegram** — optionally connect a Telegram bot for mobile access
+7. **Ready** — start chatting
+
+If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding is skipped entirely.
+
 ---
 
 ## Features
@@ -52,7 +68,7 @@ No Xcode required — only Command Line Tools (`xcode-select --install`).
 Hover or click the notch to expand a chat panel with spring animations. Messages stream in real-time via SSE from the Hermes agent API.
 
 ### Telegram continuity
-BoaNotch auto-detects your Telegram DM session with the Hermes bot from `~/.hermes/state.db` on launch. The same `session_id` (your Telegram `chat_id`) is sent as `X-Hermes-Session-Id` on every API request — giving you full continuity between Telegram and BoaNotch. No manual linking, no picker. One session, two interfaces.
+notchnotch auto-detects your Telegram DM session with the Hermes bot from `~/.hermes/state.db` on launch. The same `session_id` (your Telegram `chat_id`) is sent as `X-Hermes-Session-Id` on every API request — giving you full continuity between Telegram and notchnotch. No manual linking, no picker. One session, two interfaces.
 
 ### Collapsible thinking & tool calls
 Hermes's internal reasoning (`<think>` blocks) and tool execution are hidden behind collapsible toggles. Only the clean response is shown. The SSE parser uses a two-tier heuristic with post-processing fallback (see [SSE Token Routing](#sse-token-routing)).
@@ -71,8 +87,11 @@ Gear icon (top-right) opens settings: max iterations (Quick/Normal/Deep), stream
 ### Drag & drop files
 Drag any file onto the notch. Supports images (vision analysis), PDFs, code (35+ languages), text, CSV, JSON, YAML, RTF. Violet overlay on drag hover.
 
+### Onboarding
+First launch walks new users through Hermes installation, AI provider setup, model selection, and optional Telegram connection — no terminal needed.
+
 ### Welcome screen
-Before the first message, BoaNotch shows the logo with "Notch Notch ! Who's there ? Your futchure." — disappears after first input.
+Before the first message, notchnotch shows the logo with "notch notch ! Who's there ? Your futchure." — disappears after first input.
 
 ### Smart file paths
 File paths in responses render as clickable cards with SF Symbol icons. Click to reveal in Finder.
@@ -100,10 +119,10 @@ BoaNotch (NSPanel, always-on-top, level mainMenu+3)
     |
     +-- Top bar (when open)
     |     Left: search button
-    |     Center: Telegram session indicator (auto-linked)
     |     Right: settings button
     |
     +-- Content (when open)
+    |     Onboarding flow (7 screens, first launch only)
     |     Welcome screen (logo + tagline, before first message)
     |     ChatView: messages + input bar
     |       MessageBubble: thinking/tool toggles, code blocks, file cards
@@ -165,6 +184,19 @@ BoaNotch/
     |   +-- NotchPanel.swift             # Borderless NSPanel subclass
     |   +-- NotchWindowController.swift  # Positioning, drag monitor, screen tracking
     |
+    +-- Onboarding/
+    |   +-- OnboardingViewModel.swift    # Step state, OAuth, install, config writes
+    |   +-- OnboardingContainerView.swift # Step router + nav dots
+    |   +-- WelcomeStep.swift            # Screen 1: logo + tagline
+    |   +-- PrivacyStep.swift            # Screen 2: privacy explainer
+    |   +-- ConnectProviderStep.swift     # Screen 3: OpenRouter OAuth + API key paste
+    |   +-- InstallHermesStep.swift       # Screen 4: background installer
+    |   +-- ChooseModelStep.swift         # Screen 5: model picker
+    |   +-- TelegramStep.swift            # Screen 6: optional Telegram bot
+    |   +-- ReadyStep.swift              # Screen 7: done
+    |   +-- OAuthService.swift           # PKCE + OpenRouter token exchange
+    |   +-- ShellRunner.swift            # Async Process() wrapper
+    |
     +-- Services/
         +-- HermesClient.swift           # OpenAI-compatible SSE client
         +-- SSEParser.swift              # Two-tier token routing
@@ -181,28 +213,17 @@ BoaNotch/
 
 - **macOS 14** (Sonoma) or later
 - **MacBook with notch** (works on non-notch Macs too, positioned at top-center)
-- **Hermes agent** running with API server enabled
 
-### Hermes Setup
+Hermes agent is installed automatically on first launch via the onboarding flow. No terminal required.
 
-Add to `~/.hermes/.env`:
-
-```bash
-API_SERVER_ENABLED=true
-```
-
-Restart your Hermes gateway. Verify:
-
-```bash
-curl http://localhost:8642/health
-```
+If you already have Hermes installed, notchnotch detects it and skips the onboarding.
 
 ### Permissions
 
 On first use, macOS will prompt for:
-- **Microphone** — for voice memos
+- **Microphone** — for voice memos (only when you tap the mic button)
 - **Speech Recognition** — for on-device transcription
-- **Accessibility** (manual) — for global Ctrl+Shift+R hotkey. Add BoaNotch.app in System Settings > Privacy & Security > Accessibility.
+- **Accessibility** (manual) — for global Ctrl+Shift+R hotkey. Add the app in System Settings > Privacy & Security > Accessibility.
 
 ---
 
@@ -238,7 +259,7 @@ On first use, macOS will prompt for:
 - 50K character extraction limit
 
 ### Quit
-Menu bar icon > Quit BoaNotch, or Cmd+Q.
+Menu bar icon > Quit notchnotch, or Cmd+Q.
 
 ---
 
@@ -360,6 +381,10 @@ Timeouts: 300s request, 600s resource.
 | `com.apple.security.network.client` | Entitlements | Network access |
 | `API_SERVER_ENABLED=true` | `~/.hermes/.env` | Enables Hermes API |
 | `hermesSessionId` | UserDefaults | Auto-linked Telegram session ID |
+| `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
+| `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
+| `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
+| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme for OAuth callback |
 
 ---
 

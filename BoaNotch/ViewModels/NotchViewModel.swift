@@ -13,6 +13,7 @@ class NotchViewModel: ObservableObject {
     @Published var isSettingsOpen = false
     @Published var isSearchOpen = false
     @Published var isExpandedBarOpen = false
+    @Published var suppressAutoClose = false
 
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
@@ -75,7 +76,7 @@ class NotchViewModel: ObservableObject {
             hoverTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 guard !Task.isCancelled else { return }
-                self.close()
+                if !self.suppressAutoClose { self.close() }
             }
         }
     }
