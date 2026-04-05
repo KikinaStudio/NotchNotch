@@ -9,7 +9,7 @@ struct WelcomeStep: View {
             Spacer()
 
             // Logo (full wordmark from SVG)
-            if let nsImage = loadLogo() {
+            if let nsImage = loadAppLogo() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -30,18 +30,6 @@ struct WelcomeStep: View {
         }
     }
 
-    private func loadLogo() -> NSImage? {
-        // SPM resource bundle
-        if let url = Bundle.module.url(forResource: "logo-white", withExtension: "png", subdirectory: "Resources"),
-           let img = NSImage(contentsOf: url) { return img }
-        // Fallbacks for .app bundle
-        if let url = Bundle.main.resourceURL?.appendingPathComponent("logo-white.png"),
-           let img = NSImage(contentsOf: url) { return img }
-        if let execURL = Bundle.main.executableURL?.deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Resources/logo-white.png"),
-           let img = NSImage(contentsOf: execURL) { return img }
-        return nil
-    }
 }
 
 // MARK: - Shared button styles

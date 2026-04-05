@@ -50,7 +50,7 @@ struct ChatView: View {
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
                         .multilineTextAlignment(.center)
-                    if let nsImage = Self.loadLogo() {
+                    if let nsImage = loadAppLogo() {
                         Image(nsImage: nsImage)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -227,18 +227,6 @@ struct ChatView: View {
             || !chatVM.pendingAttachments.isEmpty
     }
 
-    private static func loadLogo() -> NSImage? {
-        // SPM resource bundle
-        if let url = Bundle.module.url(forResource: "logo-white", withExtension: "png", subdirectory: "Resources"),
-           let img = NSImage(contentsOf: url) { return img }
-        // Fallbacks for .app bundle
-        if let url = Bundle.main.resourceURL?.appendingPathComponent("logo-white.png"),
-           let img = NSImage(contentsOf: url) { return img }
-        if let execURL = Bundle.main.executableURL?.deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Resources/logo-white.png"),
-           let img = NSImage(contentsOf: execURL) { return img }
-        return nil
-    }
 
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         if let lastId = chatVM.messages.last?.id {

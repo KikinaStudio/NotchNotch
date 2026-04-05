@@ -7,8 +7,8 @@ struct PrivacyStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("You're in control")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.88))
                 .padding(.bottom, 14)
 
             ScrollView(.vertical, showsIndicators: false) {

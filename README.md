@@ -16,7 +16,7 @@ Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBore
 
 ### Download DMG
 
-Download from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag to Applications.
+Download from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/releases). Drag to Applications.
 
 **Gatekeeper will block it** (unsigned app). Run this once:
 
@@ -39,7 +39,7 @@ The `--no-quarantine` flag bypasses Gatekeeper automatically. No `xattr` needed.
 ### Build from source
 
 ```bash
-git clone https://github.com/KikinaStudio/BoaNotch.git
+git clone https://github.com/KikinaStudio/Notchnotch.git
 cd BoaNotch
 bash scripts/run.sh
 ```

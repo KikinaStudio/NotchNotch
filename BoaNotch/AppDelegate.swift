@@ -47,22 +47,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            // Try SPM resource bundle first, then .app bundle fallback
-            let image: NSImage? = {
-                if let url = Bundle.module.url(forResource: "menubar-icon", withExtension: "png", subdirectory: "Resources"),
-                   let img = NSImage(contentsOf: url) { return img }
-                if let url = Bundle.main.resourceURL?.appendingPathComponent("menubar-icon.png"),
-                   let img = NSImage(contentsOf: url) { return img }
-                return nil
-            }()
-
-            if let image {
+            if let url = Bundle.module.url(forResource: "menubar-icon", withExtension: "png", subdirectory: "Resources"),
+               let image = NSImage(contentsOf: url) {
                 image.size = NSSize(width: 16, height: 16)
                 image.isTemplate = true
                 button.image = image
-            } else {
-                button.image = NSImage(systemSymbolName: "bubble.left.fill", accessibilityDescription: "notchnotch")
-                button.image?.size = NSSize(width: 16, height: 16)
+            } else if let url = Bundle.main.resourceURL?.appendingPathComponent("menubar-icon.png"),
+                      let image = NSImage(contentsOf: url) {
+                image.size = NSSize(width: 16, height: 16)
+                image.isTemplate = true
+                button.image = image
             }
         }
 
