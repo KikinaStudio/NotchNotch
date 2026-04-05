@@ -1,4 +1,4 @@
-# notchnotch
+# NotchNotch
 
 A native macOS app that lives in your MacBook's notch, providing instant access to your [Hermes](https://github.com/NousResearch/hermes-agent) AI agent without switching windows.
 
