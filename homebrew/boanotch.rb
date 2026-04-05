@@ -3,8 +3,8 @@
 # Install: brew install --cask KikinaStudio/tap/boanotch --no-quarantine
 
 cask "boanotch" do
-  version "0.6.0"
-  sha256 "" # TODO: fill with: shasum -a 256 BoaNotch-v0.6.0.dmg
+  version "0.7.0"
+  sha256 "" # fill with: shasum -a 256 BoaNotch-v0.7.0.dmg
 
   url "https://github.com/KikinaStudio/BoaNotch/releases/download/v#{version}/BoaNotch-v#{version}.dmg"
   name "BoaNotch"

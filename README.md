@@ -2,10 +2,47 @@
 
 A native macOS app that lives in your MacBook's notch, providing instant access to your [Hermes](https://github.com/NousResearch/hermes-agent) AI agent without switching windows.
 
-Built with Swift & SwiftUI. Zero dependencies. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
+Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
+![Version](https://img.shields.io/badge/version-0.7.0-violet)
+
+---
+
+## Install
+
+### Download DMG
+
+Download `BoaNotch-v0.7.0.dmg` from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag BoaNotch.app to Applications.
+
+**Gatekeeper will block it** (unsigned app). Run this once:
+
+```bash
+xattr -cr /Applications/BoaNotch.app
+```
+
+Then open normally. Don't look for "Allow Anyway" in System Settings — it's buried and unreliable. `xattr -cr` is the canonical bypass.
+
+### Homebrew
+
+```bash
+brew install --cask KikinaStudio/tap/boanotch --no-quarantine
+```
+
+The `--no-quarantine` flag bypasses Gatekeeper automatically. No `xattr` needed.
+
+> **Setup:** requires a personal tap repo. See [Publishing a release](#publishing-a-release).
+
+### Build from source
+
+```bash
+git clone https://github.com/KikinaStudio/BoaNotch.git
+cd BoaNotch
+bash scripts/run.sh
+```
+
+No Xcode required — only Command Line Tools (`xcode-select --install`).
 
 ---
 
@@ -14,44 +51,41 @@ Built with Swift & SwiftUI. Zero dependencies. Inspired by [BoringNotch](https:/
 ### Chat in the notch
 Hover or click the notch to expand a chat panel with spring animations. Messages stream in real-time via SSE from the Hermes agent API.
 
+### Telegram continuity
+BoaNotch auto-detects your Telegram DM session with the Hermes bot from `~/.hermes/state.db` on launch. The same `session_id` (your Telegram `chat_id`) is sent as `X-Hermes-Session-Id` on every API request — giving you full continuity between Telegram and BoaNotch. No manual linking, no picker. One session, two interfaces.
+
 ### Collapsible thinking & tool calls
-Hermes's internal reasoning (`<think>` blocks) and tool execution (shell commands, API calls) are hidden behind collapsible toggles. Only the clean response is shown. The SSE parser uses a two-tier detection system (see [SSE Token Routing](#sse-token-routing)) with post-processing fallback to ensure clean separation.
+Hermes's internal reasoning (`<think>` blocks) and tool execution are hidden behind collapsible toggles. Only the clean response is shown. The SSE parser uses a two-tier heuristic with post-processing fallback (see [SSE Token Routing](#sse-token-routing)).
 
 ### Search in conversation
-Click the magnifying glass icon (top-left of the open notch) to open a search bar. Case-insensitive full-text search across all messages with:
-- Match counter (`N/M`)
-- Previous/Next navigation (chevron arrows or Enter key)
-- Auto-scroll to the matched message
-- Purple highlight on matching text ranges via `AttributedString.backgroundColor`
+Magnifying glass icon (top-left) opens full-text search across all messages:
+- Match counter (`N/M`), Previous/Next navigation
+- Auto-scroll to matched message, purple highlight on matching text
 
-### Settings & session linking
-Click the gear icon (top-right of the open notch) to open settings. Link BoaNotch to an existing Hermes conversation from any platform:
-- **Auto-discovery**: reads `SELECT DISTINCT source FROM sessions` from `~/.hermes/state.db` — no code changes needed when new platforms are added
-- **Currently supported**: Telegram, with Slack, Discord, WhatsApp, Signal ready when Hermes adds them
-- **Session continuity**: the selected session ID is sent as `X-Hermes-Session-Id` header on every API request
-- **Persistence**: selection saved in `UserDefaults`, restored on launch
+### Settings
+Gear icon (top-right) opens settings: max iterations (Quick/Normal/Deep), streaming toggle, terminal backend (local/docker/ssh), and Telegram session status.
 
 ### Voice memos
-Press `Ctrl+Shift+R` anywhere to record. A KITT-style purple scanner line sweeps under the closed notch while recording. Press again or `Enter` to stop — the audio is transcribed locally (macOS Speech framework, French locale) and sent as text. The notch stays closed; a toast appears when Hermes responds.
-
-A mic button in the open notch input bar provides the same functionality: tap to record (icon turns purple with pulse), tap again to stop + transcribe + auto-send. A spinning ring animation shows during transcription.
+`Ctrl+Shift+R` anywhere to record. KITT-style purple scanner line under the closed notch. Press again or `Enter` to stop — transcribed locally (macOS Speech, French locale) and sent as text. Mic button in the input bar does the same.
 
 ### Drag & drop files
-Drag any file onto the notch to attach it. Supports images (with vision analysis), PDFs, code files, text, and 35+ formats. A violet overlay appears on drag hover.
+Drag any file onto the notch. Supports images (vision analysis), PDFs, code (35+ languages), text, CSV, JSON, YAML, RTF. Violet overlay on drag hover.
+
+### Welcome screen
+Before the first message, BoaNotch shows the logo with "Notch Notch ! Who's there ? Your futchure." — disappears after first input.
 
 ### Smart file paths
-File paths in responses are rendered as clickable cards with SF Symbol icons, filename, and relative path. Click to reveal in Finder.
+File paths in responses render as clickable cards with SF Symbol icons. Click to reveal in Finder.
 
 ### Streaming indicator
-While Hermes is responding:
-- **Notch closed**: extends slightly right with a braille spinner animation (unicode frames, see [Braille Spinner](#braille-spinner))
-- **Notch open**: the send button becomes a braille spinner (clickable to cancel)
+- **Closed**: notch extends slightly with a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
+- **Open**: send button becomes a spinner (click to cancel)
 
 ### Toast notifications
-When the notch is closed and Hermes finishes responding, a clean black toast slides out below the notch with the beginning of the response. Tap to expand.
+When closed, a black toast slides out below the notch with the response preview. Tap to expand.
 
 ### Code blocks & markdown
-Fenced code blocks render in monospaced style with language labels. Bold, italic, inline code, and links render natively via `AttributedString`. Orphan `**` markers (from content split across tool/response boundaries) are automatically stripped.
+Fenced code blocks with language labels, bold, italic, inline code, and links via `AttributedString`.
 
 ---
 
@@ -65,85 +99,80 @@ BoaNotch (NSPanel, always-on-top, level mainMenu+3)
     |     Open: expanded chat panel (580x340pt)
     |
     +-- Top bar (when open)
-    |     Left: search button (magnifying glass)
-    |     Center: linked session indicator
-    |     Right: settings button (gear)
-    |     States: default | search bar | recording indicator
+    |     Left: search button
+    |     Center: Telegram session indicator (auto-linked)
+    |     Right: settings button
     |
     +-- Content (when open)
+    |     Welcome screen (logo + tagline, before first message)
     |     ChatView: messages + input bar
-    |       MessageBubble:
-    |         [> Thought for Xs]     <- collapsible
-    |         [> Used tools]         <- collapsible
-    |         Clean response text    <- always visible
-    |         [file.txt card]        <- clickable, Finder reveal
-    |         Search highlights      <- purple bg on matching text
-    |       Input bar (bare, purple cursor, buttons right-aligned)
-    |         [+] [mic] [send/spinner]
+    |       MessageBubble: thinking/tool toggles, code blocks, file cards
+    |       Input bar: [+file] [mic] [...more] [send/spinner]
     |     -- OR --
-    |     SettingsView: source picker + session list
+    |     SettingsView: agent config + session status
     |
     +-- Overlays
-    |     KITT scanner (recording, below closed notch)
-    |     Braille spinner (thinking, closed notch right side)
-    |     Drop overlay (violet, file drag)
-    |     Toast (response preview, below closed notch)
-    |     Fade gradient (black, bottom of scroll area)
+    |     KITT scanner (recording), Braille spinner (thinking)
+    |     Drop overlay (file drag), Toast (response preview)
     |
     +-- Services
-          HermesClient -> localhost:8642/v1/chat/completions
-            X-Hermes-Session-Id header (when session linked)
-          SSEParser (two-tier: strong markers + weak heuristics)
-          SessionStore -> ~/.hermes/state.db (SQLite3 readonly)
-          SpeechTranscriber (on-device, SFSpeechRecognizer)
-          DocumentExtractor (PDF, images, code, text)
-          AudioRecorder (M4A to ~/.hermes/cache/audio/)
+          HermesClient -> localhost:8642 (SSE streaming)
+          SessionStore -> auto-detect Telegram session from state.db
+          SSEParser, SpeechTranscriber, DocumentExtractor, AudioRecorder
 ```
 
 ## Project Structure
 
 ```
 BoaNotch/
-+-- Package.swift                        # SwiftPM, macOS 14+, zero deps
++-- Package.swift                        # SwiftPM, macOS 14+
 +-- scripts/
 |   +-- run.sh                           # Build + bundle + codesign + launch
+|   +-- release.sh                       # Universal binary + DMG + ad-hoc sign
++-- homebrew/
+|   +-- boanotch.rb                      # Homebrew Cask formula template
 +-- BoaNotch/
     +-- BoaNotchApp.swift                # @main entry point
     +-- AppDelegate.swift                # Lifecycle, Carbon hotkeys, menu bar, voice
     +-- AppConstants.swift               # Colors, file icons, cursor modifier
     +-- Info.plist                        # LSUIElement, ATS, mic/speech permissions
-    +-- BoaNotch.entitlements             # network.client
+    +-- BoaNotch.entitlements            # network.client
+    +-- Resources/
+    |   +-- AppIcon.icns                 # App icon (all sizes)
+    |   +-- menubar-icon.png/@2x.png     # Menu bar template icon
+    |   +-- logo-white.png               # Welcome screen logo (white)
+    |   +-- icon.svg, logo.svg           # Source SVGs
     |
     +-- Models/
-    |   +-- ChatMessage.swift             # role, content, thinkingContent, toolCallContent
-    |   +-- Attachment.swift              # fileName, fileType, textContent, fileURL
+    |   +-- ChatMessage.swift            # role, content, thinking, toolCalls
+    |   +-- Attachment.swift             # fileName, fileType, textContent, fileURL
     |
     +-- ViewModels/
-    |   +-- NotchViewModel.swift          # State machine (closed/open/toast), recording, streaming
-    |   +-- ChatViewModel.swift           # Messages, streaming, send/cancel, voice, session passthrough
-    |   +-- SearchViewModel.swift         # Search matches, navigation, query state
+    |   +-- NotchViewModel.swift         # State machine (closed/open/toast)
+    |   +-- ChatViewModel.swift          # Messages, streaming, send/cancel, voice
+    |   +-- SearchViewModel.swift        # Search matches, navigation
     |
     +-- Views/
-    |   +-- NotchView.swift               # Root: shape + top bar + KITT + braille + overlays
-    |   +-- NotchShape.swift              # Animatable Shape, quad curves, corner radii
-    |   +-- ChatView.swift                # Scroll + fade + input bar + file picker
-    |   +-- MessageBubble.swift           # Thinking/tool toggles, code blocks, file cards, search highlight
-    |   +-- SearchBarView.swift           # Search input + match counter + nav arrows
-    |   +-- SettingsView.swift            # Source picker + session list + disconnect
-    |   +-- ToastView.swift               # Black toast, markdown-stripped
-    |   +-- DropOverlay.swift             # Violet opaque drop zone
+    |   +-- NotchView.swift              # Root: shape + top bar + overlays
+    |   +-- ChatView.swift               # Scroll + welcome screen + input bar
+    |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards
+    |   +-- SearchBarView.swift          # Search input + match counter
+    |   +-- SettingsView.swift           # Agent config + session status
+    |   +-- ExpandedBarView.swift        # Profile, model, reasoning, incognito
+    |   +-- NotchShape.swift, ToastView.swift, DropOverlay.swift
     |
     +-- Window/
-    |   +-- NotchPanel.swift              # Borderless NSPanel subclass
-    |   +-- NotchWindowController.swift   # Positioning, drag monitor, screen tracking
+    |   +-- NotchPanel.swift             # Borderless NSPanel subclass
+    |   +-- NotchWindowController.swift  # Positioning, drag monitor, screen tracking
     |
     +-- Services/
-        +-- HermesClient.swift            # OpenAI-compatible SSE client, session header
-        +-- SSEParser.swift               # Two-tier token routing: thinking / toolCall / delta
-        +-- SessionStore.swift            # SQLite3 reader for ~/.hermes/state.db
-        +-- SpeechTranscriber.swift       # SFSpeechRecognizer, French locale, guard double-resume
-        +-- DocumentExtractor.swift       # 40+ file types, 50K char limit
-        +-- AudioRecorder.swift           # AVAudioRecorder, M4A, shared instance
+        +-- HermesClient.swift           # OpenAI-compatible SSE client
+        +-- SSEParser.swift              # Two-tier token routing
+        +-- SessionStore.swift           # Auto-detect Telegram session from state.db
+        +-- HermesConfig.swift           # config.yaml watcher
+        +-- SpeechTranscriber.swift      # SFSpeechRecognizer, French locale
+        +-- DocumentExtractor.swift      # 40+ file types, 50K char limit
+        +-- AudioRecorder.swift          # AVAudioRecorder, M4A
 ```
 
 ---
@@ -177,48 +206,6 @@ On first use, macOS will prompt for:
 
 ---
 
-## Install
-
-### Download DMG
-
-Download `BoaNotch-vX.Y.Z.dmg` from [GitHub Releases](https://github.com/KikinaStudio/BoaNotch/releases). Drag BoaNotch.app to Applications.
-
-**Gatekeeper will block it** (unsigned app). Fix:
-
-```bash
-xattr -cr /Applications/BoaNotch.app
-```
-
-Then open normally. You only need to do this once.
-
-### Homebrew (coming soon)
-
-```bash
-brew install --cask KikinaStudio/tap/boanotch --no-quarantine
-```
-
-The `--no-quarantine` flag bypasses Gatekeeper automatically.
-
-### Build from source
-
-```bash
-git clone https://github.com/KikinaStudio/BoaNotch.git
-cd BoaNotch
-bash scripts/run.sh
-```
-
-No Xcode required — only the Command Line Tools.
-
-### Build universal binary + DMG
-
-```bash
-bash scripts/release.sh
-```
-
-Builds for Apple Silicon + Intel, creates a DMG in `.build/`.
-
----
-
 ## Usage
 
 ### Chat
@@ -228,41 +215,82 @@ Builds for Apple Silicon + Intel, creates a DMG in `.build/`.
 - Move cursor away to collapse (600ms delay)
 
 ### Search
-- Click the **magnifying glass** icon (top-left of open notch)
-- Type to search — matches are highlighted in purple across all messages
-- Use **chevron arrows** or press **Enter** to jump between matches
-- Counter shows current position (`3/12`)
-- Click **X** to close search
+- Click the **magnifying glass** icon (top-left)
+- Type to search — matches highlighted in purple
+- **Chevron arrows** or **Enter** to jump between matches
+- Counter shows position (`3/12`)
 
-### Settings & Session Linking
-- Click the **gear** icon (top-right of open notch)
-- Select a platform (Telegram, etc.) — sessions are loaded from `~/.hermes/state.db`
-- Click a session to link it — all subsequent messages use that session's context
-- The top bar shows an indicator when a session is linked
-- Click the gear again to close settings
-- **Disconnect** button clears the linked session
+### Settings
+- Click the **gear** icon (top-right)
+- Agent: max iterations, streaming toggle
+- Execution: terminal backend (local/docker/ssh)
+- Session: shows auto-linked Telegram session status
 
 ### Voice Memos
-- **Ctrl+Shift+R** — start recording (KITT scanner appears under notch)
-- **Ctrl+Shift+R** or **Enter** — stop, transcribe locally, send to Hermes
-- **Mic button** in input bar — same flow, visible in the open notch
-- Notch stays closed for hotkey path. Toast shows Hermes's response.
+- **Ctrl+Shift+R** — start recording (KITT scanner appears)
+- **Ctrl+Shift+R** or **Enter** — stop, transcribe, send
+- **Mic button** in input bar — same flow
 - Uses Carbon `RegisterEventHotKey` — works from any app, no error beep
 
 ### Attach Files
 - **Drag & drop** onto the notch, or click **+** in the input bar
-- Images are copied to `~/.hermes/cache/images/` for vision analysis
-- PDFs, code (35+ languages), text, CSV, JSON, YAML, RTF supported
+- Images copied to `~/.hermes/cache/images/` for vision analysis
 - 50K character extraction limit
 
-### Thinking & Tool Calls
-- `<think>` reasoning: hidden in collapsible "Thought for Xs" toggle
-- Tool execution (commands, API calls): hidden in "Used tools" toggle
-- Only the clean final response is shown by default
-- Click toggles to expand and see full detail
-
 ### Quit
-Menu bar icon (speech bubble) > Quit BoaNotch, or Cmd+Q from the menu.
+Menu bar icon > Quit BoaNotch, or Cmd+Q.
+
+---
+
+## Distribution
+
+### Building a release
+
+```bash
+bash scripts/release.sh
+```
+
+This script:
+1. Builds a release binary (universal `arm64+x86_64` if Xcode is installed, `arm64` only with Command Line Tools)
+2. Creates a `.app` bundle with Info.plist, resources, and icons
+3. Signs with ad-hoc certificate (`codesign --force --deep --sign -`) — avoids runtime crashes on macOS 14+ even without an Apple Developer account
+4. Creates a DMG via `create-dmg` (install with `brew install create-dmg`) or `hdiutil` fallback
+
+Output: `.build/BoaNotch-v0.7.0.dmg`
+
+### Publishing a release
+
+```bash
+# 1. Build the DMG
+bash scripts/release.sh
+
+# 2. Create a GitHub Release
+gh release create v0.7.0 .build/BoaNotch-v0.7.0.dmg \
+    --title "BoaNotch v0.7.0" \
+    --notes "Telegram auto-link, custom icon, distribution pipeline"
+
+# 3. Update Homebrew formula
+shasum -a 256 .build/BoaNotch-v0.7.0.dmg
+# Copy the hash into homebrew/boanotch.rb sha256 field
+```
+
+### Homebrew tap setup
+
+To enable `brew install --cask KikinaStudio/tap/boanotch`:
+
+1. Create repo `KikinaStudio/homebrew-tap` on GitHub
+2. Copy `homebrew/boanotch.rb` to `Casks/boanotch.rb` in that repo
+3. Fill in the `sha256` from `shasum -a 256` of the DMG
+4. Users install with: `brew install --cask KikinaStudio/tap/boanotch --no-quarantine`
+
+The `--no-quarantine` flag bypasses Gatekeeper automatically — no `xattr` needed.
+
+### Signing notes
+
+The app is currently **ad-hoc signed** (`codesign --sign -`). This:
+- Avoids runtime crashes from macOS 14+ code signing enforcement
+- Does NOT satisfy Gatekeeper (users still need `xattr -cr` or `--no-quarantine`)
+- If you later get an Apple Developer account ($99/year), just change `--sign -` to `--sign "Developer ID Application: Your Name"` — no other changes needed
 
 ---
 
@@ -270,106 +298,34 @@ Menu bar icon (speech bubble) > Quit BoaNotch, or Cmd+Q from the menu.
 
 ### SSE Token Routing
 
-The `SSEParser` classifies each streaming token from the Hermes API into one of three channels:
+The `SSEParser` classifies each streaming token into three channels:
 
-1. **Thinking** — content inside `<think>...</think>` tags (standard Hermes reasoning format, see [hermes-agent-reasoning-traces](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces))
-2. **Tool calls** — detected via two tiers:
-   - **Strong markers** (always trigger tool mode, even after clean response): emojis (`💻🔧⚙️🔎🔍📚📋📧✍️📖`), `<tool_call>`/`<tool_response>` XML tags
-   - **Weak heuristics** (only before clean response is detected): shell operators (`&&`, `||`, `2>/dev/null`), variable references (`$GAPI`, `GAPI=`), command prefixes (`python `, `bash `, `curl `), Hermes skill paths (`.hermes/skills/`), CLI flags (`--max`, `--output`)
-3. **Response** — clean conversational content detected by `looksLikeCleanResponse`:
-   - French pronouns (`Tu`, `Je`, `Il`, `On`, `Ce`, `Un`, `Ça`) for small SSE tokens
-   - Uppercase start with no shell operators (3+ chars, excludes ALL_CAPS like `SSH`, `JSON`)
-   - Numbered lists (`1. ...`)
-   - Common patterns (`Voici`, `J'ai`, `Il y a`, `Le `, `La `, `C'est`, `Desolé`, etc.)
+1. **Thinking** — `<think>...</think>` tags
+2. **Tool calls** — two tiers:
+   - **Strong markers**: emojis (`💻🔧⚙️🔎📚`), XML tags
+   - **Weak heuristics**: shell operators, command prefixes, CLI flags
+3. **Response** — clean text (French pronouns, uppercase starts, numbered lists)
 
-**Key design decisions:**
+`sawCleanResponse` flag prevents re-entry to tool mode from natural text. Post-processing fallback (`extractCleanResponse`) catches misclassified content after streaming.
 
-- `sawCleanResponse` flag: once clean text is detected, only strong markers (emojis/tags) can re-enter tool mode. This prevents keywords like "himalaya" in natural response text from being misclassified as tool output.
-- `pendingRegular` buffer: when `<think>` tags and regular content arrive in the same SSE chunk, the regular content is buffered for the next `parse()` call instead of being dropped.
-- **Post-processing fallback** (`extractCleanResponse`): after streaming finishes, if `content` is empty but `toolCallContent` has text, the system splits tool content into paragraphs and moves trailing clean paragraphs to `content`. This catches cases where SSE tokens are too small (single characters) for the streaming heuristic to classify correctly.
+### Session Auto-Link
 
-**Why heuristics instead of structured parsing?** The Hermes model internally uses `<tool_call>` XML tags (documented in the [reasoning traces dataset](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces)), but the agent runtime intercepts these tags, executes the tools, and streams the execution output as plain text content (`delta.content`). The `<tool_call>` tags are consumed server-side and never appear in the SSE stream. Tool output arrives as free-form text with emoji markers — hence the heuristic approach.
-
-### Braille Spinner
-
-The braille spinner uses Unicode braille pattern characters cycling at 80ms per frame:
-
-```
-⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏
-```
-
-These are the standard frames from [unicode-animations](https://www.npmjs.com/package/unicode-animations) (`dots` pattern). Rendered with `TimelineView(.periodic(from:by:))` for leak-free animation (no `Timer` needed). Parameterized with `size` and `color` — used in two contexts:
-- Closed notch thinking indicator: 14pt, accent purple
-- Send button during streaming: 16pt, white, clickable to cancel
-
-### Session Linking
-
-BoaNotch reads Hermes session data from `~/.hermes/state.db` (SQLite3, `SQLITE_OPEN_READONLY`). The database schema is documented in the [Hermes Agent v0.7.0 release](https://github.com/NousResearch/hermes-agent/releases/tag/v2026.4.3):
+On launch, `SessionStore` reads `~/.hermes/state.db`:
 
 ```sql
-sessions (
-    id TEXT PRIMARY KEY,
-    source TEXT NOT NULL,     -- 'telegram', 'api_server', 'cron', etc.
-    title TEXT,
-    started_at REAL NOT NULL, -- Unix timestamp
-    message_count INTEGER,
-    -- ... plus model, tokens, cost fields
-)
+SELECT id FROM sessions WHERE source = 'telegram'
+ORDER BY started_at DESC LIMIT 1
 ```
 
-**Platform auto-discovery**: `SELECT DISTINCT source FROM sessions` populates the source picker. When Hermes adds new platforms (Slack, Discord, WhatsApp, Signal — all have defined toolsets in `config.yaml` under `platform_toolsets`), they appear automatically without code changes.
-
-**Session continuity via `X-Hermes-Session-Id`**: the Hermes API server (v0.7.0+) supports persistent sessions via this header. The API server streams tool progress events in real-time and tracks conversation state per session. See [API server streaming docs](https://github.com/NousResearch/hermes-agent/releases/tag/v2026.4.3).
+This `id` is the Telegram `chat_id` of your DM with the Hermes bot. It's sent as `X-Hermes-Session-Id` on every request, giving full context continuity between Telegram and BoaNotch. Persisted in `UserDefaults` across restarts.
 
 ### Window System
 
-Custom `NSPanel` — borderless, transparent, non-activating, level `mainMenu + 3`. Panel size is fixed (620x380pt). Content animates inside via `NotchShape` clipping. The panel joins all spaces and only becomes key when the notch is open.
-
-This approach is derived from [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook), both of which use a similar borderless panel strategy. Key differences:
-- BoaNotch uses a single fixed-size panel rather than dynamically resizing the window
-- The notch shape uses quad curves (not rounded rects) for a closer match to the hardware notch silhouette
-- Hover detection is handled via SwiftUI `.onHover` with debounced delays rather than NSTrackingArea
-
-### Notch Detection
-
-Hardware notch dimensions via `screen.auxiliaryTopLeftArea` / `auxiliaryTopRightArea`. The gap between them defines the notch width. Fallback: 185x32pt pill centered at screen top. Height is clamped to `screen.safeAreaInsets.top`.
+Custom `NSPanel` — borderless, transparent, non-activating, level `mainMenu + 3`. Fixed panel size (620x380pt). Content animates inside via `NotchShape` clipping. Panel joins all spaces and only becomes key when open.
 
 ### Notch Shape
 
-`NotchShape` is a custom `Shape` with `animatableData` for smooth corner radius transitions:
-- **Closed**: top 6pt (concave entry curve), bottom 10pt (convex corners) — flatter than BoringNotch's default, closer to hardware
-- **Open**: top 14pt, bottom 18pt — reduced from earlier versions to maintain the "less curved" feel
-
-The shape uses `addQuadCurve` for all corners, giving a continuous curvature that approximates the hardware notch's bezier without being an exact replica.
-
-### Animations
-
-- Open: `.interactiveSpring(response: 0.42, dampingFraction: 0.8)`
-- Close: `.interactiveSpring(response: 0.45, dampingFraction: 1.0)` (critically damped, no bounce)
-- Toast: `.spring(response: 0.35, dampingFraction: 0.8)`
-- Recording: `.interactiveSpring(response: 0.35, dampingFraction: 0.7)`
-- Corner radii, width, height all animate via `animatableData`
-
-### Voice Pipeline
-
-1. Carbon `RegisterEventHotKey` intercepts Ctrl+Shift+R globally (no error beep)
-2. `AVAudioRecorder` captures M4A to `~/.hermes/cache/audio/`
-3. `SFSpeechRecognizer` transcribes on-device (French locale `fr-FR`, fallback to system)
-4. Transcribed text sent as a regular message to Hermes
-5. If transcription fails: audio file path sent as attachment with fallback note
-6. Guard against double-resume of continuation (prevents crash on edge cases)
-
-Single shared `AudioRecorder` instance — both the hotkey path (AppDelegate) and the mic button path (ChatViewModel) use the same recorder to prevent conflicts.
-
-### Input Bar Design
-
-The input bar has no background or chrome — just a bare text field with a purple blinking cursor (via `.tint(AppColors.accent)`). All buttons are right-aligned: `[+] [mic] [send]`. This replaces the earlier ChatGPT-style input bar with grey background and rounded corners.
-
-A fade-to-black gradient (32pt tall `LinearGradient`) overlays the bottom of the scroll area, visually separating the last messages from the input line. Messages have 36pt bottom padding so they scroll above the fade.
-
-### Drag Detection
-
-Global `NSEvent.addGlobalMonitorForEvents(.leftMouseDragged)` detects file drags into the notch region (80pt tall zone at screen top). `leftMouseUp` monitor clears the drag state.
+Custom `Shape` with `animatableData` for smooth corner radius transitions. Quad curves approximate the hardware notch silhouette. Closed: top 6pt, bottom 10pt. Open: top 14pt, bottom 18pt.
 
 ---
 
@@ -378,7 +334,7 @@ Global `NSEvent.addGlobalMonitorForEvents(.leftMouseDragged)` detects file drags
 | Endpoint | Method | Headers | Description |
 |----------|--------|---------|-------------|
 | `localhost:8642/health` | GET | — | Health check |
-| `localhost:8642/v1/chat/completions` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` (optional) | Chat completions (SSE streaming) |
+| `localhost:8642/v1/chat/completions` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Chat completions (SSE) |
 
 Request:
 ```json
@@ -389,9 +345,7 @@ Request:
 }
 ```
 
-Timeouts: 300s request, 600s resource (allows for long tool execution chains).
-
-The `X-Hermes-Session-Id` header enables conversation continuity with an existing Hermes session (e.g., a Telegram conversation). When set, the API server loads the session's context and continues from where it left off. See [Hermes Agent v0.7.0 release notes](https://github.com/NousResearch/hermes-agent/releases/tag/v2026.4.3) for the full API server streaming specification.
+Timeouts: 300s request, 600s resource.
 
 ---
 
@@ -405,54 +359,18 @@ The `X-Hermes-Session-Id` header enables conversation continuity with an existin
 | `NSSpeechRecognitionUsageDescription` | Info.plist | Speech recognition prompt |
 | `com.apple.security.network.client` | Entitlements | Network access |
 | `API_SERVER_ENABLED=true` | `~/.hermes/.env` | Enables Hermes API |
-| `API_SERVER_KEY=<token>` | `~/.hermes/.env` | Optional bearer auth |
-| `hermesSessionId` | UserDefaults | Persisted linked session ID |
-
----
-
-## Design Decisions & Learnings
-
-### Why a notch app?
-The MacBook notch is unused screen real estate directly in the user's line of sight. A chat interface there provides ambient access to an AI agent without window switching, dock icons, or context changes. Inspired by [NotchNook](https://lo.cafe/notchnook) (general notch utility) and [BoringNotch](https://github.com/TheBoredTeam/boring.notch) (music player in the notch).
-
-### Why heuristic SSE parsing?
-The Hermes agent model uses structured `<tool_call>` XML tags internally (documented in the [reasoning traces dataset](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces)), but the agent runtime consumes these tags and streams tool execution output as plain text. The SSE stream contains no structural markers for tool output — only emoji prefixes (`💻`, `📚`, etc.) and shell command patterns. A two-tier heuristic (strong markers + weak patterns) with a `sawCleanResponse` gate provides reliable classification for streaming display.
-
-### Why post-processing fallback?
-SSE tokens can arrive as single characters. A token like `"C"` from `"Ce sont des..."` cannot match any pattern. The post-processing pass in `ChatViewModel.extractCleanResponse()` runs after streaming finishes and operates on full paragraphs, catching cases the streaming heuristic misses.
-
-### Why Carbon hotkeys?
-NSEvent global monitors for key events produce a system error beep on key combinations. Carbon's `RegisterEventHotKey` intercepts the event before the system processes it, eliminating the beep. This is the same approach used by macOS apps like Raycast, Alfred, and the Hermes agent CLI itself.
-
-### Why a single AudioRecorder?
-The app has two voice entry points (Ctrl+Shift+R hotkey and mic button in the UI). Using two `AudioRecorder` instances could cause conflicts if both are triggered. A single shared instance prevents this.
-
-### Why SQLite C API directly?
-The `SessionStore` uses the C `sqlite3` API rather than a Swift wrapper. macOS ships with `libsqlite3` and SwiftPM links it automatically — no external dependency needed. The database is opened `SQLITE_OPEN_READONLY` to prevent any accidental writes to Hermes state.
-
----
-
-## Key References
-
-| Resource | What it provides |
-|----------|-----------------|
-| [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) | The Hermes agent — API server, tools, skills, MCP, memory. BoaNotch is a native client for its `/v1/chat/completions` endpoint. |
-| [Hermes Agent v0.7.0 release](https://github.com/NousResearch/hermes-agent/releases/tag/v2026.4.3) | API server streaming, `X-Hermes-Session-Id` header, MCP stability fixes, tool progress events, platform toolsets for Telegram/Slack/Discord/WhatsApp/Signal. |
-| [hermes-agent-reasoning-traces](https://huggingface.co/datasets/lambda/hermes-agent-reasoning-traces) | Dataset documenting the `<think>` and `<tool_call>` format used by Hermes models. Essential for understanding SSE parsing. |
-| [unicode-animations](https://www.npmjs.com/package/unicode-animations) | Source of braille spinner frames (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`). The `dots` pattern at 80ms/frame. |
-| [BoringNotch](https://github.com/TheBoredTeam/boring.notch) | Open-source macOS notch app. Provided the NSPanel/borderless window strategy, notch shape approach, and hover detection pattern. |
-| [NotchNook](https://lo.cafe/notchnook) | Commercial macOS notch utility. Design inspiration for notch interaction patterns (hover-to-expand, spring animations). |
+| `hermesSessionId` | UserDefaults | Auto-linked Telegram session ID |
 
 ---
 
 ## Known Limitations
 
-- **No conversation persistence** — messages are lost on restart. Hermes remembers context server-side via sessions and memory, but the UI starts blank. Use session linking to pick up where you left off.
-- **Fixed notch size** — the open notch is always 580x340pt. Resizable notch with auto-grow is planned.
+- **No conversation persistence** — messages are lost on restart. Hermes remembers context server-side via sessions and memory, but the UI starts blank.
+- **Fixed notch size** — 580x340pt. Dynamic height and drag-to-resize are planned.
 - **Hardcoded localhost:8642** — no UI to change the Hermes URL.
-- **Tool detection is heuristic** — some tool output may leak into the response or vice versa, especially with very small SSE tokens. The post-processing fallback catches most cases.
-- **arm64 only** — builds for Apple Silicon. Intel Macs need a separate build.
-- **Unsigned** — triggers Gatekeeper warning. Right-click > Open to bypass.
+- **No conversation history** — new conversation button is hidden until a history list is implemented.
+- **Tool detection is heuristic** — some tool output may leak into the response or vice versa. Post-processing fallback catches most cases.
+- **Unsigned** — triggers Gatekeeper. Use `xattr -cr` or `brew install --no-quarantine`.
 
 ---
 
@@ -466,7 +384,17 @@ The `SessionStore` uses the C `sqlite3` API rather than a Swift wrapper. macOS s
 - **SQLite3** — Hermes session database (C API, readonly)
 - **PDFKit** — PDF text extraction
 - **URLSession.bytes** — Async SSE streaming
-- **Zero external dependencies**
+
+---
+
+## Roadmap
+
+- [ ] Dynamic notch height (auto-grow with content, drag handle)
+- [ ] Conversation history list + new conversation button
+- [ ] Auto-update via Sparkle
+- [ ] Flanking search/settings buttons beside physical notch
+- [ ] Universal binary (requires Xcode)
+- [ ] Apple Developer signing + notarization
 
 ---
 
