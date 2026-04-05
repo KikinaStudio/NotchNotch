@@ -31,7 +31,7 @@ class AudioRecorder: ObservableObject {
             audioRecorder?.record()
             isRecording = true
         } catch {
-            print("[BoaNotch] Recording error: \(error)")
+            print("[notchnotch] Recording error: \(error)")
         }
     }
 

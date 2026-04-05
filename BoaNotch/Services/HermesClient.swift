@@ -59,7 +59,7 @@ class HermesClient {
 
                     continuation.finish()
                 } catch {
-                    print("[BoaNotch] Stream error: \(error)")
+                    print("[notchnotch] Stream error: \(error)")
                     continuation.finish(throwing: error)
                 }
             }
@@ -77,13 +77,13 @@ class HermesClient {
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             if !ok {
                 let body = String(data: data, encoding: .utf8) ?? "empty"
-                print("[BoaNotch] Health check failed: status=\((response as? HTTPURLResponse)?.statusCode ?? -1) body=\(body)")
+                print("[notchnotch] Health check failed: status=\((response as? HTTPURLResponse)?.statusCode ?? -1) body=\(body)")
             } else {
-                print("[BoaNotch] Health check OK")
+                print("[notchnotch] Health check OK")
             }
             return ok
         } catch {
-            print("[BoaNotch] Health check error: \(error)")
+            print("[notchnotch] Health check error: \(error)")
             return false
         }
     }

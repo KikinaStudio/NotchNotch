@@ -1,22 +1,23 @@
 #!/bin/bash
-# Build BoaNotch for release: universal binary + DMG + ad-hoc codesign
+# Build notchnotch for release: universal binary + DMG + ad-hoc codesign
 set -e
 
 cd "$(dirname "$0")/.."
 
 VERSION=$(grep -A1 'CFBundleShortVersionString' BoaNotch/Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>/\1/')
-APP_NAME="BoaNotch"
+APP_NAME="notchnotch"
+SPM_TARGET="BoaNotch"   # SPM target name (unchanged to avoid breaking build)
 
 # Try universal binary first (requires Xcode), fall back to current arch
 if xcodebuild -version &>/dev/null; then
-    echo "Building BoaNotch v${VERSION} (universal binary: arm64 + x86_64)..."
+    echo "Building notchnotch v${VERSION} (universal binary: arm64 + x86_64)..."
     swift build -c release --arch arm64 --arch x86_64 2>&1
-    BINARY=".build/apple/Products/Release/${APP_NAME}"
+    BINARY=".build/apple/Products/Release/${SPM_TARGET}"
 else
     ARCH=$(uname -m)
-    echo "Building BoaNotch v${VERSION} (${ARCH} — install Xcode for universal binary)..."
+    echo "Building notchnotch v${VERSION} (${ARCH} — install Xcode for universal binary)..."
     swift build -c release 2>&1
-    BINARY=".build/release/${APP_NAME}"
+    BINARY=".build/release/${SPM_TARGET}"
 fi
 
 APP_DIR=".build/${APP_NAME}.app/Contents"
@@ -26,7 +27,7 @@ rm -rf ".build/${APP_NAME}.app"
 mkdir -p "$APP_DIR/MacOS"
 mkdir -p "$APP_DIR/Resources"
 
-# Copy binary
+# Copy binary (rename from SPM target to app name)
 cp "$BINARY" "$APP_DIR/MacOS/${APP_NAME}"
 
 # Copy Info.plist
@@ -35,6 +36,9 @@ cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
 # Copy resources (icons, logo)
 cp BoaNotch/Resources/*.png "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.icns "$APP_DIR/Resources/" 2>/dev/null || true
+
+# Copy SPM resource bundle
+cp -R .build/release/${SPM_TARGET}_${SPM_TARGET}.bundle "$APP_DIR/Resources/" 2>/dev/null || true
 
 # Ad-hoc codesign (avoids runtime crashes on macOS 14+)
 echo "Signing ${APP_NAME}.app (ad-hoc)..."
@@ -79,7 +83,7 @@ fi
 
 echo ""
 echo "========================================"
-echo "  Release: ${APP_NAME} v${VERSION}"
+echo "  Release: notchnotch v${VERSION}"
 echo "========================================"
 ls -lh ".build/${DMG_NAME}"
 echo ""

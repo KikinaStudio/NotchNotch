@@ -150,7 +150,7 @@ class HermesConfig: ObservableObject {
             try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
             try FileManager.default.moveItem(atPath: tmpPath, toPath: configPath)
         } catch {
-            print("[BoaNotch] Config write error: \(error)")
+            print("[notchnotch] Config write error: \(error)")
         }
     }
 

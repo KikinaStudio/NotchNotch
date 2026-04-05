@@ -21,7 +21,7 @@ Download from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/relea
 **Gatekeeper will block it** (unsigned app). Run this once:
 
 ```bash
-xattr -cr /Applications/BoaNotch.app
+xattr -cr /Applications/notchnotch.app
 ```
 
 Then open normally. Don't look for "Allow Anyway" in System Settings — it's buried and unreliable. `xattr -cr` is the canonical bypass.
@@ -29,7 +29,7 @@ Then open normally. Don't look for "Allow Anyway" in System Settings — it's bu
 ### Homebrew
 
 ```bash
-brew install --cask KikinaStudio/tap/boanotch --no-quarantine
+brew install --cask KikinaStudio/tap/notchnotch --no-quarantine
 ```
 
 The `--no-quarantine` flag bypasses Gatekeeper automatically. No `xattr` needed.
@@ -40,7 +40,7 @@ The `--no-quarantine` flag bypasses Gatekeeper automatically. No `xattr` needed.
 
 ```bash
 git clone https://github.com/KikinaStudio/Notchnotch.git
-cd BoaNotch
+cd NotchNotch
 bash scripts/run.sh
 ```
 
@@ -111,7 +111,7 @@ Fenced code blocks with language labels, bold, italic, inline code, and links vi
 ## Architecture
 
 ```
-BoaNotch (NSPanel, always-on-top, level mainMenu+3)
+notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |
     +-- NotchShape (custom animatable path, quad curves)
     |     Closed: matches hardware notch (~185x32pt)
@@ -149,7 +149,7 @@ BoaNotch/
 |   +-- run.sh                           # Build + bundle + codesign + launch
 |   +-- release.sh                       # Universal binary + DMG + ad-hoc sign
 +-- homebrew/
-|   +-- boanotch.rb                      # Homebrew Cask formula template
+|   +-- notchnotch.rb                    # Homebrew Cask formula template
 +-- BoaNotch/
     +-- BoaNotchApp.swift                # @main entry point
     +-- AppDelegate.swift                # Lifecycle, Carbon hotkeys, menu bar, voice
@@ -277,7 +277,7 @@ This script:
 3. Signs with ad-hoc certificate (`codesign --force --deep --sign -`) — avoids runtime crashes on macOS 14+ even without an Apple Developer account
 4. Creates a DMG via `create-dmg` (install with `brew install create-dmg`) or `hdiutil` fallback
 
-Output: `.build/BoaNotch-v0.7.0.dmg`
+Output: `.build/notchnotch-v0.8.0.dmg`
 
 ### Publishing a release
 
@@ -286,13 +286,13 @@ Output: `.build/BoaNotch-v0.7.0.dmg`
 bash scripts/release.sh
 
 # 2. Create a GitHub Release
-gh release create v0.7.0 .build/BoaNotch-v0.7.0.dmg \
-    --title "BoaNotch v0.7.0" \
-    --notes "Telegram auto-link, custom icon, distribution pipeline"
+gh release create v0.8.0 .build/notchnotch-v0.8.0.dmg \
+    --title "notchnotch v0.8.0" \
+    --notes "Onboarding, notchnotch rebrand"
 
 # 3. Update Homebrew formula
-shasum -a 256 .build/BoaNotch-v0.7.0.dmg
-# Copy the hash into homebrew/boanotch.rb sha256 field
+shasum -a 256 .build/notchnotch-v0.8.0.dmg
+# Copy the hash into homebrew/notchnotch.rb sha256 field
 ```
 
 ### Homebrew tap setup
@@ -300,9 +300,9 @@ shasum -a 256 .build/BoaNotch-v0.7.0.dmg
 To enable `brew install --cask KikinaStudio/tap/boanotch`:
 
 1. Create repo `KikinaStudio/homebrew-tap` on GitHub
-2. Copy `homebrew/boanotch.rb` to `Casks/boanotch.rb` in that repo
+2. Copy `homebrew/notchnotch.rb` to `Casks/notchnotch.rb` in that repo
 3. Fill in the `sha256` from `shasum -a 256` of the DMG
-4. Users install with: `brew install --cask KikinaStudio/tap/boanotch --no-quarantine`
+4. Users install with: `brew install --cask KikinaStudio/tap/notchnotch --no-quarantine`
 
 The `--no-quarantine` flag bypasses Gatekeeper automatically — no `xattr` needed.
 
@@ -338,7 +338,7 @@ SELECT id FROM sessions WHERE source = 'telegram'
 ORDER BY started_at DESC LIMIT 1
 ```
 
-This `id` is the Telegram `chat_id` of your DM with the Hermes bot. It's sent as `X-Hermes-Session-Id` on every request, giving full context continuity between Telegram and BoaNotch. Persisted in `UserDefaults` across restarts.
+This `id` is the Telegram `chat_id` of your DM with the Hermes bot. It's sent as `X-Hermes-Session-Id` on every request, giving full context continuity between Telegram and notchnotch. Persisted in `UserDefaults` across restarts.
 
 ### Window System
 
@@ -384,7 +384,7 @@ Timeouts: 300s request, 600s resource.
 | `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
 | `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
 | `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
-| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme for OAuth callback |
+| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme for OpenRouter OAuth callback |
 
 ---
 
