@@ -3,20 +3,27 @@ import SwiftUI
 struct ToastView: View {
     let message: String
     var notchWidth: CGFloat = 185
+    var isClipperToast: Bool = false
 
     var body: some View {
-        Text(cleanForToast(message))
-            .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.85))
-            .lineLimit(2)
-            .truncationMode(.tail)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(width: notchWidth)
-            .background(Color.black)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+        HStack(spacing: 8) {
+            if isClipperToast {
+                PacmanView()
+                    .frame(width: 18, height: 18)
+            }
+            Text(cleanForToast(message))
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .multilineTextAlignment(.leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(width: isClipperToast ? max(notchWidth, 280) : notchWidth)
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     /// Strip markdown syntax for clean toast display
@@ -45,5 +52,34 @@ struct ToastView: View {
         while s.contains("  ") { s = s.replacingOccurrences(of: "  ", with: " ") }
         while s.contains("\n\n\n") { s = s.replacingOccurrences(of: "\n\n\n", with: "\n\n") }
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: - Animated pacman (chomping purple circle)
+
+struct PacmanView: View {
+    @State private var chomping = false
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.05)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let cycle = t.truncatingRemainder(dividingBy: 0.4) / 0.4
+            let mouthAngle = abs(cycle * 2 - 1) * 40  // 0→40→0 degrees
+
+            Canvas { context, size in
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let radius = min(size.width, size.height) / 2
+
+                var path = Path()
+                let startAngle = Angle.degrees(mouthAngle)
+                let endAngle = Angle.degrees(360 - mouthAngle)
+                path.move(to: center)
+                path.addArc(center: center, radius: radius,
+                           startAngle: startAngle, endAngle: endAngle, clockwise: false)
+                path.closeSubpath()
+
+                context.fill(path, with: .color(AppColors.accent))
+            }
+        }
     }
 }

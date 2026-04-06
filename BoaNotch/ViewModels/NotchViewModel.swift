@@ -4,6 +4,7 @@ enum NotchState: Equatable {
     case closed
     case open
     case toast(String)
+    case clipperToast(String)  // brain dump toast with pacman icon
 }
 
 enum DropZone {
@@ -35,13 +36,22 @@ class NotchViewModel: ObservableObject {
     var isClosed: Bool { state == .closed }
 
     var isToastVisible: Bool {
-        if case .toast = state { return true }
-        return false
+        switch state {
+        case .toast, .clipperToast: return true
+        default: return false
+        }
     }
 
     var toastMessage: String? {
-        if case .toast(let msg) = state { return msg }
-        return nil
+        switch state {
+        case .toast(let msg), .clipperToast(let msg): return msg
+        default: return nil
+        }
+    }
+
+    var isClipperToast: Bool {
+        if case .clipperToast = state { return true }
+        return false
     }
 
     // MARK: - Current animated size
@@ -119,6 +129,24 @@ class NotchViewModel: ObservableObject {
 
         toastTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                self.state = .closed
+            }
+            self.onStateChange?(.closed)
+        }
+    }
+
+    func showClipperToast(_ title: String) {
+        toastTask?.cancel()
+        let truncated = String(title.prefix(80))
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            state = .clipperToast(truncated)
+        }
+        onStateChange?(.clipperToast(truncated))
+
+        toastTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 self.state = .closed

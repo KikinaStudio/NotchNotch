@@ -22,26 +22,60 @@ bash scripts/run.sh      # Build + bundle + codesign + launch
 bash scripts/release.sh   # Universal binary + DMG
 ```
 
+### Starting Hermes locally
+
+Hermes must be running for NotchNotch to work. Start it with its venv:
+
+```bash
+cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
+```
+
+- The binary is at `~/.hermes/hermes-agent/hermes` but **must** be run with `./venv/bin/python3` (system Python is 3.9, Hermes needs 3.10+ for `str | None` syntax).
+- The API server is started via `hermes gateway run`, NOT `hermes serve` (which doesn't exist).
+- Health check: `curl http://localhost:8642/health`
+
 ## Key architecture
 
-- `HermesClient.swift` — SSE streaming to `localhost:8642/v1/chat/completions`
-- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db` for cross-platform session continuity via `X-Hermes-Session-Id` header. Uses `user_id` (Telegram chat ID), NOT the internal session `id`.
-- `SSEParser.swift` — Two-tier token routing: thinking (`<think>`), tool calls (emoji/XML markers + weak heuristics), clean response
+- `HermesClient.swift` — SSE streaming (`streamCompletion`) and fire-and-forget (`sendCompletion`) to `localhost:8642/v1/chat/completions`
+- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `X-Hermes-Session-Id` header
+- `SSEParser.swift` — Returns `[SSEEvent]` arrays (not single events). Two-tier token routing: thinking (`<think>`), tool calls (emoji/XML markers + weak heuristics), clean response. Handles `</think>` + response in the same chunk.
 - `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch
+- `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
+- `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
 - `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events
 
+### Brain save pattern (v0.9)
+
+Both the drop zone "Save to brain" and the message brain button use the same flow:
+
+1. `ChatViewModel.saveToBrain(content:fileName:)` builds a prompt: `"Please save the following content to your memory. File: <name>\n\n<content>"`
+2. `HermesClient.sendCompletion(messages:)` sends `POST` with `stream: false`, checks HTTP 200, discards body
+3. Toast shown via `notchVM.showToast()`
+
+The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
+
 ## Important gotchas
 
-- **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. The `run.sh` script copies to `Contents/Resources/` which doesn't match. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.
-- **Session ID**: `X-Hermes-Session-Id` must be the Telegram `user_id` (e.g. `7921106232`), not the Hermes internal session ID. Sending an internal session ID causes Hermes to return empty 0-token responses.
+- **Session ID must be prefixed**: `X-Hermes-Session-Id` must be `notchnotch-<user_id>` (e.g. `notchnotch-7921106232`), NOT the raw `user_id`. The raw value collides with existing session IDs in Hermes's DB (`sessions.id` can equal `sessions.user_id`), causing Hermes to resume a stuck session and hang indefinitely. This was discovered when the Telegram user_id `7921106232` matched an old `api_server` session ID.
+- **SSE parser must return arrays**: `SSEParser.parse()` returns `[SSEEvent]`, not `SSEEvent?`. When `</think>` and response text arrive in the same SSE chunk, both `.thinking` and `.delta` must be emitted. The old single-return design stored the response in `pendingRegular` which was lost if no more content chunks followed before `[DONE]`.
+- **DropDelegate, not .onDrop closure**: The split drop zone requires `DropInfo.location` for position detection, which is only available via a `DropDelegate`. The simple `.onDrop(of:isTargeted:)` closure does not expose cursor position.
+- **NWListener response timing**: In `ClipperListener.swift`, do NOT use `defer { connection.cancel() }` in the receive handler — it cancels the connection before `connection.send()` completes. Let the send completion handler call `connection.cancel()`.
+- **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.
 - **Ad-hoc signed**: Triggers Gatekeeper. Users need `xattr -cr` or right-click > Open.
 - **SPM target name**: Still `BoaNotch` in Package.swift (renamed to `notchnotch` only at the app bundle level).
+- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum requires updating the switch in `NotchWindowController.swift` (line ~61) or the build fails.
+- **Chrome extension local path**: The extension is loaded from `~/NotchNotch Extension/` on the dev machine, NOT from the git repo clone. Changes to the repo must be copied there and the extension reloaded in Chrome.
+
+## Companion projects
+
+- **[NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper)** — Chrome extension that clips web pages to Hermes's brain. After a successful Hermes save, it POSTs `{"title","url"}` to `localhost:19944/clip` which triggers the pacman toast in NotchNotch. Loaded locally from `~/NotchNotch Extension/`.
 
 ## Conventions
 
 - Language: Swift 5.9, macOS 14+ deployment target
 - UI: SwiftUI with AppKit (NSPanel, NSStatusItem, Carbon hotkeys)
-- No external dependencies — all standard frameworks
+- No external dependencies — all standard frameworks (Network.framework for ClipperListener)
 - French locale for speech transcription
 - Purple/violet accent color throughout
+- Pacman icon for clipper toasts (animated purple circle, Canvas + TimelineView)

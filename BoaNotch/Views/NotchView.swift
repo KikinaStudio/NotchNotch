@@ -51,7 +51,7 @@ struct NotchView: View {
                 }
 
                 if notchVM.isToastVisible, let msg = notchVM.toastMessage {
-                    ToastView(message: msg, notchWidth: notchVM.closedSize.width)
+                    ToastView(message: msg, notchWidth: notchVM.closedSize.width, isClipperToast: notchVM.isClipperToast)
                         .padding(.top, 8)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity),

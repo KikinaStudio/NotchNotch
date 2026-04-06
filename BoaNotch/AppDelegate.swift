@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let searchVM = SearchViewModel()
     let hermesConfig = HermesConfig()
     let onboardingVM = OnboardingViewModel()
+    private let clipperListener = ClipperListener()
     private var statusItem: NSStatusItem?
     private var hotKeyRef: EventHotKeyRef?
     private var enterHotKeyRef: EventHotKeyRef?
@@ -39,6 +40,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         registerGlobalHotkey()
         setupMenuBarItem()
+        startClipperListener()
+    }
+
+    private func startClipperListener() {
+        clipperListener.onClip = { [weak self] title, url in
+            guard let self else { return }
+            let label = title.isEmpty ? url : title
+            self.notchVM.showClipperToast(label)
+        }
+        clipperListener.start()
     }
 
     // MARK: - Menu bar icon
@@ -171,5 +182,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         unregisterEnterHotkey()
+        clipperListener.stop()
     }
 }
