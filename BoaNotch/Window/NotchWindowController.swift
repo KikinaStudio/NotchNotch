@@ -62,7 +62,7 @@ class NotchWindowController {
             case .open:
                 panel.isNotchOpen = true
                 panel.makeKey()
-            case .closed, .toast, .clipperToast:
+            case .closed, .toast, .clipperToast, .awaitingClassification:
                 panel.isNotchOpen = false
                 panel.resignKey()
             }

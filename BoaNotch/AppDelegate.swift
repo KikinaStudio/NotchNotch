@@ -13,8 +13,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let onboardingVM = OnboardingViewModel()
     private let clipperListener = ClipperListener()
     private var statusItem: NSStatusItem?
-    private var hotKeyRef: EventHotKeyRef?
     private var enterHotKeyRef: EventHotKeyRef?
+    private var shiftEnterHotKeyRef: EventHotKeyRef?
+    private var escapeHotKeyRef: EventHotKeyRef?
+    private var flagsMonitor: Any?
+    private var controlTapTimestamps: [Date] = []
     private static weak var shared: AppDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,6 +40,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             notchVM.suppressAutoClose = true
             notchVM.open()
         }
+
+        notchVM.onDiscardAction = { [weak self] in self?.handleDiscardAction() }
 
         registerGlobalHotkey()
         setupMenuBarItem()
@@ -86,9 +91,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    // MARK: - Global hotkey (Carbon RegisterEventHotKey — intercepts the event, no error beep)
+    // MARK: - Triple-tap Control detection + Carbon hotkeys for classification
 
     private func registerGlobalHotkey() {
+        // Carbon event handler for dynamic hotkeys (Enter, Shift+Enter, Escape)
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
 
         InstallEventHandler(GetApplicationEventTarget(), { (_, event, _) -> OSStatus in
@@ -98,37 +104,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard let delegate = AppDelegate.shared else { return noErr }
             DispatchQueue.main.async {
                 switch hotKeyID.id {
-                case 1: delegate.toggleRecording()   // Ctrl+Shift+R
-                case 2: delegate.confirmRecording()   // Enter (during recording)
+                case 2: delegate.handleEnterHotkey()
+                case 3: delegate.handleBrainDumpAction()   // Shift+Enter
+                case 4: delegate.handleDiscardAction()      // Escape
                 default: break
                 }
             }
             return noErr
         }, 1, &eventType, nil, nil)
 
-        // Ctrl+Shift+R — toggle recording
-        let recID = EventHotKeyID(signature: OSType(0x424E4348), id: 1)
-        RegisterEventHotKey(UInt32(kVK_ANSI_R), UInt32(controlKey | shiftKey), recID, GetApplicationEventTarget(), 0, &hotKeyRef)
-
-        // Enter — confirm and send recording (registered dynamically in toggleRecording)
-    }
-
-    private func registerEnterHotkey() {
-        guard enterHotKeyRef == nil else { return }
-        let enterID = EventHotKeyID(signature: OSType(0x424E4348), id: 2)
-        RegisterEventHotKey(UInt32(kVK_Return), 0, enterID, GetApplicationEventTarget(), 0, &enterHotKeyRef)
-    }
-
-    private func unregisterEnterHotkey() {
-        if let ref = enterHotKeyRef {
-            UnregisterEventHotKey(ref)
-            enterHotKeyRef = nil
+        // Triple-tap Control via flagsChanged monitor
+        flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
         }
     }
 
+    private func handleFlagsChanged(_ event: NSEvent) {
+        let controlDown = event.modifierFlags.contains(.control)
+        let otherModifiers = event.modifierFlags.intersection([.shift, .command, .option])
+
+        // Count clean Control releases (no other modifiers held)
+        if !controlDown && otherModifiers.isEmpty {
+            let now = Date()
+            controlTapTimestamps.append(now)
+            controlTapTimestamps = controlTapTimestamps.filter { now.timeIntervalSince($0) < 0.5 }
+
+            if controlTapTimestamps.count >= 3 {
+                controlTapTimestamps.removeAll()
+                DispatchQueue.main.async { self.toggleRecording() }
+            }
+        }
+    }
+
+    // MARK: - Recording toggle
+
     private func toggleRecording() {
+        // Triple-tap during classification = discard
+        if case .awaitingClassification = notchVM.state {
+            handleDiscardAction()
+            return
+        }
+
         if audioRecorder.isRecording {
-            sendVoiceMemo()
+            finishRecording()
         } else {
             audioRecorder.startRecording()
             notchVM.isRecording = true
@@ -136,12 +154,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func confirmRecording() {
-        guard audioRecorder.isRecording else { return }
-        sendVoiceMemo()
+    /// Enter hotkey serves double duty: stop recording OR confirm Talk
+    private func handleEnterHotkey() {
+        if audioRecorder.isRecording {
+            finishRecording()
+        } else if case .awaitingClassification = notchVM.state {
+            handleTalkAction()
+        }
     }
 
-    private func sendVoiceMemo() {
+    private func finishRecording() {
         unregisterEnterHotkey()
         guard let url = audioRecorder.stopRecording() else {
             notchVM.isRecording = false
@@ -149,13 +171,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         notchVM.isRecording = false
 
-        // Transcribe locally, then send as text
         Task { @MainActor in
             if let text = await SpeechTranscriber.transcribe(audioURL: url) {
-                chatVM.draft = text
-                chatVM.send()
+                notchVM.showClassification(transcript: text)
+                registerClassificationHotkeys()
             } else {
-                // Fallback: send audio file path if transcription fails
+                // Transcription failed — fall back to direct send with attachment
                 let attachment = Attachment(
                     fileName: url.lastPathComponent,
                     fileType: "m4a",
@@ -169,6 +190,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Classification actions
+
+    private func handleTalkAction() {
+        guard let transcript = notchVM.pendingTranscript else { return }
+        unregisterClassificationHotkeys()
+        notchVM.pendingTranscript = nil
+        notchVM.open()
+        chatVM.draft = transcript
+        chatVM.send()
+    }
+
+    private func handleBrainDumpAction() {
+        guard let transcript = notchVM.pendingTranscript else { return }
+        unregisterClassificationHotkeys()
+        notchVM.pendingTranscript = nil
+        chatVM.saveToBrain(content: transcript, fileName: "voice-note")
+        notchVM.showClipperToast("Note archivée 🧠")
+    }
+
+    private func handleDiscardAction() {
+        unregisterClassificationHotkeys()
+        notchVM.dismissClassification()
+    }
+
+    // MARK: - Dynamic Carbon hotkeys
+
+    private func registerEnterHotkey() {
+        guard enterHotKeyRef == nil else { return }
+        let enterID = EventHotKeyID(signature: OSType(0x424E4348), id: 2)
+        RegisterEventHotKey(UInt32(kVK_Return), 0, enterID, GetApplicationEventTarget(), 0, &enterHotKeyRef)
+    }
+
+    private func unregisterEnterHotkey() {
+        if let ref = enterHotKeyRef { UnregisterEventHotKey(ref); enterHotKeyRef = nil }
+    }
+
+    private func registerClassificationHotkeys() {
+        registerEnterHotkey()
+
+        if shiftEnterHotKeyRef == nil {
+            let shiftEnterID = EventHotKeyID(signature: OSType(0x424E4348), id: 3)
+            RegisterEventHotKey(UInt32(kVK_Return), UInt32(shiftKey), shiftEnterID, GetApplicationEventTarget(), 0, &shiftEnterHotKeyRef)
+        }
+
+        if escapeHotKeyRef == nil {
+            let escapeID = EventHotKeyID(signature: OSType(0x424E4348), id: 4)
+            RegisterEventHotKey(UInt32(kVK_Escape), 0, escapeID, GetApplicationEventTarget(), 0, &escapeHotKeyRef)
+        }
+    }
+
+    private func unregisterClassificationHotkeys() {
+        unregisterEnterHotkey()
+        if let ref = shiftEnterHotKeyRef { UnregisterEventHotKey(ref); shiftEnterHotKeyRef = nil }
+        if let ref = escapeHotKeyRef { UnregisterEventHotKey(ref); escapeHotKeyRef = nil }
+    }
+
     // MARK: - OAuth URL handler
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -180,8 +257,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
-        unregisterEnterHotkey()
+        unregisterClassificationHotkeys()
+        if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
         clipperListener.stop()
     }
 }

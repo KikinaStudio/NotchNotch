@@ -59,6 +59,7 @@ struct NotchView: View {
                         ))
                         .onTapGesture { notchVM.open() }
                 }
+
             }
         }
         .frame(
@@ -217,7 +218,7 @@ struct NotchView: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColors.recordingLabel)
 
-            Text("Ctrl+Shift+R to stop")
+            Text("Triple-tap ⌃ to stop")
                 .font(.system(size: 10))
                 .foregroundStyle(.white.opacity(0.4))
         }
