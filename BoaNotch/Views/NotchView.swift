@@ -27,10 +27,9 @@ struct NotchView: View {
                     )
                     .onHover { hovering in notchVM.handleHover(hovering) }
                     .onTapGesture { notchVM.handleClick() }
-                    .onDrop(of: [.fileURL], isTargeted: $notchVM.isDragTargeted) { providers in
-                        handleDrop(providers)
-                        return true
-                    }
+                    .onDrop(of: [.fileURL], delegate: NotchDropDelegate(
+                        notchVM: notchVM, chatVM: chatVM, notchWidth: notchVM.currentWidth
+                    ))
                     .animation(
                         .interactiveSpring(response: 0.42, dampingFraction: 0.8, blendDuration: 0),
                         value: notchVM.isOpen
@@ -119,10 +118,10 @@ struct NotchView: View {
 
                         if notchVM.isSettingsOpen {
                             SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
-                            .padding(.top, 12)
+                            .padding(.top, 14)
                             .padding(.horizontal, 30)
                             .padding(.bottom, 18)
-                            .background(Color.white.opacity(0.08))
+                            .background(Color.white.opacity(0.05))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             .padding(.horizontal, 30)
                             .padding(.bottom, 18)
@@ -139,7 +138,7 @@ struct NotchView: View {
             }
 
             if notchVM.isDragTargeted {
-                DropOverlay()
+                DropOverlay(activeZone: notchVM.activeDropZone)
                     .transition(.opacity)
             }
         }
@@ -149,60 +148,60 @@ struct NotchView: View {
                 bottomCornerRadius: notchVM.bottomCornerRadius
             )
         )
-        // no overlay here — KITT scanner placed in VStack below
+        .overlay(alignment: .top) {
+            // Flanking buttons — beside the hardware notch, on the same line
+            if notchVM.isOpen && !onboardingVM.needsOnboarding
+                && !notchVM.isSearchOpen && !notchVM.isRecording {
+                HStack(spacing: 0) {
+                    Button {
+                        if notchVM.isSettingsOpen {
+                            notchVM.isSettingsOpen = false
+                        } else {
+                            notchVM.isSearchOpen = true
+                        }
+                    } label: {
+                        Image(systemName: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+
+                    Spacer(minLength: notchVM.closedSize.width + 16)
+
+                    Button { notchVM.isSettingsOpen.toggle() } label: {
+                        Image(systemName: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.5))
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                }
+                .padding(.horizontal, 60)
+                .padding(.top, 2)
+                .transition(.opacity.animation(.easeIn(duration: 0.15).delay(0.1)))
+            }
+        }
     }
 
-    // MARK: - Settings top bar (close + gear filled)
+    // MARK: - Settings top bar spacer (buttons moved to flanking overlay)
 
     private var settingsTopBar: some View {
-        HStack {
-            Button { notchVM.isSettingsOpen = false } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.5))
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-
-            Spacer()
-
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(AppColors.accent)
-        }
-        .padding(.horizontal, 46)
-        .padding(.top, 36)
-        .padding(.bottom, 4)
+        Color.clear
+            .frame(height: 32)
+            .padding(.top, 4)
     }
 
-    // MARK: - Top bar (search + session indicator)
+    // MARK: - Top bar spacer (buttons moved to flanking overlay)
 
     private var notchTopBar: some View {
-        HStack {
-            Button { notchVM.isSearchOpen = true } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.4))
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-
-            Spacer()
-
-            // New conversation — hidden until conversation history is implemented
-            // Button { ... } label: { Image(systemName: "plus.bubble") }
-
-            Button { notchVM.isSettingsOpen.toggle() } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.4))
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-        }
-        .padding(.horizontal, 46)
-        .padding(.top, 36)
-        .padding(.bottom, 4)
+        Color.clear
+            .frame(height: 32)
+            .padding(.top, 4)
     }
 
     // MARK: - Recording indicator (inside open notch)
@@ -226,20 +225,59 @@ struct NotchView: View {
         .padding(.bottom, 4)
     }
 
-    private func handleDrop(_ providers: [NSItemProvider]) {
+}
+
+// MARK: - Drop delegate for split drop zones
+
+struct NotchDropDelegate: DropDelegate {
+    let notchVM: NotchViewModel
+    let chatVM: ChatViewModel
+    let notchWidth: CGFloat
+
+    func dropEntered(info: DropInfo) {
+        notchVM.isDragTargeted = true
+        updateZone(info: info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        updateZone(info: info)
+        return DropProposal(operation: .copy)
+    }
+
+    func dropExited(info: DropInfo) {
+        notchVM.isDragTargeted = false
+        notchVM.activeDropZone = .none
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        let zone = notchVM.activeDropZone
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+
         for provider in providers {
             provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
                 guard let data = data as? Data,
                       let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true)
                 else { return }
-
                 let attachment = DocumentExtractor.extract(from: url)
                 DispatchQueue.main.async {
-                    self.chatVM.pendingAttachments.append(attachment)
-                    if !self.notchVM.isOpen { self.notchVM.open() }
+                    switch zone {
+                    case .left, .none:
+                        chatVM.pendingAttachments.append(attachment)
+                        if !notchVM.isOpen { notchVM.open() }
+                    case .right:
+                        chatVM.saveToBrain(content: attachment.textContent, fileName: attachment.fileName)
+                    }
                 }
             }
         }
+        notchVM.isDragTargeted = false
+        notchVM.activeDropZone = .none
+        return true
+    }
+
+    private func updateZone(info: DropInfo) {
+        notchVM.activeDropZone = info.location.x < notchWidth / 2.0 ? .left : .right
     }
 }
 

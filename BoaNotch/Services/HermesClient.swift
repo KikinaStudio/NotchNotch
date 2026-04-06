@@ -51,9 +51,13 @@ class HermesClient {
                     for try await line in bytes.lines {
                         guard !Task.isCancelled else { break }
 
-                        if let event = parser.parse(line: line) {
+                        let events = parser.parse(line: line)
+                        for event in events {
                             if case .done = event { break }
                             continuation.yield(event)
+                        }
+                        if events.contains(where: { if case .done = $0 { return true }; return false }) {
+                            break
                         }
                     }
 
@@ -67,6 +71,31 @@ class HermesClient {
             continuation.onTermination = { _ in
                 task.cancel()
             }
+        }
+    }
+
+    func sendCompletion(messages: [[String: String]]) async throws {
+        guard let url = URL(string: self.baseURL) else {
+            throw HermesError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let sessionId = self.sessionId, !sessionId.isEmpty {
+            request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
+        }
+        let body: [String: Any] = [
+            "model": "hermes-agent",
+            "messages": messages,
+            "stream": false
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw HermesError.httpError(httpResponse.statusCode)
         }
     }
 

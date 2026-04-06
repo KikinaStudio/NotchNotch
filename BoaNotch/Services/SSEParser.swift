@@ -13,19 +13,25 @@ struct SSEParser {
     private var sawCleanResponse = false
     private var pendingRegular = ""
 
-    mutating func parse(line: String) -> SSEEvent? {
+    mutating func parse(line: String) -> [SSEEvent] {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard trimmed.hasPrefix("data: ") else { return nil }
+        guard trimmed.hasPrefix("data: ") else { return [] }
 
         let data = String(trimmed.dropFirst(6))
 
         if data == "[DONE]" {
+            // Flush any pending regular content before emitting done
+            var events: [SSEEvent] = []
+            if !pendingRegular.isEmpty {
+                events.append(routeSingleContent(pendingRegular))
+                pendingRegular = ""
+            }
             insideThink = false
             toolMode = false
             sawCleanResponse = false
-            pendingRegular = ""
-            return .done
+            events.append(.done)
+            return events
         }
 
         guard let jsonData = data.data(using: .utf8),
@@ -34,7 +40,7 @@ struct SSEParser {
               let firstChoice = choices.first,
               let delta = firstChoice["delta"] as? [String: Any]
         else {
-            return nil
+            return []
         }
 
         // Explicit tool_calls in delta (OpenAI format)
@@ -52,18 +58,18 @@ struct SSEParser {
                     }
                 }
             }
-            if !toolText.isEmpty { return .toolCall(toolText) }
+            if !toolText.isEmpty { return [.toolCall(toolText)] }
         }
 
         guard let content = delta["content"] as? String, !content.isEmpty else {
-            return nil
+            return []
         }
 
         // Route through think tag detection first
         return routeContent(content)
     }
 
-    private mutating func routeContent(_ text: String) -> SSEEvent? {
+    private mutating func routeContent(_ text: String) -> [SSEEvent] {
         var thinkBuf = ""
         var regularBuf = pendingRegular
         pendingRegular = ""
@@ -91,13 +97,21 @@ struct SSEParser {
             }
         }
 
+        var events: [SSEEvent] = []
+
         if !thinkBuf.isEmpty {
-            if !regularBuf.isEmpty { pendingRegular = regularBuf }
-            return .thinking(thinkBuf)
+            events.append(.thinking(thinkBuf))
         }
 
-        if regularBuf.isEmpty { return nil }
+        if !regularBuf.isEmpty {
+            events.append(routeSingleContent(regularBuf))
+        }
 
+        return events
+    }
+
+    /// Route a single piece of non-thinking content to the appropriate event type
+    private mutating func routeSingleContent(_ regularBuf: String) -> SSEEvent {
         // Strong markers (emojis, XML tags) always enter tool mode, even after clean response
         if isStrongToolMarker(regularBuf) {
             toolMode = true

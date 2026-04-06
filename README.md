@@ -390,10 +390,10 @@ Timeouts: 300s request, 600s resource.
 
 ## Known Limitations
 
-- **No conversation persistence** — messages are lost on restart. Hermes remembers context server-side via sessions and memory, but the UI starts blank.
+- **UI starts blank on restart** — notchnotch doesn't reload previous messages from Hermes on launch. The conversation context is fully preserved server-side (Hermes persists all messages with full-text search), so the agent remembers everything — the UI just doesn't display past messages yet.
 - **Fixed notch size** — 580x340pt. Dynamic height and drag-to-resize are planned.
 - **Hardcoded localhost:8642** — no UI to change the Hermes URL.
-- **No conversation history** — new conversation button is hidden until a history list is implemented.
+- **No conversation history UI** — notchnotch can't browse past sessions or reload old conversations yet. Hermes stores full session history in `state.db`.
 - **Tool detection is heuristic** — some tool output may leak into the response or vice versa. Post-processing fallback catches most cases.
 - **Unsigned** — triggers Gatekeeper. Use `xattr -cr` or `brew install --no-quarantine`.
 
@@ -414,10 +414,11 @@ Timeouts: 300s request, 600s resource.
 
 ## Roadmap
 
+- [x] Flanking search/settings buttons beside physical notch
 - [ ] Dynamic notch height (auto-grow with content, drag handle)
-- [ ] Conversation history list + new conversation button
+- [ ] Conversation history UI (browse and reload sessions from Hermes `state.db`)
+- [ ] Memory provider selection UI (choose among Hermes's 6 external memory providers)
 - [ ] Auto-update via Sparkle
-- [ ] Flanking search/settings buttons beside physical notch
 - [ ] Universal binary (requires Xcode)
 - [ ] Apple Developer signing + notarization
 

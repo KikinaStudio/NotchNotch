@@ -18,8 +18,14 @@ struct ChatView: View {
                                 .frame(maxHeight: .infinity)
 
                             ForEach(chatVM.messages) { message in
-                                MessageBubble(message: message, searchQuery: searchVM.query)
-                                    .id(message.id)
+                                MessageBubble(
+                                    message: message,
+                                    searchQuery: searchVM.query,
+                                    onSaveToBrain: message.role == .assistant ? {
+                                        chatVM.saveToBrain(content: message.content, fileName: "chat-response")
+                                    } : nil
+                                )
+                                .id(message.id)
                             }
                         }
                         .padding(.horizontal, 2)
@@ -50,13 +56,6 @@ struct ChatView: View {
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
                         .multilineTextAlignment(.center)
-                    if let nsImage = loadAppLogo() {
-                        Image(nsImage: nsImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: 220)
-                            .opacity(0.35)
-                    }
                 }
                 .padding(.bottom, 100)
             }

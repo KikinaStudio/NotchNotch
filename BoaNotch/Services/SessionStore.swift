@@ -24,21 +24,26 @@ class SessionStore: ObservableObject {
         autoLinkTelegram()
     }
 
-    /// Auto-detect the Telegram DM session from Hermes state.db
+    /// Auto-detect the Telegram user ID from Hermes state.db
     func autoLinkTelegram() {
         guard let db = openDB() else { return }
         defer { sqlite3_close(db) }
 
-        // Find the most recent Telegram session (the user's DM with the bot)
+        // Find the Telegram user_id (chat_id) — this is what X-Hermes-Session-Id expects,
+        // not the internal session ID. Using the session ID causes Hermes to resume a
+        // closed session and return empty responses.
         var stmt: OpaquePointer?
-        let sql = "SELECT id FROM sessions WHERE source = 'telegram' ORDER BY started_at DESC LIMIT 1"
+        let sql = "SELECT user_id FROM sessions WHERE source = 'telegram' AND user_id IS NOT NULL ORDER BY started_at DESC LIMIT 1"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         defer { sqlite3_finalize(stmt) }
 
         if sqlite3_step(stmt) == SQLITE_ROW {
-            let sessionId = String(cString: sqlite3_column_text(stmt, 0))
-            if selectedSessionId != sessionId {
-                selectedSessionId = sessionId
+            // Prefix with "notchnotch-" to avoid collision with existing session IDs
+            // in the Hermes DB that may share the same raw user_id value
+            let userId = String(cString: sqlite3_column_text(stmt, 0))
+            let prefixed = "notchnotch-\(userId)"
+            if selectedSessionId != prefixed {
+                selectedSessionId = prefixed
             }
             isLinked = true
         }

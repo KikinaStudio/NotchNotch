@@ -54,7 +54,7 @@ struct SearchBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.08))
+        .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 38)
         .padding(.top, 36)

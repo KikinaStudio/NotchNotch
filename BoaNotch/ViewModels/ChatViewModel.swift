@@ -203,6 +203,21 @@ class ChatViewModel: ObservableObject {
         return false
     }
 
+    func saveToBrain(content: String, fileName: String) {
+        let truncated = String(content.prefix(DocumentExtractor.maxCharacters))
+        let prompt = "Please save the following content to your memory. File: \(fileName)\n\n\(truncated)"
+        let messages: [[String: String]] = [["role": "user", "content": prompt]]
+        Task { @MainActor in
+            do {
+                try await client.sendCompletion(messages: messages)
+                notchVM?.showToast("Saved to brain")
+            } catch {
+                print("[notchnotch] Save to brain error: \(error)")
+                notchVM?.showToast("Brain save failed")
+            }
+        }
+    }
+
     func removeAttachment(_ id: UUID) {
         pendingAttachments.removeAll { $0.id == id }
     }

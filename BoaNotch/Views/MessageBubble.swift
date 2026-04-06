@@ -4,11 +4,13 @@ import AppKit
 struct MessageBubble: View {
     let message: ChatMessage
     var searchQuery: String? = nil
+    var onSaveToBrain: (() -> Void)? = nil
 
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
     @State private var showToolCalls = false
+    @State private var brainHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -34,8 +36,20 @@ struct MessageBubble: View {
             // Message content with clickable file paths (final response only)
             if !displayContent.isEmpty {
                 filePathAwareContent
-            } else if message.isStreaming && message.thinkingContent.isEmpty && message.toolCallContent.isEmpty {
-                streamingDots
+                    .overlay(alignment: .bottomTrailing) {
+                        if !isUser && !message.isStreaming && onSaveToBrain != nil {
+                            Button { onSaveToBrain?() } label: {
+                                Image(systemName: "brain.head.profile")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(brainHovered ? .blue : .gray)
+                                    .opacity(brainHovered ? 1.0 : 0.5)
+                            }
+                            .buttonStyle(.plain)
+                            .onHover { brainHovered = $0 }
+                            .pointingHandCursor()
+                            .offset(x: 4, y: 4)
+                        }
+                    }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

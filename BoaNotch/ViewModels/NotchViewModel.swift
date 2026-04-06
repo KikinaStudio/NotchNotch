@@ -6,9 +6,14 @@ enum NotchState: Equatable {
     case toast(String)
 }
 
+enum DropZone {
+    case none, left, right
+}
+
 class NotchViewModel: ObservableObject {
     @Published var state: NotchState = .closed
     @Published var isDragTargeted = false
+    @Published var activeDropZone: DropZone = .none
     @Published var isRecording = false
     @Published var isSettingsOpen = false
     @Published var isSearchOpen = false
