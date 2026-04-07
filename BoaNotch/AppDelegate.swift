@@ -18,6 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var escapeHotKeyRef: EventHotKeyRef?
     private var flagsMonitor: Any?
     private var controlTapTimestamps: [Date] = []
+    private var controlWasDown = false
     private static weak var shared: AppDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -120,19 +121,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
-        let controlDown = event.modifierFlags.contains(.control)
+        // Only react to Control-key events (left or right Control).
+        // flagsChanged fires for ALL modifiers (Fn, Caps Lock, Shift, etc.) — gate strictly.
+        let keyCode = Int(event.keyCode)
+        guard keyCode == kVK_Control || keyCode == kVK_RightControl else { return }
+
+        let nowDown = event.modifierFlags.contains(.control)
+        let wasDown = controlWasDown
+        controlWasDown = nowDown
+
+        // Detect a clean down→up release with no other modifiers held
         let otherModifiers = event.modifierFlags.intersection([.shift, .command, .option])
+        guard wasDown, !nowDown, otherModifiers.isEmpty else { return }
 
-        // Count clean Control releases (no other modifiers held)
-        if !controlDown && otherModifiers.isEmpty {
-            let now = Date()
-            controlTapTimestamps.append(now)
-            controlTapTimestamps = controlTapTimestamps.filter { now.timeIntervalSince($0) < 0.5 }
+        let now = Date()
+        controlTapTimestamps.append(now)
+        controlTapTimestamps = controlTapTimestamps.filter { now.timeIntervalSince($0) < 0.5 }
 
-            if controlTapTimestamps.count >= 3 {
-                controlTapTimestamps.removeAll()
-                DispatchQueue.main.async { self.toggleRecording() }
-            }
+        if controlTapTimestamps.count >= 3 {
+            controlTapTimestamps.removeAll()
+            DispatchQueue.main.async { self.toggleRecording() }
         }
     }
 
@@ -150,21 +158,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             audioRecorder.startRecording()
             notchVM.isRecording = true
-            registerEnterHotkey()
         }
     }
 
-    /// Enter hotkey serves double duty: stop recording OR confirm Talk
+    /// Enter hotkey is only registered during the classification window
     private func handleEnterHotkey() {
-        if audioRecorder.isRecording {
-            finishRecording()
-        } else if case .awaitingClassification = notchVM.state {
+        if case .awaitingClassification = notchVM.state {
             handleTalkAction()
         }
     }
 
     private func finishRecording() {
-        unregisterEnterHotkey()
         guard let url = audioRecorder.stopRecording() else {
             notchVM.isRecording = false
             return
