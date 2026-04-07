@@ -25,8 +25,23 @@ class NotchViewModel: ObservableObject {
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
 
-    /// The fully open size for chat — wide and compact
-    let openSize: CGSize = CGSize(width: 580, height: 340)
+    /// The open width for chat (fixed)
+    let openWidth: CGFloat = 580
+    /// The open height for chat (dynamic — grows with content or drag)
+    @Published var openHeight: CGFloat = 340
+
+    // MARK: - Dynamic height state
+    /// nil = auto-grow active. Non-nil = user has dragged, respect their preference.
+    var userResizedHeight: CGFloat? = nil
+    /// Screen height, set by NotchWindowController at launch.
+    var screenHeight: CGFloat = 900
+
+    static let defaultOpenHeight: CGFloat = 340
+    static let fixedChromeHeight: CGFloat = 96  // topBar(36) + chatTopPad(4) + inputBar(~32) + chatBottomPad(18) + margin(6)
+
+    var autoGrowMax: CGFloat { screenHeight * 4.0 / 9.0 }
+    var dragMin: CGFloat { Self.fixedChromeHeight + 60 }  // 60pt ≈ 3 lines of chat
+    var dragMax: CGFloat { screenHeight * 5.0 / 7.0 }
 
     var onStateChange: ((NotchState) -> Void)?
 
@@ -71,12 +86,15 @@ class NotchViewModel: ObservableObject {
     @Published var isStreaming = false
 
     var currentWidth: CGFloat {
-        if isOpen { return openSize.width }
+        if isOpen { return openWidth }
         return isThinkingClosed ? closedSize.width + 36 : closedSize.width
     }
 
     var currentHeight: CGFloat {
-        isOpen ? openSize.height : closedSize.height
+        if isOpen {
+            return isSettingsOpen ? Self.defaultOpenHeight : openHeight
+        }
+        return closedSize.height
     }
 
     // MARK: - Corner radii (from BoringNotch source)
@@ -120,8 +138,10 @@ class NotchViewModel: ObservableObject {
 
     func close() {
         isDragTargeted = false
+        userResizedHeight = nil
         withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)) {
             state = .closed
+            openHeight = Self.defaultOpenHeight
         }
         onStateChange?(.closed)
     }
@@ -160,6 +180,29 @@ class NotchViewModel: ObservableObject {
             }
             self.onStateChange?(.closed)
         }
+    }
+
+    // MARK: - Dynamic height
+
+    func updateContentHeight(_ contentHeight: CGFloat) {
+        guard userResizedHeight == nil, isOpen, !isSettingsOpen else { return }
+        let ideal = Self.fixedChromeHeight + contentHeight
+        let clamped = min(ideal, autoGrowMax)
+        let floored = max(clamped, Self.defaultOpenHeight)
+        if floored > openHeight + 2 {  // only grow, never shrink; ignore micro-updates
+            withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.85, blendDuration: 0)) {
+                openHeight = floored
+            }
+        }
+    }
+
+    /// Apply a drag resize given the height at drag start and current translation.
+    /// The view tracks the start height locally so we don't need mutable state here.
+    func applyDragResize(startHeight: CGFloat, translation: CGFloat) {
+        let newHeight = startHeight + translation
+        let clamped = min(max(newHeight, dragMin), dragMax)
+        userResizedHeight = clamped
+        openHeight = clamped
     }
 
     // MARK: - Classification (post-recording intent picker)

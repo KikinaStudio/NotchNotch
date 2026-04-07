@@ -42,6 +42,10 @@ struct NotchView: View {
                         .interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0),
                         value: notchVM.isThinkingClosed
                     )
+                    .animation(
+                        .interactiveSpring(response: 0.3, dampingFraction: 0.85, blendDuration: 0),
+                        value: notchVM.openHeight
+                    )
 
                 // KITT scanner — directly below the closed notch
                 if notchVM.isRecording && !notchVM.isOpen {
@@ -64,7 +68,7 @@ struct NotchView: View {
         }
         .frame(
             width: NotchWindowController.panelWidth,
-            height: NotchWindowController.panelHeight,
+            height: notchVM.screenHeight,
             alignment: .top
         )
     }
@@ -135,6 +139,15 @@ struct NotchView: View {
                         }
                     }
                     .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
+                }
+            }
+
+            // Drag resize handle — only in chat mode
+            if notchVM.isOpen && !onboardingVM.needsOnboarding && !notchVM.isSettingsOpen {
+                VStack {
+                    Spacer()
+                    ResizeHandle(notchVM: notchVM)
+                        .padding(.bottom, 2)
                 }
             }
 
@@ -226,6 +239,39 @@ struct NotchView: View {
         .padding(.bottom, 4)
     }
 
+}
+
+// MARK: - Resize handle (drag bottom edge of open notch)
+
+private struct ResizeHandle: View {
+    @ObservedObject var notchVM: NotchViewModel
+    @State private var dragStartHeight: CGFloat?
+
+    var body: some View {
+        Capsule()
+            .fill(.white.opacity(0.15))
+            .frame(width: 36, height: 4)
+            .frame(width: 100, height: 16)  // larger hit area
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { value in
+                        let start = dragStartHeight ?? notchVM.openHeight
+                        if dragStartHeight == nil { dragStartHeight = start }
+                        notchVM.applyDragResize(
+                            startHeight: start,
+                            translation: value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        dragStartHeight = nil
+                    }
+            )
+            .onHover { hovering in
+                if hovering { NSCursor.resizeUpDown.push() }
+                else { NSCursor.pop() }
+            }
+    }
 }
 
 // MARK: - Drop delegate for split drop zones
