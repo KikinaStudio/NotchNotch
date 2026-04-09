@@ -4,13 +4,10 @@ import AppKit
 struct MessageBubble: View {
     let message: ChatMessage
     var searchQuery: String? = nil
-    var onSaveToBrain: (() -> Void)? = nil
-
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
     @State private var showToolCalls = false
-    @State private var brainHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -36,20 +33,6 @@ struct MessageBubble: View {
             // Message content with clickable file paths (final response only)
             if !displayContent.isEmpty {
                 filePathAwareContent
-                    .overlay(alignment: .bottomTrailing) {
-                        if !isUser && !message.isStreaming && onSaveToBrain != nil {
-                            Button { onSaveToBrain?() } label: {
-                                Image(systemName: "brain.head.profile")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(brainHovered ? .blue : .gray)
-                                    .opacity(brainHovered ? 1.0 : 0.5)
-                            }
-                            .buttonStyle(.plain)
-                            .onHover { brainHovered = $0 }
-                            .pointingHandCursor()
-                            .offset(x: 4, y: 4)
-                        }
-                    }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -295,17 +278,6 @@ struct MessageBubble: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    // MARK: - Streaming dots
-
-    private var streamingDots: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<3, id: \.self) { i in
-                StreamingDot(delay: Double(i) * 0.15)
-            }
-        }
-        .frame(height: 18)
-    }
-
     // MARK: - Path parsing
 
     struct ContentPart: Equatable {
@@ -412,25 +384,4 @@ struct MessageBubble: View {
         return result
     }
 
-}
-
-// MARK: - Animated streaming dot
-
-struct StreamingDot: View {
-    let delay: Double
-    @State private var animating = false
-
-    var body: some View {
-        Circle()
-            .fill(.white.opacity(0.4))
-            .frame(width: 5, height: 5)
-            .offset(y: animating ? -3 : 1)
-            .animation(
-                .easeInOut(duration: 0.5)
-                .repeatForever(autoreverses: true)
-                .delay(delay),
-                value: animating
-            )
-            .onAppear { animating = true }
-    }
 }

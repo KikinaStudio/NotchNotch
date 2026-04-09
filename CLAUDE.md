@@ -47,7 +47,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ### Brain save pattern (v0.9)
 
-Both the drop zone "Save to brain" and the message brain button use the same flow:
+The drop zone "Save to brain", voice notes, and the Clipper extension all use the same flow:
 
 1. `ChatViewModel.saveToBrain(content:fileName:)` builds a prompt: `"Please save the following content to your memory. File: <name>\n\n<content>"`
 2. `HermesClient.sendCompletion(messages:)` sends `POST /v1/responses` with `store: false`, checks HTTP 200, discards body

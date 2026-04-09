@@ -134,7 +134,7 @@ struct NotchView: View {
                         } else {
                             ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
                                 .padding(.top, notchVM.isRecording ? 8 : 4)
-                                .padding(.horizontal, 38)
+                                .padding(.horizontal, 35)
                                 .padding(.bottom, 18)
                         }
                     }
@@ -167,33 +167,25 @@ struct NotchView: View {
             if notchVM.isOpen && !onboardingVM.needsOnboarding
                 && !notchVM.isSearchOpen && !notchVM.isRecording {
                 HStack(spacing: 0) {
-                    Button {
+                    FlankingButton(
+                        icon: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass",
+                        isActive: false
+                    ) {
                         if notchVM.isSettingsOpen {
                             notchVM.isSettingsOpen = false
                         } else {
                             notchVM.isSearchOpen = true
                         }
-                    } label: {
-                        Image(systemName: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.5))
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
 
                     Spacer(minLength: notchVM.closedSize.width + 16)
 
-                    Button { notchVM.isSettingsOpen.toggle() } label: {
-                        Image(systemName: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(notchVM.isSettingsOpen ? AppColors.accent : .white.opacity(0.5))
-                            .frame(width: 28, height: 28)
-                            .contentShape(Rectangle())
+                    FlankingButton(
+                        icon: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape",
+                        isActive: notchVM.isSettingsOpen
+                    ) {
+                        notchVM.isSettingsOpen.toggle()
                     }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
                 }
                 .padding(.horizontal, 60)
                 .padding(.top, 2)
@@ -325,6 +317,28 @@ struct NotchDropDelegate: DropDelegate {
 
     private func updateZone(info: DropInfo) {
         notchVM.activeDropZone = info.location.x < notchWidth / 2.0 ? .left : .right
+    }
+}
+
+// MARK: - Flanking button (search / settings beside notch)
+
+private struct FlankingButton: View {
+    let icon: String
+    let isActive: Bool
+    let action: () -> Void
+    @State private var hovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(isActive ? AppColors.accent : .white.opacity(hovered ? 0.5 : 0.1))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovered = $0 }
+        .pointingHandCursor()
     }
 }
 

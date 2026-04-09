@@ -20,10 +20,7 @@ struct ChatView: View {
                             ForEach(chatVM.messages) { message in
                                 MessageBubble(
                                     message: message,
-                                    searchQuery: searchVM.query,
-                                    onSaveToBrain: message.role == .assistant ? {
-                                        chatVM.saveToBrain(content: message.content, fileName: "chat-response")
-                                    } : nil
+                                    searchQuery: searchVM.query
                                 )
                                 .id(message.id)
                             }
@@ -127,7 +124,7 @@ struct ChatView: View {
 
     private var inputBar: some View {
         VStack(spacing: 0) {
-            // Expanded bar (brain toggle)
+            // Expanded bar
             if notchVM.isExpandedBarOpen {
                 ExpandedBarView(config: hermesConfig, notchVM: notchVM)
                     .padding(.horizontal, 2)
