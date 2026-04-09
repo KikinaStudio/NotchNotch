@@ -64,8 +64,8 @@ class ChatViewModel: ObservableObject {
         pendingAttachments = []
         connectionError = nil
 
-        // Build API messages BEFORE adding the placeholder
-        let apiMessages = messages
+        // Build conversation history from all messages BEFORE the one just appended
+        let conversationHistory = messages.dropLast()
             .filter { !$0.content.isEmpty }
             .map { ["role": $0.role.rawValue, "content": $0.content] }
 
@@ -75,7 +75,7 @@ class ChatViewModel: ObservableObject {
 
         streamTask = Task { @MainActor in
             do {
-                let stream = client.streamCompletion(messages: apiMessages)
+                let stream = client.streamCompletion(input: fullContent, conversationHistory: conversationHistory)
                 var gotFirstToken = false
                 var thinkingStarted: Date?
 

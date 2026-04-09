@@ -13,11 +13,11 @@ class HermesClient {
 
     // MARK: - Streaming via /v1/runs
 
-    func streamCompletion(messages: [[String: String]]) -> AsyncThrowingStream<SSEEvent, Error> {
+    func streamCompletion(input: String, conversationHistory: [[String: String]]) -> AsyncThrowingStream<SSEEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let runId = try await self.startRun(messages: messages)
+                    let runId = try await self.startRun(input: input, conversationHistory: conversationHistory)
 
                     guard let eventsURL = URL(string: "\(self.baseURL)/v1/runs/\(runId)/events") else {
                         continuation.finish(throwing: HermesError.invalidURL)
@@ -65,7 +65,7 @@ class HermesClient {
         }
     }
 
-    private func startRun(messages: [[String: String]]) async throws -> String {
+    private func startRun(input: String, conversationHistory: [[String: String]]) async throws -> String {
         guard let url = URL(string: "\(baseURL)/v1/runs") else {
             throw HermesError.invalidURL
         }
@@ -74,7 +74,10 @@ class HermesClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        var body: [String: Any] = ["input": messages]
+        var body: [String: Any] = ["input": input]
+        if !conversationHistory.isEmpty {
+            body["conversation_history"] = conversationHistory
+        }
         if let sessionId = sessionId, !sessionId.isEmpty {
             body["session_id"] = sessionId
         }

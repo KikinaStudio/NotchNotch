@@ -36,7 +36,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ## Key architecture
 
-- `HermesClient.swift` — Two-step streaming via `/v1/runs` (POST to start, GET SSE events), fire-and-forget via `/v1/responses` (`sendCompletion`)
+- `HermesClient.swift` — Two-step streaming via `/v1/runs` with explicit `conversation_history` (POST `{input, conversation_history, session_id}` to start, GET SSE events), fire-and-forget via `/v1/responses` (`sendCompletion`)
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
 - `SSEParser.swift` — Routes structured SSE events from `/v1/runs`: `message.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `run.completed`. No heuristics.
 - `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch
