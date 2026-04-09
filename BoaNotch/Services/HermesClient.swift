@@ -1,7 +1,7 @@
 import Foundation
 
 class HermesClient {
-    private let baseURL = "http://localhost:8642/v1/chat/completions"
+    private let baseURL = "http://localhost:8642"
     var sessionId: String?
 
     private let session: URLSession = {
@@ -11,29 +11,20 @@ class HermesClient {
         return URLSession(configuration: config)
     }()
 
+    // MARK: - Streaming via /v1/runs
+
     func streamCompletion(messages: [[String: String]]) -> AsyncThrowingStream<SSEEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    guard let url = URL(string: self.baseURL) else {
+                    let runId = try await self.startRun(messages: messages)
+
+                    guard let eventsURL = URL(string: "\(self.baseURL)/v1/runs/\(runId)/events") else {
                         continuation.finish(throwing: HermesError.invalidURL)
                         return
                     }
 
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    if let sessionId = self.sessionId, !sessionId.isEmpty {
-                        request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
-                    }
-
-                    let body: [String: Any] = [
-                        "model": "hermes-agent",
-                        "messages": messages,
-                        "stream": true
-                    ]
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
+                    let request = URLRequest(url: eventsURL)
                     let (bytes, response) = try await self.session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
@@ -74,20 +65,48 @@ class HermesClient {
         }
     }
 
+    private func startRun(messages: [[String: String]]) async throws -> String {
+        guard let url = URL(string: "\(baseURL)/v1/runs") else {
+            throw HermesError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = ["input": messages]
+        if let sessionId = sessionId, !sessionId.isEmpty {
+            body["session_id"] = sessionId
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        guard httpResponse.statusCode == 202 else {
+            throw HermesError.httpError(httpResponse.statusCode)
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let runId = json["run_id"] as? String else {
+            throw HermesError.invalidResponse
+        }
+        return runId
+    }
+
+    // MARK: - Non-streaming via /v1/responses
+
     func sendCompletion(messages: [[String: String]]) async throws {
-        guard let url = URL(string: self.baseURL) else {
+        guard let url = URL(string: "\(baseURL)/v1/responses") else {
             throw HermesError.invalidURL
         }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let sessionId = self.sessionId, !sessionId.isEmpty {
-            request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
-        }
         let body: [String: Any] = [
             "model": "hermes-agent",
-            "messages": messages,
-            "stream": false
+            "input": messages,
+            "store": false,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (_, response) = try await session.data(for: request)
@@ -99,8 +118,10 @@ class HermesClient {
         }
     }
 
+    // MARK: - Health check
+
     func healthCheck() async -> Bool {
-        guard let url = URL(string: "http://localhost:8642/health") else { return false }
+        guard let url = URL(string: "\(baseURL)/health") else { return false }
         do {
             let (data, response) = try await session.data(from: url)
             let ok = (response as? HTTPURLResponse)?.statusCode == 200

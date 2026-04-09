@@ -36,9 +36,9 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ## Key architecture
 
-- `HermesClient.swift` — SSE streaming (`streamCompletion`) and fire-and-forget (`sendCompletion`) to `localhost:8642/v1/chat/completions`
-- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `X-Hermes-Session-Id` header
-- `SSEParser.swift` — Returns `[SSEEvent]` arrays (not single events). Two-tier token routing: thinking (`<think>`), tool calls (emoji/XML markers + weak heuristics), clean response. Handles `</think>` + response in the same chunk.
+- `HermesClient.swift` — Two-step streaming via `/v1/runs` (POST to start, GET SSE events), fire-and-forget via `/v1/responses` (`sendCompletion`)
+- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
+- `SSEParser.swift` — Routes structured SSE events from `/v1/runs`: `message.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `run.completed`. No heuristics.
 - `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
@@ -50,15 +50,14 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 Both the drop zone "Save to brain" and the message brain button use the same flow:
 
 1. `ChatViewModel.saveToBrain(content:fileName:)` builds a prompt: `"Please save the following content to your memory. File: <name>\n\n<content>"`
-2. `HermesClient.sendCompletion(messages:)` sends `POST` with `stream: false`, checks HTTP 200, discards body
+2. `HermesClient.sendCompletion(messages:)` sends `POST /v1/responses` with `store: false`, checks HTTP 200, discards body
 3. Toast shown via `notchVM.showToast()`
 
 The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
 
 ## Important gotchas
 
-- **Session ID must be prefixed**: `X-Hermes-Session-Id` must be `notchnotch-<user_id>` (e.g. `notchnotch-7921106232`), NOT the raw `user_id`. The raw value collides with existing session IDs in Hermes's DB (`sessions.id` can equal `sessions.user_id`), causing Hermes to resume a stuck session and hang indefinitely. This was discovered when the Telegram user_id `7921106232` matched an old `api_server` session ID.
-- **SSE parser must return arrays**: `SSEParser.parse()` returns `[SSEEvent]`, not `SSEEvent?`. When `</think>` and response text arrive in the same SSE chunk, both `.thinking` and `.delta` must be emitted. The old single-return design stored the response in `pendingRegular` which was lost if no more content chunks followed before `[DONE]`.
+- **Session ID must be prefixed**: `session_id` in `/v1/runs` body must be `notchnotch-<user_id>` (e.g. `notchnotch-7921106232`), NOT the raw `user_id`. The raw value collides with existing session IDs in Hermes's DB (`sessions.id` can equal `sessions.user_id`), causing Hermes to resume a stuck session and hang indefinitely.
 - **DropDelegate, not .onDrop closure**: The split drop zone requires `DropInfo.location` for position detection, which is only available via a `DropDelegate`. The simple `.onDrop(of:isTargeted:)` closure does not expose cursor position.
 - **NWListener response timing**: In `ClipperListener.swift`, do NOT use `defer { connection.cancel() }` in the receive handler — it cancels the connection before `connection.send()` completes. Let the send completion handler call `connection.cancel()`.
 - **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.

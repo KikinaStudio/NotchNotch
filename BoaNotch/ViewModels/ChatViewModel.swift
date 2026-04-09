@@ -108,7 +108,6 @@ class ChatViewModel: ObservableObject {
                         messages[lastIndex].thinkingDuration = Date().timeIntervalSince(start)
                     }
                     messages[lastIndex].isStreaming = false
-                    extractCleanResponse(at: lastIndex)
                 }
                 isStreaming = false
                 connectionError = nil
@@ -154,53 +153,6 @@ class ChatViewModel: ObservableObject {
             messages[lastIndex].isStreaming = false
         }
         isStreaming = false
-    }
-
-    // MARK: - Post-processing: extract clean response from tool content
-
-    private func extractCleanResponse(at index: Int) {
-        let content = messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines)
-        let toolContent = messages[index].toolCallContent
-        guard content.isEmpty, !toolContent.isEmpty else { return }
-
-        // Split into paragraphs and find where clean response starts (from the end)
-        let paragraphs = toolContent.components(separatedBy: "\n\n")
-        var cleanStart = paragraphs.count
-
-        for i in stride(from: paragraphs.count - 1, through: 0, by: -1) {
-            let p = paragraphs[i].trimmingCharacters(in: .whitespacesAndNewlines)
-            if p.isEmpty { continue }
-            if looksLikeToolParagraph(p) { break }
-            cleanStart = i
-        }
-
-        if cleanStart < paragraphs.count {
-            messages[index].toolCallContent = paragraphs[0..<cleanStart].joined(separator: "\n\n")
-            messages[index].content = paragraphs[cleanStart...].joined(separator: "\n\n")
-        }
-    }
-
-    private func looksLikeToolParagraph(_ text: String) -> Bool {
-        // Emoji markers
-        let markers = ["💻", "🔧", "⚙️", "🔎", "🔍", "📚", "📋", "📧", "✍️", "📖"]
-        for m in markers { if text.contains(m) { return true } }
-
-        // Shell patterns
-        if text.contains("2>/dev/null") || text.contains("2>&1") { return true }
-        if text.contains(" && ") || text.contains(" || ") { return true }
-        if text.contains("$GAPI") || text.contains("GAPI=") { return true }
-        if text.contains(".hermes/") { return true }
-
-        // Command invocations
-        if text.hasPrefix("python ") || text.hasPrefix("bash ") || text.hasPrefix("curl ") { return true }
-
-        // JSON output
-        if text.hasPrefix("[{") || text.hasPrefix("{\"") || text.hasPrefix("[\"") { return true }
-
-        // CLI flags
-        if text.contains(" --output") || text.contains(" --page-size") || text.contains(" --max") { return true }
-
-        return false
     }
 
     func saveToBrain(content: String, fileName: String) {
