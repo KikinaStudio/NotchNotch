@@ -69,7 +69,7 @@ struct ExpandedBarView: View {
 
             // Reasoning effort segmented
             HStack(spacing: 0) {
-                ForEach(["low", "medium", "high", "xhigh"], id: \.self) { level in
+                ForEach(["none", "minimal", "low", "medium", "high", "xhigh"], id: \.self) { level in
                     Button {
                         config.reasoningEffort = level
                         config.setImmediate("agent.reasoning_effort", value: level)
@@ -141,6 +141,8 @@ struct ExpandedBarView: View {
 
     private func shortLabel(_ level: String) -> String {
         switch level {
+        case "none": return "off"
+        case "minimal": return "min"
         case "low": return "low"
         case "medium": return "med"
         case "high": return "high"

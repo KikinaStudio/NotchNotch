@@ -49,8 +49,12 @@ class HermesConfig: ObservableObject {
         ("anthropic/claude-opus-4.6", "opus 4.6"),
         ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
         ("google/gemini-3-flash-preview", "gemini flash"),
+        ("google/gemini-3-pro-preview", "gemini pro"),
+        ("openai/gpt-4o", "gpt-4o"),
+        ("openai/gpt-5", "gpt-5"),
         ("minimax/minimax-m2.7", "minimax m2.7"),
         ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
+        ("nous/mimo-v2-pro", "mimo v2 pro"),
     ]
 
     var modelDisplayName: String {
