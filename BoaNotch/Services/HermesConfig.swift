@@ -15,6 +15,7 @@ class HermesConfig: ObservableObject {
     // Zone B: Expanded bar
     @Published var activeProfile: String = "default"
     @Published var modelDefault: String = ""
+    @Published var modelProvider: String = "openrouter"
     @Published var reasoningEffort: String = "medium"
     @Published var skipMemory: Bool = false
     @Published var maxIterations: Int = 50
@@ -44,18 +45,44 @@ class HermesConfig: ObservableObject {
     // Profiles
     @Published var availableProfiles: [String] = ["default"]
 
-    // Models (hardcoded starter list)
-    let availableModels: [(value: String, label: String)] = [
-        ("anthropic/claude-opus-4.6", "opus 4.6"),
-        ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
-        ("google/gemini-3-flash-preview", "gemini flash"),
-        ("google/gemini-3-pro-preview", "gemini pro"),
-        ("openai/gpt-4o", "gpt-4o"),
-        ("openai/gpt-5", "gpt-5"),
-        ("minimax/minimax-m2.7", "minimax m2.7"),
-        ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
-        ("nous/mimo-v2-pro", "mimo v2 pro"),
-    ]
+    // Models filtered by active provider
+    var availableModels: [(value: String, label: String)] {
+        switch modelProvider {
+        case "openai":
+            return [
+                ("gpt-4o-mini", "gpt-4o mini"),
+                ("gpt-4o", "gpt-4o"),
+                ("gpt-5", "gpt-5"),
+            ]
+        case "anthropic":
+            return [
+                ("claude-sonnet-4-6-20250514", "sonnet 4.6"),
+                ("claude-opus-4-6-20250514", "opus 4.6"),
+            ]
+        case "minimax":
+            return [
+                ("MiniMax-M2.7", "m2.7"),
+                ("MiniMax-M2.7-highspeed", "m2.7 fast"),
+            ]
+        case "google":
+            return [
+                ("gemini-3-flash-preview", "gemini flash"),
+                ("gemini-3-pro-preview", "gemini pro"),
+            ]
+        default: // openrouter — proxies everything
+            return [
+                ("anthropic/claude-opus-4.6", "opus 4.6"),
+                ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
+                ("google/gemini-3-flash-preview", "gemini flash"),
+                ("google/gemini-3-pro-preview", "gemini pro"),
+                ("openai/gpt-4o", "gpt-4o"),
+                ("openai/gpt-5", "gpt-5"),
+                ("minimax/minimax-m2.7", "minimax m2.7"),
+                ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
+                ("nous/mimo-v2-pro", "mimo v2 pro"),
+            ]
+        }
+    }
 
     var modelDisplayName: String {
         availableModels.first(where: { $0.value == modelDefault })?.label
@@ -86,6 +113,7 @@ class HermesConfig: ObservableObject {
         guard let content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
 
         modelDefault = readYAML(content, key: "model.default") ?? modelDefault
+        modelProvider = readYAML(content, key: "model.provider") ?? modelProvider
         reasoningEffort = readYAML(content, key: "agent.reasoning_effort") ?? reasoningEffort
         maxIterations = readYAMLInt(content, key: "agent.max_iterations") ?? maxIterations
         streaming = readYAMLBool(content, key: "display.streaming") ?? streaming

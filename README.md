@@ -177,7 +177,7 @@ BoaNotch/
     |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards
     |   +-- SearchBarView.swift          # Search input + match counter
     |   +-- SettingsView.swift           # Agent config + session status
-    |   +-- ExpandedBarView.swift        # Profile, model, reasoning, incognito
+    |   +-- ExpandedBarView.swift        # Profile, model, reasoning (Menu), incognito
     |   +-- NotchShape.swift, ToastView.swift, DropOverlay.swift
     |
     +-- Window/
@@ -201,7 +201,7 @@ BoaNotch/
         +-- HermesClient.swift           # OpenAI-compatible SSE client
         +-- SSEParser.swift              # Two-tier token routing
         +-- SessionStore.swift           # Auto-detect Telegram session from state.db
-        +-- HermesConfig.swift           # config.yaml watcher
+        +-- HermesConfig.swift           # config.yaml watcher, provider-aware model list
         +-- SpeechTranscriber.swift      # SFSpeechRecognizer, French locale
         +-- DocumentExtractor.swift      # 40+ file types, 50K char limit
         +-- AudioRecorder.swift          # AVAudioRecorder, M4A

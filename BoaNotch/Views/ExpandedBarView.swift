@@ -67,25 +67,36 @@ struct ExpandedBarView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
-            // Reasoning effort segmented
-            HStack(spacing: 0) {
+            // Reasoning effort
+            Menu {
                 ForEach(["none", "minimal", "low", "medium", "high", "xhigh"], id: \.self) { level in
                     Button {
                         config.reasoningEffort = level
                         config.setImmediate("agent.reasoning_effort", value: level)
                     } label: {
-                        Text(shortLabel(level))
-                            .font(.system(size: 9, weight: config.reasoningEffort == level ? .bold : .regular))
-                            .foregroundStyle(config.reasoningEffort == level ? .white : .white.opacity(0.35))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(config.reasoningEffort == level ? AppColors.accent.opacity(0.3) : .clear)
+                        HStack {
+                            Text(shortLabel(level))
+                            if level == config.reasoningEffort {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "brain")
+                        .font(.system(size: 9))
+                    Text(shortLabel(config.reasoningEffort))
+                        .font(.system(size: 10, weight: .medium))
+                }
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.white.opacity(0.06))
+                .clipShape(Capsule())
             }
-            .background(.white.opacity(0.06))
-            .clipShape(Capsule())
+            .menuStyle(.borderlessButton)
+            .fixedSize()
 
             // Incognito toggle
             Button {
