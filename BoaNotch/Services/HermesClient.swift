@@ -11,20 +11,53 @@ class HermesClient {
         return URLSession(configuration: config)
     }()
 
-    // MARK: - Streaming via /v1/runs
+    // MARK: - Server-side conversation persistence
 
-    func streamCompletion(input: String, conversationHistory: [[String: String]]) -> AsyncThrowingStream<SSEEvent, Error> {
+    var conversationId: String {
+        get {
+            if let id = UserDefaults.standard.string(forKey: "hermesConversationId") {
+                return id
+            }
+            let id = UUID().uuidString
+            UserDefaults.standard.set(id, forKey: "hermesConversationId")
+            return id
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: "hermesConversationId")
+        }
+    }
+
+    func resetConversation() {
+        conversationId = UUID().uuidString
+    }
+
+    // MARK: - Streaming via /v1/responses
+
+    func streamCompletion(input: String) -> AsyncThrowingStream<SSEEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let runId = try await self.startRun(input: input, conversationHistory: conversationHistory)
-
-                    guard let eventsURL = URL(string: "\(self.baseURL)/v1/runs/\(runId)/events") else {
+                    guard let url = URL(string: "\(self.baseURL)/v1/responses") else {
                         continuation.finish(throwing: HermesError.invalidURL)
                         return
                     }
 
-                    let request = URLRequest(url: eventsURL)
+                    var request = URLRequest(url: url)
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+                    var body: [String: Any] = [
+                        "model": "hermes-agent",
+                        "input": input,
+                        "stream": true,
+                        "store": true,
+                        "conversation": self.conversationId,
+                    ]
+                    if let sessionId = self.sessionId, !sessionId.isEmpty {
+                        body["session_id"] = sessionId
+                    }
+                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
                     let (bytes, response) = try await self.session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse else {
@@ -65,39 +98,7 @@ class HermesClient {
         }
     }
 
-    private func startRun(input: String, conversationHistory: [[String: String]]) async throws -> String {
-        guard let url = URL(string: "\(baseURL)/v1/runs") else {
-            throw HermesError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        var body: [String: Any] = ["input": input]
-        if !conversationHistory.isEmpty {
-            body["conversation_history"] = conversationHistory
-        }
-        if let sessionId = sessionId, !sessionId.isEmpty {
-            body["session_id"] = sessionId
-        }
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HermesError.invalidResponse
-        }
-        guard httpResponse.statusCode == 202 else {
-            throw HermesError.httpError(httpResponse.statusCode)
-        }
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let runId = json["run_id"] as? String else {
-            throw HermesError.invalidResponse
-        }
-        return runId
-    }
-
-    // MARK: - Non-streaming via /v1/responses
+    // MARK: - Non-streaming via /v1/responses (brain saves)
 
     func sendCompletion(messages: [[String: String]]) async throws {
         guard let url = URL(string: "\(baseURL)/v1/responses") else {

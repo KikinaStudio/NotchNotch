@@ -64,18 +64,13 @@ class ChatViewModel: ObservableObject {
         pendingAttachments = []
         connectionError = nil
 
-        // Build conversation history from all messages BEFORE the one just appended
-        let conversationHistory = messages.dropLast()
-            .filter { !$0.content.isEmpty }
-            .map { ["role": $0.role.rawValue, "content": $0.content] }
-
         let assistantMessage = ChatMessage(role: .assistant, content: "", isStreaming: true)
         messages.append(assistantMessage)
         isStreaming = true
 
         streamTask = Task { @MainActor in
             do {
-                let stream = client.streamCompletion(input: fullContent, conversationHistory: conversationHistory)
+                let stream = client.streamCompletion(input: fullContent)
                 var gotFirstToken = false
                 var thinkingStarted: Date?
 
@@ -142,8 +137,7 @@ class ChatViewModel: ObservableObject {
         showNewConversationConfirm = false
         cancelStream()
         messages.removeAll()
-        draft = "/new"
-        send()
+        client.resetConversation()
     }
 
     func cancelStream() {

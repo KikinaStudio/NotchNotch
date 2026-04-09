@@ -13,42 +13,80 @@ struct SSEParser {
     mutating func parse(line: String) -> [SSEEvent] {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        // Handle [DONE] sentinel before JSON parse
+        if trimmed == "data: [DONE]" {
+            return [.done]
+        }
+
         guard trimmed.hasPrefix("data: ") else { return [] }
 
         let data = String(trimmed.dropFirst(6))
 
         guard let jsonData = data.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
-              let event = json["event"] as? String
+              let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
         else {
             return []
         }
 
-        switch event {
-        case "message.delta":
-            guard let delta = json["delta"] as? String, !delta.isEmpty else { return [] }
-            return routeContent(delta)
+        // Responses API format (type field)
+        if let type = json["type"] as? String {
+            switch type {
+            case "response.output_text.delta":
+                guard let delta = json["delta"] as? String, !delta.isEmpty else { return [] }
+                return routeContent(delta)
 
-        case "tool.started":
-            let tool = json["tool"] as? String ?? "tool"
-            let preview = json["preview"] as? String
-            let text = preview != nil ? "→ \(tool) \(preview!)" : "→ \(tool)"
-            return [.toolCall(text + "\n")]
+            case "tool.started":
+                let tool = json["tool"] as? String ?? "tool"
+                let preview = json["preview"] as? String
+                let text = preview != nil ? "→ \(tool) \(preview!)" : "→ \(tool)"
+                return [.toolCall(text + "\n")]
 
-        case "tool.completed":
-            let tool = json["tool"] as? String ?? "tool"
-            let duration = json["duration"] as? Double ?? 0
-            let isError = json["error"] as? Bool ?? false
-            let symbol = isError ? "✗" : "✓"
-            let text = "\(symbol) \(tool) (\(String(format: "%.1f", duration))s)"
-            return [.toolCall(text + "\n")]
+            case "tool.completed":
+                let tool = json["tool"] as? String ?? "tool"
+                let duration = json["duration"] as? Double ?? 0
+                let isError = json["error"] as? Bool ?? false
+                let symbol = isError ? "✗" : "✓"
+                let text = "\(symbol) \(tool) (\(String(format: "%.1f", duration))s)"
+                return [.toolCall(text + "\n")]
 
-        case "run.completed", "run.failed":
-            return [.done]
+            case "response.completed", "response.failed":
+                return [.done]
 
-        default:
-            return []
+            default:
+                return []
+            }
         }
+
+        // Legacy /v1/runs format (event field)
+        if let event = json["event"] as? String {
+            switch event {
+            case "message.delta":
+                guard let delta = json["delta"] as? String, !delta.isEmpty else { return [] }
+                return routeContent(delta)
+
+            case "tool.started":
+                let tool = json["tool"] as? String ?? "tool"
+                let preview = json["preview"] as? String
+                let text = preview != nil ? "→ \(tool) \(preview!)" : "→ \(tool)"
+                return [.toolCall(text + "\n")]
+
+            case "tool.completed":
+                let tool = json["tool"] as? String ?? "tool"
+                let duration = json["duration"] as? Double ?? 0
+                let isError = json["error"] as? Bool ?? false
+                let symbol = isError ? "✗" : "✓"
+                let text = "\(symbol) \(tool) (\(String(format: "%.1f", duration))s)"
+                return [.toolCall(text + "\n")]
+
+            case "run.completed", "run.failed":
+                return [.done]
+
+            default:
+                return []
+            }
+        }
+
+        return []
     }
 
     // MARK: - Think tag routing (simple, reliable — not heuristic)

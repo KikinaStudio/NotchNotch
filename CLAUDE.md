@@ -36,14 +36,22 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ## Key architecture
 
-- `HermesClient.swift` — Two-step streaming via `/v1/runs` with explicit `conversation_history` (POST `{input, conversation_history, session_id}` to start, GET SSE events), fire-and-forget via `/v1/responses` (`sendCompletion`)
+- `HermesClient.swift` — Single-request streaming via `POST /v1/responses` with `stream: true` and server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults). Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context.
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
-- `SSEParser.swift` — Routes structured SSE events from `/v1/runs`: `message.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `run.completed`. No heuristics.
+- `SSEParser.swift` — Routes SSE events from `/v1/responses` streaming: `response.output_text.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `response.completed`. Also supports legacy `/v1/runs` format (`message.delta`, `run.completed`) via `json["event"]` fallback. No heuristics.
 - `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
 - `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads `model.provider` to filter `availableModels` per provider (OpenRouter shows all, direct providers show only their models). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`.
+
+### Conversation flow (v0.10)
+
+1. `ChatViewModel.send()` calls `HermesClient.streamCompletion(input:)` — single `POST /v1/responses` with `stream: true`, `store: true`, `conversation: <UUID>`
+2. Server returns SSE events: `response.created`, `response.output_text.delta`, `tool.started`, `tool.completed`, `response.completed`, `[DONE]`
+3. `SSEParser` routes deltas through `routeContent()` for `<think>` tag detection, tool events formatted as `→ tool preview` / `✓ tool (0.1s)`
+4. Server persists the full conversation history (including tool calls) in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
+5. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID — no `/new` command sent
 
 ### Brain save pattern (v0.9)
 
@@ -57,7 +65,8 @@ The NotchNotch Clipper Chrome extension uses the identical API pattern, then pin
 
 ## Important gotchas
 
-- **Session ID must be prefixed**: `session_id` in `/v1/runs` body must be `notchnotch-<user_id>` (e.g. `notchnotch-7921106232`), NOT the raw `user_id`. The raw value collides with existing session IDs in Hermes's DB (`sessions.id` can equal `sessions.user_id`), causing Hermes to resume a stuck session and hang indefinitely.
+- **Conversation history is server-side**: NotchNotch no longer sends `conversation_history` — the server chains responses via the `conversation` UUID. The stored history includes full agent messages (tool calls + results), which can grow large in tool-heavy conversations. If this becomes a problem, check that Hermes's context compression handles tool results well — do NOT strip them from the response store.
+- **Session ID prefix (legacy)**: `session_id` was used with `/v1/runs` and had to be `notchnotch-<user_id>`. Now using `/v1/responses` with `conversation` parameter instead. The `sessionId` property is still passed in the request body for Telegram continuity but is no longer the primary conversation mechanism.
 - **DropDelegate, not .onDrop closure**: The split drop zone requires `DropInfo.location` for position detection, which is only available via a `DropDelegate`. The simple `.onDrop(of:isTargeted:)` closure does not expose cursor position.
 - **NWListener response timing**: In `ClipperListener.swift`, do NOT use `defer { connection.cancel() }` in the receive handler — it cancels the connection before `connection.send()` completes. Let the send completion handler call `connection.cancel()`.
 - **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.
