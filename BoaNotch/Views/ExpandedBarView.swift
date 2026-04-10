@@ -40,8 +40,7 @@ struct ExpandedBarView: View {
             Menu {
                 ForEach(config.availableModels, id: \.value) { model in
                     Button {
-                        config.modelDefault = model.value
-                        config.setImmediate("model.default", value: model.value)
+                        config.switchModel(model)
                     } label: {
                         HStack {
                             Text(model.label)

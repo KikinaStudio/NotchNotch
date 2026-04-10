@@ -43,7 +43,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
-- `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads `model.provider` to filter `availableModels` per provider (OpenRouter shows all, direct providers show only their models). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`.
+- `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. `availableModels` returns a flat list of all models with routing info `(value, label, provider, baseURL)`. `switchModel()` writes `model.default`, `model.provider`, and `model.base_url` atomically in a single file write via `Data.write(options: .atomic)`. The old `writeToConfig` method also uses this pattern (NOT tmp+moveItem which fails on macOS). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`.
 
 ### Conversation flow (v0.10)
 

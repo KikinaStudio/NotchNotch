@@ -26,7 +26,7 @@ struct ChatView: View {
                             }
                         }
                         .padding(.horizontal, 2)
-                        .padding(.bottom, 36)
+                        .padding(.bottom, 6)
                         .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
                         .background(
                             GeometryReader { geo in

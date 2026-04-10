@@ -45,48 +45,37 @@ class HermesConfig: ObservableObject {
     // Profiles
     @Published var availableProfiles: [String] = ["default"]
 
-    // Models filtered by active provider
-    var availableModels: [(value: String, label: String)] {
-        switch modelProvider {
-        case "openai":
-            return [
-                ("gpt-4o-mini", "gpt-4o mini"),
-                ("gpt-4o", "gpt-4o"),
-                ("gpt-5", "gpt-5"),
-            ]
-        case "anthropic":
-            return [
-                ("claude-sonnet-4-6-20250514", "sonnet 4.6"),
-                ("claude-opus-4-6-20250514", "opus 4.6"),
-            ]
-        case "minimax":
-            return [
-                ("MiniMax-M2.7", "m2.7"),
-                ("MiniMax-M2.7-highspeed", "m2.7 fast"),
-            ]
-        case "google":
-            return [
-                ("gemini-3-flash-preview", "gemini flash"),
-                ("gemini-3-pro-preview", "gemini pro"),
-            ]
-        default: // openrouter — proxies everything
-            return [
-                ("anthropic/claude-opus-4.6", "opus 4.6"),
-                ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
-                ("google/gemini-3-flash-preview", "gemini flash"),
-                ("google/gemini-3-pro-preview", "gemini pro"),
-                ("openai/gpt-4o", "gpt-4o"),
-                ("openai/gpt-5", "gpt-5"),
-                ("minimax/minimax-m2.7", "minimax m2.7"),
-                ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
-                ("nous/mimo-v2-pro", "mimo v2 pro"),
-            ]
-        }
+    // Only models with working API keys
+    var availableModels: [(value: String, label: String, provider: String, baseURL: String)] {
+        [
+            ("MiniMax-M2.7", "m2.7", "minimax", "https://api.minimax.io/v1"),
+            ("MiniMax-M2.5", "m2.5", "minimax", "https://api.minimax.io/v1"),
+            ("nous/mimo-v2-pro", "mimo v2", "openrouter", "https://openrouter.ai/api/v1"),
+        ]
     }
 
     var modelDisplayName: String {
         availableModels.first(where: { $0.value == modelDefault })?.label
             ?? modelDefault.split(separator: "/").last.map(String.init) ?? modelDefault
+    }
+
+    /// Switch model, provider, and base_url in a single atomic write
+    func switchModel(_ model: (value: String, label: String, provider: String, baseURL: String)) {
+        modelDefault = model.value
+        modelProvider = model.provider
+        guard var content = try? String(contentsOfFile: configPath, encoding: .utf8) else {
+            print("[notchnotch] switchModel: cannot read \(configPath)")
+            return
+        }
+        content = replaceNestedYAML(content, section: "model", key: "default", value: model.value)
+        content = replaceNestedYAML(content, section: "model", key: "provider", value: model.provider)
+        content = replaceNestedYAML(content, section: "model", key: "base_url", value: model.baseURL)
+        do {
+            let data = content.data(using: .utf8)!
+            try data.write(to: URL(fileURLWithPath: configPath), options: .atomic)
+        } catch {
+            print("[notchnotch] switchModel write error: \(error)")
+        }
     }
 
     // MARK: - File watcher
@@ -176,11 +165,9 @@ class HermesConfig: ObservableObject {
             content = replaceTopLevelYAML(content, key: key, value: valueStr)
         }
 
-        // Atomic write: temp file + rename
-        let tmpPath = configPath + ".tmp"
         do {
-            try content.write(toFile: tmpPath, atomically: true, encoding: .utf8)
-            try FileManager.default.moveItem(atPath: tmpPath, toPath: configPath)
+            let data = content.data(using: .utf8)!
+            try data.write(to: URL(fileURLWithPath: configPath), options: .atomic)
         } catch {
             print("[notchnotch] Config write error: \(error)")
         }
