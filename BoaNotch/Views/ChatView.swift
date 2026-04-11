@@ -21,7 +21,9 @@ struct ChatView: View {
                                 MessageBubble(
                                     message: message,
                                     searchQuery: searchVM.query,
-                                    onRetry: message.role == .assistant ? { chatVM.retryLastAssistant() } : nil
+                                    onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
+                                        ? { chatVM.retryLastAssistant() }
+                                        : nil
                                 )
                                 .id(message.id)
                             }
