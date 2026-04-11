@@ -92,6 +92,9 @@ First launch walks new users through Hermes installation, AI provider setup, mod
 ### Welcome screen
 Before the first message, notchnotch shows the logo with "notch notch ! Who's there ? Your futchure." — disappears after first input.
 
+### Copy & Retry
+Hover any completed assistant message to reveal action buttons: **Copy** (clipboard with checkmark feedback) and **Retry** (re-sends the last user message for a fresh response).
+
 ### Smart file paths
 File paths in responses render as clickable cards with SF Symbol icons. Click to reveal in Finder.
 
@@ -167,13 +170,13 @@ BoaNotch/
     |
     +-- ViewModels/
     |   +-- NotchViewModel.swift         # State machine (closed/open/toast)
-    |   +-- ChatViewModel.swift          # Messages, streaming, send/cancel, voice
+    |   +-- ChatViewModel.swift          # Messages, send/cancel/retry, voice
     |   +-- SearchViewModel.swift        # Search matches, navigation
     |
     +-- Views/
     |   +-- NotchView.swift              # Root: shape + top bar + overlays
     |   +-- ChatView.swift               # Scroll + welcome screen + input bar
-    |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards
+    |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards, copy/retry
     |   +-- SearchBarView.swift          # Search input + match counter
     |   +-- SettingsView.swift           # Agent config + session status
     |   +-- ExpandedBarView.swift        # Profile, model, reasoning (Menu), incognito

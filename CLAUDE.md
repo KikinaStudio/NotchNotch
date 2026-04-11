@@ -47,11 +47,13 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ### Conversation flow (v0.11)
 
-1. `ChatViewModel.send()` calls `HermesClient.sendResponse(input:)` — single `POST /v1/responses` with `store: true`, `conversation: <UUID>` (non-streaming)
-2. Server runs the full agent loop (including tool calls), returns a complete JSON response with `output` array containing `function_call`, `function_call_output`, `reasoning`, and `message` items
-3. `HermesClient.parseOutput()` extracts `content`, `thinkingContent` (from `reasoning` items), and `toolCalls` (formatted from `function_call`/`function_call_output` items)
-4. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
-5. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
+1. `ChatViewModel.send()` builds `fullContent` (inlined attachments + text), appends user message, calls `startRequest(input:)`
+2. `startRequest(input:)` appends a placeholder assistant message, sets `isStreaming`, and launches a Task that calls `HermesClient.sendResponse(input:)` — single `POST /v1/responses` with `store: true`, `conversation: <UUID>` (non-streaming)
+3. Server runs the full agent loop (including tool calls), returns a complete JSON response with `output` array containing `function_call`, `function_call_output`, `reasoning`, and `message` items
+4. `HermesClient.parseOutput()` extracts `content`, `thinkingContent` (from `reasoning` items), and `toolCalls` (formatted from `function_call`/`function_call_output` items)
+5. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
+6. `retryLastAssistant()` removes the last user+assistant pair, re-appends the user message, and calls `startRequest(input:)` to get a fresh response
+7. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
 
 ### Voice recording flow
 
