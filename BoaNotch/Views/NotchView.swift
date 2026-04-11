@@ -126,7 +126,7 @@ struct NotchView: View {
                         } else {
                             ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
                                 .padding(.top, 4)
-                                .padding(.horizontal, 35)
+                                .padding(.horizontal, 38)
                                 .padding(.bottom, 18)
                         }
                     }
@@ -150,27 +150,29 @@ struct NotchView: View {
             if notchVM.isOpen && !onboardingVM.needsOnboarding
                 && !notchVM.isSearchOpen {
                 HStack(spacing: 0) {
-                    FlankingButton(
-                        icon: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass",
-                        isActive: false
-                    ) {
-                        if notchVM.isSettingsOpen {
-                            notchVM.isSettingsOpen = false
-                        } else {
-                            notchVM.isSearchOpen = true
-                        }
-                    }
-
                     Spacer(minLength: notchVM.closedSize.width + 16)
 
-                    FlankingButton(
-                        icon: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape",
-                        isActive: notchVM.isSettingsOpen
-                    ) {
-                        notchVM.isSettingsOpen.toggle()
+                    HStack(spacing: 14) {
+                        FlankingButton(
+                            icon: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass",
+                            isActive: false
+                        ) {
+                            if notchVM.isSettingsOpen {
+                                notchVM.isSettingsOpen = false
+                            } else {
+                                notchVM.isSearchOpen = true
+                            }
+                        }
+
+                        FlankingButton(
+                            icon: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape",
+                            isActive: notchVM.isSettingsOpen
+                        ) {
+                            notchVM.isSettingsOpen.toggle()
+                        }
                     }
                 }
-                .padding(.horizontal, 60)
+                .padding(.horizontal, 38)
                 .padding(.top, 2)
                 .transition(.opacity.animation(.easeIn(duration: 0.15).delay(0.1)))
             }

@@ -32,7 +32,7 @@ func sfIconForFileType(_ type: String) -> String {
 // MARK: - Logo loading
 
 func loadAppLogo() -> NSImage? {
-    if let url = Bundle.module.url(forResource: "logo-white", withExtension: "png", subdirectory: "Resources"),
+    if let url = Bundle.module.url(forResource: "logo-white", withExtension: "png"),
        let img = NSImage(contentsOf: url) { return img }
     if let url = Bundle.main.resourceURL?.appendingPathComponent("logo-white.png"),
        let img = NSImage(contentsOf: url) { return img }
