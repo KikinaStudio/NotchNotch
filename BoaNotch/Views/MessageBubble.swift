@@ -15,7 +15,7 @@ struct MessageBubble: View {
     @State private var isHoveredRetry = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             // Attachment pills
             if !message.attachments.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -38,6 +38,7 @@ struct MessageBubble: View {
             // Message content with clickable file paths (final response only)
             if !displayContent.isEmpty {
                 filePathAwareContent
+                    .padding(.top, (!message.thinkingContent.isEmpty || !message.toolCallContent.isEmpty) ? 4 : 0)
             }
 
             // Action buttons for completed assistant messages
@@ -81,7 +82,7 @@ struct MessageBubble: View {
         .background {
             if isUser {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(0.1))
+                    .fill(.white.opacity(0.7))
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
@@ -170,6 +171,18 @@ struct MessageBubble: View {
                 switch block {
                 case .code(let lang, let code):
                     codeBlock(language: lang, code: code)
+                case .blockquote(let text):
+                    HStack(alignment: .top, spacing: 8) {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(.white.opacity(0.15))
+                            .frame(width: 2)
+                        Text(markdownString(text))
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineSpacing(3)
+                            .italic()
+                    }
+                    .padding(.leading, 4)
                 case .text(let text):
                     let parts = splitByFilePaths(text)
                     ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
@@ -179,7 +192,8 @@ struct MessageBubble: View {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
                                     .font(.system(size: 14))
-                                    .foregroundStyle(.white.opacity(0.88))
+                                    .lineSpacing(isUser ? 0 : 4)
+                                    .foregroundStyle(.white.opacity(0.82))
                                     .textSelection(.enabled)
 
                                 if message.isStreaming && idx == blocks.count - 1 && part == parts.last {
@@ -225,6 +239,7 @@ struct MessageBubble: View {
     enum ContentBlock {
         case text(String)
         case code(String, String) // (language, code)
+        case blockquote(String)
     }
 
     private func splitIntoBlocks(_ text: String) -> [ContentBlock] {
@@ -266,7 +281,46 @@ struct MessageBubble: View {
             blocks.append(.text(remaining))
         }
 
-        return blocks.isEmpty ? [.text(text)] : blocks
+        // Post-process: extract blockquote lines from text blocks
+        let raw = blocks.isEmpty ? [.text(text)] : blocks
+        var final: [ContentBlock] = []
+        for block in raw {
+            guard case .text(let t) = block else { final.append(block); continue }
+            let lines = t.components(separatedBy: "\n")
+            var buf: [String] = []
+            var inQuote = false
+            for line in lines {
+                if line.hasPrefix("> ") {
+                    if !inQuote {
+                        let joined = buf.joined(separator: "\n")
+                        if !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            final.append(.text(joined))
+                        }
+                        buf = []
+                        inQuote = true
+                    }
+                    buf.append(String(line.dropFirst(2)))
+                } else {
+                    if inQuote {
+                        final.append(.blockquote(buf.joined(separator: "\n")))
+                        buf = []
+                        inQuote = false
+                    }
+                    buf.append(line)
+                }
+            }
+            if !buf.isEmpty {
+                if inQuote {
+                    final.append(.blockquote(buf.joined(separator: "\n")))
+                } else {
+                    let joined = buf.joined(separator: "\n")
+                    if !joined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        final.append(.text(joined))
+                    }
+                }
+            }
+        }
+        return final.isEmpty ? [.text(text)] : final
     }
 
     // MARK: - File card (white pill + path below)
@@ -415,6 +469,15 @@ struct MessageBubble: View {
     private func markdownString(_ text: String) -> AttributedString {
         var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
+
+        // Reduce bold weight to semibold for dark-mode readability
+        for run in result.runs {
+            if let inlinePresentationIntent = run.inlinePresentationIntent,
+               inlinePresentationIntent.contains(.stronglyEmphasized) {
+                let range = run.range
+                result[range].font = .system(size: 14, weight: .semibold)
+            }
+        }
 
         // Apply search highlighting
         if let query = searchQuery, !query.isEmpty {
