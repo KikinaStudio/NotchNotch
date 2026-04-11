@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Yams
 
 class HermesConfig: ObservableObject {
     static let shared = HermesConfig()
@@ -99,23 +100,24 @@ class HermesConfig: ObservableObject {
     // MARK: - Load from config.yaml
 
     func load() {
-        guard let content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
+        guard let content = try? String(contentsOfFile: configPath, encoding: .utf8),
+              let yaml = (try? Yams.load(yaml: content)) as? [String: Any] else { return }
 
-        modelDefault = readYAML(content, key: "model.default") ?? modelDefault
-        modelProvider = readYAML(content, key: "model.provider") ?? modelProvider
-        reasoningEffort = readYAML(content, key: "agent.reasoning_effort") ?? reasoningEffort
-        maxIterations = readYAMLInt(content, key: "agent.max_iterations") ?? maxIterations
-        streaming = readYAMLBool(content, key: "display.streaming") ?? streaming
-        terminalBackend = readYAML(content, key: "terminal.backend") ?? terminalBackend
-        sshHost = readYAML(content, key: "terminal.ssh_host") ?? sshHost
-        sshUser = readYAML(content, key: "terminal.ssh_user") ?? sshUser
-        sshPort = readYAMLInt(content, key: "terminal.ssh_port") ?? sshPort
-        dockerImage = readYAML(content, key: "terminal.docker_image") ?? dockerImage
+        modelDefault = yamlString(yaml, "model.default") ?? modelDefault
+        modelProvider = yamlString(yaml, "model.provider") ?? modelProvider
+        reasoningEffort = yamlString(yaml, "agent.reasoning_effort") ?? reasoningEffort
+        maxIterations = yamlInt(yaml, "agent.max_iterations") ?? maxIterations
+        streaming = yamlBool(yaml, "display.streaming") ?? streaming
+        terminalBackend = yamlString(yaml, "terminal.backend") ?? terminalBackend
+        sshHost = yamlString(yaml, "terminal.ssh_host") ?? sshHost
+        sshUser = yamlString(yaml, "terminal.ssh_user") ?? sshUser
+        sshPort = yamlInt(yaml, "terminal.ssh_port") ?? sshPort
+        dockerImage = yamlString(yaml, "terminal.docker_image") ?? dockerImage
 
         // skip_memory can be top-level or under agent
-        if let sm = readYAMLBool(content, key: "skip_memory") {
+        if let sm = yamlBool(yaml, "skip_memory") {
             skipMemory = sm
-        } else if let sm = readYAMLBool(content, key: "agent.skip_memory") {
+        } else if let sm = yamlBool(yaml, "agent.skip_memory") {
             skipMemory = sm
         }
     }
@@ -222,99 +224,36 @@ class HermesConfig: ObservableObject {
         }
     }
 
-    // MARK: - YAML regex helpers
+    // MARK: - YAML read helpers (Yams)
 
-    /// Read a value for a potentially nested key like "agent.reasoning_effort"
-    private func readYAML(_ content: String, key: String) -> String? {
-        let parts = key.split(separator: ".").map(String.init)
-
-        if parts.count == 1 {
-            return matchTopLevel(content, key: parts[0])
+    private func yamlValue(_ dict: [String: Any], _ keyPath: String) -> Any? {
+        let parts = keyPath.split(separator: ".").map(String.init)
+        var current: Any = dict
+        for part in parts {
+            guard let d = current as? [String: Any], let next = d[part] else { return nil }
+            current = next
         }
-
-        // Nested: find section block, then key within it
-        let section = parts.dropLast().joined(separator: ".")
-        let leaf = parts.last!
-        return matchNested(content, section: section, key: leaf)
+        return current
     }
 
-    private func readYAMLInt(_ content: String, key: String) -> Int? {
-        readYAML(content, key: key).flatMap { Int($0) }
+    private func yamlString(_ dict: [String: Any], _ keyPath: String) -> String? {
+        guard let val = yamlValue(dict, keyPath) else { return nil }
+        if let s = val as? String { return s }
+        return "\(val)"
     }
 
-    private func readYAMLBool(_ content: String, key: String) -> Bool? {
-        guard let val = readYAML(content, key: key)?.lowercased() else { return nil }
-        if val == "true" { return true }
-        if val == "false" { return false }
+    private func yamlInt(_ dict: [String: Any], _ keyPath: String) -> Int? {
+        guard let val = yamlValue(dict, keyPath) else { return nil }
+        if let i = val as? Int { return i }
+        if let s = val as? String { return Int(s) }
         return nil
     }
 
-    private func matchTopLevel(_ content: String, key: String) -> String? {
-        // Match "key: value" at the start of a line (no indentation)
-        let pattern = "(?m)^" + NSRegularExpression.escapedPattern(for: key) + ":\\s*(.+?)\\s*$"
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)),
-              let range = Range(match.range(at: 1), in: content) else { return nil }
-        let val = String(content[range])
-        return cleanYAMLValue(val)
-    }
-
-    private func matchNested(_ content: String, section: String, key: String) -> String? {
-        // For "agent.reasoning_effort": find "agent:" section, then "  reasoning_effort: value"
-        let sectionParts = section.split(separator: ".").map(String.init)
-
-        // Find the section header line
-        let sectionKey = sectionParts.last!
-        let sectionPattern = "(?m)^" + String(repeating: "  ", count: sectionParts.count - 1) + NSRegularExpression.escapedPattern(for: sectionKey) + ":\\s*$"
-
-        // Also try "section:" with inline value (shouldn't happen for sections but be safe)
-        let lines = content.components(separatedBy: "\n")
-        let indent = String(repeating: "  ", count: sectionParts.count - 1)
-        let keyIndent = String(repeating: "  ", count: sectionParts.count)
-
-        var inSection = false
-        for line in lines {
-            if !inSection {
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if line.hasPrefix(indent) && !line.hasPrefix(keyIndent) && trimmed.hasPrefix(sectionKey + ":") {
-                    inSection = true
-                }
-            } else {
-                // We're in the section — check for the key
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed.isEmpty { continue }
-
-                // If we hit a line at the same or lesser indent as the section, we've left it
-                if !line.hasPrefix(keyIndent) && !trimmed.isEmpty {
-                    break
-                }
-
-                if trimmed.hasPrefix(key + ":") {
-                    let afterColon = trimmed.dropFirst(key.count + 1).trimmingCharacters(in: .whitespaces)
-                    if !afterColon.isEmpty {
-                        return cleanYAMLValue(afterColon)
-                    }
-                }
-            }
-        }
+    private func yamlBool(_ dict: [String: Any], _ keyPath: String) -> Bool? {
+        guard let val = yamlValue(dict, keyPath) else { return nil }
+        if let b = val as? Bool { return b }
+        if let s = val as? String { return s.lowercased() == "true" ? true : s.lowercased() == "false" ? false : nil }
         return nil
-    }
-
-    private func cleanYAMLValue(_ val: String) -> String {
-        var v = val
-        // Remove inline comments
-        if let commentIdx = v.firstIndex(of: "#") {
-            // Only strip if preceded by whitespace (not inside a string)
-            let before = v[v.startIndex..<commentIdx]
-            if before.last == " " || before.last == "\t" {
-                v = String(before).trimmingCharacters(in: .whitespaces)
-            }
-        }
-        // Remove quotes
-        if (v.hasPrefix("\"") && v.hasSuffix("\"")) || (v.hasPrefix("'") && v.hasSuffix("'")) {
-            v = String(v.dropFirst().dropLast())
-        }
-        return v
     }
 
     // MARK: - YAML write helpers
