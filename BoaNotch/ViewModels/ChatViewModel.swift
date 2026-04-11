@@ -69,41 +69,20 @@ class ChatViewModel: ObservableObject {
         isStreaming = true
 
         streamTask = Task { @MainActor in
+            let startTime = Date()
             do {
-                let stream = client.streamCompletion(input: fullContent)
-                var gotFirstToken = false
-                var thinkingStarted: Date?
+                let result = try await client.sendResponse(input: fullContent)
 
-                for try await event in stream {
-                    guard !Task.isCancelled else { break }
-                    if !gotFirstToken {
-                        gotFirstToken = true
-                        connectionError = nil
-                    }
-                    guard let lastIndex = messages.indices.last else { continue }
+                guard !Task.isCancelled else { return }
+                guard let lastIndex = messages.indices.last else { return }
 
-                    switch event {
-                    case .thinking(let text):
-                        if thinkingStarted == nil { thinkingStarted = Date() }
-                        messages[lastIndex].thinkingContent += text
-                    case .toolCall(let text):
-                        messages[lastIndex].toolCallContent += text
-                    case .delta(let text):
-                        if let start = thinkingStarted {
-                            messages[lastIndex].thinkingDuration = Date().timeIntervalSince(start)
-                            thinkingStarted = nil
-                        }
-                        messages[lastIndex].content += text
-                    case .done:
-                        break
-                    }
+                messages[lastIndex].content = result.content
+                messages[lastIndex].thinkingContent = result.thinkingContent
+                messages[lastIndex].toolCallContent = result.toolCalls
+                if !result.thinkingContent.isEmpty {
+                    messages[lastIndex].thinkingDuration = Date().timeIntervalSince(startTime)
                 }
-                if let lastIndex = messages.indices.last {
-                    if let start = thinkingStarted {
-                        messages[lastIndex].thinkingDuration = Date().timeIntervalSince(start)
-                    }
-                    messages[lastIndex].isStreaming = false
-                }
+                messages[lastIndex].isStreaming = false
                 isStreaming = false
                 connectionError = nil
 

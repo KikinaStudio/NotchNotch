@@ -31,71 +31,87 @@ class HermesClient {
         conversationId = UUID().uuidString
     }
 
-    // MARK: - Streaming via /v1/responses
+    // MARK: - Non-streaming conversation via /v1/responses
 
-    func streamCompletion(input: String) -> AsyncThrowingStream<SSEEvent, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
-                do {
-                    guard let url = URL(string: "\(self.baseURL)/v1/responses") else {
-                        continuation.finish(throwing: HermesError.invalidURL)
-                        return
-                    }
+    struct ResponseResult {
+        let content: String
+        let thinkingContent: String
+        let toolCalls: String
+    }
 
-                    var request = URLRequest(url: url)
-                    request.httpMethod = "POST"
-                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    func sendResponse(input: String) async throws -> ResponseResult {
+        guard let url = URL(string: "\(baseURL)/v1/responses") else {
+            throw HermesError.invalidURL
+        }
 
-                    var body: [String: Any] = [
-                        "model": "hermes-agent",
-                        "input": input,
-                        "stream": true,
-                        "store": true,
-                        "conversation": self.conversationId,
-                    ]
-                    if let sessionId = self.sessionId, !sessionId.isEmpty {
-                        body["session_id"] = sessionId
-                    }
-                    request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let sessionId = sessionId, !sessionId.isEmpty {
+            request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
+        }
 
-                    let (bytes, response) = try await self.session.bytes(for: request)
+        let body: [String: Any] = [
+            "model": "hermes-agent",
+            "input": input,
+            "conversation": conversationId,
+            "store": true,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-                    guard let httpResponse = response as? HTTPURLResponse else {
-                        continuation.finish(throwing: HermesError.invalidResponse)
-                        return
-                    }
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw HermesError.httpError(httpResponse.statusCode)
+        }
 
-                    guard httpResponse.statusCode == 200 else {
-                        continuation.finish(throwing: HermesError.httpError(httpResponse.statusCode))
-                        return
-                    }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let output = json["output"] as? [[String: Any]] else {
+            throw HermesError.invalidResponse
+        }
 
-                    var parser = SSEParser()
+        return parseOutput(output)
+    }
 
-                    for try await line in bytes.lines {
-                        guard !Task.isCancelled else { break }
+    private func parseOutput(_ output: [[String: Any]]) -> ResponseResult {
+        var content = ""
+        var thinkingContent = ""
+        var toolCalls = ""
+        // Map call_id → tool name for formatting tool outputs
+        var callNames: [String: String] = [:]
 
-                        let events = parser.parse(line: line)
-                        for event in events {
-                            if case .done = event { break }
-                            continuation.yield(event)
+        for item in output {
+            guard let type = item["type"] as? String else { continue }
+            switch type {
+            case "function_call":
+                let name = item["name"] as? String ?? "tool"
+                let callId = item["call_id"] as? String ?? ""
+                callNames[callId] = name
+                let args = item["arguments"] as? String ?? ""
+                let preview = String(args.prefix(60))
+                toolCalls += "→ \(name) \(preview)\n"
+            case "function_call_output":
+                let callId = item["call_id"] as? String ?? ""
+                let name = callNames[callId] ?? "tool"
+                toolCalls += "✓ \(name)\n"
+            case "reasoning":
+                thinkingContent = item["text"] as? String ?? ""
+            case "message":
+                if let contentArray = item["content"] as? [[String: Any]] {
+                    for part in contentArray {
+                        if part["type"] as? String == "output_text" {
+                            content += part["text"] as? String ?? ""
                         }
-                        if events.contains(where: { if case .done = $0 { return true }; return false }) {
-                            break
-                        }
                     }
-
-                    continuation.finish()
-                } catch {
-                    print("[notchnotch] Stream error: \(error)")
-                    continuation.finish(throwing: error)
                 }
-            }
-
-            continuation.onTermination = { _ in
-                task.cancel()
+            default:
+                break
             }
         }
+
+        return ResponseResult(content: content, thinkingContent: thinkingContent, toolCalls: toolCalls)
     }
 
     // MARK: - Non-streaming via /v1/responses (brain saves)

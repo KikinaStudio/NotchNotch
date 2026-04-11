@@ -36,22 +36,22 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ## Key architecture
 
-- `HermesClient.swift` — Single-request streaming via `POST /v1/responses` with `stream: true` and server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults). Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context.
+- `HermesClient.swift` — Non-streaming `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). `sendResponse(input:)` returns a `ResponseResult` with `content`, `thinkingContent`, and `toolCalls` parsed from the response `output` array. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context.
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
-- `SSEParser.swift` — Routes SSE events from `/v1/responses` streaming: `response.output_text.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `response.completed`. Also supports legacy `/v1/runs` format (`message.delta`, `run.completed`) via `json["event"]` fallback. No heuristics.
+- `SSEParser.swift` — Legacy SSE parser from the `/v1/runs` era. Currently unused but kept for potential future streaming support.
 - `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
 - `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads config via Yams (`Yams.load(yaml:)` → `[String: Any]` dict navigation); writes via line-level regex replacement to preserve comments. `availableModels` returns a flat list of all models with routing info `(value, label, provider, baseURL)`. `switchModel()` writes `model.default`, `model.provider`, and `model.base_url` atomically in a single file write via `Data.write(options: .atomic)`. The old `writeToConfig` method also uses this pattern (NOT tmp+moveItem which fails on macOS). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`.
 
-### Conversation flow (v0.10)
+### Conversation flow (v0.11)
 
-1. `ChatViewModel.send()` calls `HermesClient.streamCompletion(input:)` — single `POST /v1/responses` with `stream: true`, `store: true`, `conversation: <UUID>`
-2. Server returns SSE events: `response.created`, `response.output_text.delta`, `tool.started`, `tool.completed`, `response.completed`, `[DONE]`
-3. `SSEParser` routes deltas through `routeContent()` for `<think>` tag detection, tool events formatted as `→ tool preview` / `✓ tool (0.1s)`
-4. Server persists the full conversation history (including tool calls) in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
-5. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID — no `/new` command sent
+1. `ChatViewModel.send()` calls `HermesClient.sendResponse(input:)` — single `POST /v1/responses` with `store: true`, `conversation: <UUID>` (non-streaming)
+2. Server runs the full agent loop (including tool calls), returns a complete JSON response with `output` array containing `function_call`, `function_call_output`, `reasoning`, and `message` items
+3. `HermesClient.parseOutput()` extracts `content`, `thinkingContent` (from `reasoning` items), and `toolCalls` (formatted from `function_call`/`function_call_output` items)
+4. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
+5. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
 
 ### Voice recording flow
 
@@ -78,7 +78,8 @@ The NotchNotch Clipper Chrome extension uses the identical API pattern, then pin
 ## Important gotchas
 
 - **Conversation history is server-side**: NotchNotch no longer sends `conversation_history` — the server chains responses via the `conversation` UUID. The stored history includes full agent messages (tool calls + results), which can grow large in tool-heavy conversations. If this becomes a problem, check that Hermes's context compression handles tool results well — do NOT strip them from the response store.
-- **Session ID prefix (legacy)**: `session_id` was used with `/v1/runs` and had to be `notchnotch-<user_id>`. Now using `/v1/responses` with `conversation` parameter instead. The `sessionId` property is still passed in the request body for Telegram continuity but is no longer the primary conversation mechanism.
+- **Session ID prefix (legacy)**: `session_id` was used with `/v1/runs` and had to be `notchnotch-<user_id>`. Now using `/v1/responses` with `conversation` parameter instead. The `sessionId` property is still passed as `X-Hermes-Session-Id` header for Telegram continuity but is no longer the primary conversation mechanism.
+- **No streaming on /v1/responses**: Hermes's `/v1/responses` endpoint does not support `stream: true` (the param is silently ignored). The response arrives complete as JSON. Streaming exists on `/v1/chat/completions` and `/v1/runs` but those don't support the `conversation` persistence parameter.
 - **DropDelegate, not .onDrop closure**: The split drop zone requires `DropInfo.location` for position detection, which is only available via a `DropDelegate`. The simple `.onDrop(of:isTargeted:)` closure does not expose cursor position.
 - **NWListener response timing**: In `ClipperListener.swift`, do NOT use `defer { connection.cancel() }` in the receive handler — it cancels the connection before `connection.send()` completes. Let the send completion handler call `connection.cancel()`.
 - **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.

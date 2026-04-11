@@ -355,14 +355,15 @@ Custom `Shape` with `animatableData` for smooth corner radius transitions. Quad 
 | Endpoint | Method | Headers | Description |
 |----------|--------|---------|-------------|
 | `localhost:8642/health` | GET | — | Health check |
-| `localhost:8642/v1/chat/completions` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Chat completions (SSE) |
+| `localhost:8642/v1/responses` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Responses API (server-side conversation state) |
 
 Request:
 ```json
 {
   "model": "hermes-agent",
-  "messages": [{"role": "user", "content": "Hello!"}],
-  "stream": true
+  "input": "Hello!",
+  "conversation": "notchnotch-abc12345",
+  "store": true
 }
 ```
 
@@ -381,6 +382,7 @@ Timeouts: 300s request, 600s resource.
 | `com.apple.security.network.client` | Entitlements | Network access |
 | `API_SERVER_ENABLED=true` | `~/.hermes/.env` | Enables Hermes API |
 | `hermesSessionId` | UserDefaults | Auto-linked Telegram session ID |
+| `hermesConversationId` | UserDefaults | Server-side conversation ID for Responses API persistence |
 | `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
 | `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
 | `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
@@ -390,7 +392,7 @@ Timeouts: 300s request, 600s resource.
 
 ## Known Limitations
 
-- **UI starts blank on restart** — notchnotch doesn't reload previous messages from Hermes on launch. The conversation context is fully preserved server-side (Hermes persists all messages with full-text search), so the agent remembers everything — the UI just doesn't display past messages yet.
+- **No local message history on restart** — the UI starts blank after relaunch, but Hermes preserves full conversation context server-side via the Responses API. Your agent remembers everything from previous turns.
 - **Fixed notch size** — 580x340pt. Dynamic height and drag-to-resize are planned.
 - **Hardcoded localhost:8642** — no UI to change the Hermes URL.
 - **No conversation history UI** — notchnotch can't browse past sessions or reload old conversations yet. Hermes stores full session history in `state.db`.
