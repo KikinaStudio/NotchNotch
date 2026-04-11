@@ -65,13 +65,13 @@ If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding 
 ## Features
 
 ### Chat in the notch
-Hover or click the notch to expand a chat panel with spring animations. Messages stream in real-time via SSE from the Hermes agent API.
+Hover or click the notch to expand a chat panel with spring animations. Responses arrive via the Hermes `/v1/responses` API with server-side conversation persistence — your agent remembers context across app restarts.
 
 ### Telegram continuity
 notchnotch auto-detects your Telegram DM session with the Hermes bot from `~/.hermes/state.db` on launch. The same `session_id` (your Telegram `chat_id`) is sent as `X-Hermes-Session-Id` on every API request — giving you full continuity between Telegram and notchnotch. No manual linking, no picker. One session, two interfaces.
 
 ### Collapsible thinking & tool calls
-Hermes's internal reasoning (`<think>` blocks) and tool execution are hidden behind collapsible toggles. Only the clean response is shown. The SSE parser uses a two-tier heuristic with post-processing fallback (see [SSE Token Routing](#sse-token-routing)).
+Hermes's internal reasoning (`<think>` blocks) and tool execution are hidden behind collapsible toggles. Only the clean response is shown. Thinking and tool calls are parsed from the response `output` array (`reasoning`, `function_call`, `function_call_output` items).
 
 ### Search in conversation
 Magnifying glass icon (top-left) opens full-text search across all messages:
@@ -135,7 +135,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |     Drop overlay (file drag), Toast (response preview)
     |
     +-- Services
-          HermesClient -> localhost:8642 (SSE streaming)
+          HermesClient -> localhost:8642 (/v1/responses, non-streaming)
           SessionStore -> auto-detect Telegram session from state.db
           SSEParser, SpeechTranscriber, DocumentExtractor, AudioRecorder
 ```
@@ -198,8 +198,8 @@ BoaNotch/
     |   +-- ShellRunner.swift            # Async Process() wrapper
     |
     +-- Services/
-        +-- HermesClient.swift           # OpenAI-compatible SSE client
-        +-- SSEParser.swift              # Two-tier token routing
+        +-- HermesClient.swift           # /v1/responses API client
+        +-- SSEParser.swift              # Legacy SSE parser (unused)
         +-- SessionStore.swift           # Auto-detect Telegram session from state.db
         +-- HermesConfig.swift           # config.yaml watcher, provider-aware model list
         +-- SpeechTranscriber.swift      # SFSpeechRecognizer, French locale
@@ -317,17 +317,13 @@ The app is currently **ad-hoc signed** (`codesign --sign -`). This:
 
 ## How It Works
 
-### SSE Token Routing
+### Response Parsing
 
-The `SSEParser` classifies each streaming token into three channels:
+`HermesClient.parseOutput()` walks the `output` array from `/v1/responses` and extracts three channels:
 
-1. **Thinking** — `<think>...</think>` tags
-2. **Tool calls** — two tiers:
-   - **Strong markers**: emojis (`💻🔧⚙️🔎📚`), XML tags
-   - **Weak heuristics**: shell operators, command prefixes, CLI flags
-3. **Response** — clean text (French pronouns, uppercase starts, numbered lists)
-
-`sawCleanResponse` flag prevents re-entry to tool mode from natural text. Post-processing fallback (`extractCleanResponse`) catches misclassified content after streaming.
+1. **Thinking** — `type: "reasoning"` items (exposed by a gateway patch; `<think>` blocks are stripped from `final_response` but preserved in the raw messages)
+2. **Tool calls** — `type: "function_call"` (→ name + args preview) and `type: "function_call_output"` (✓ name)
+3. **Response** — `type: "message"` → `content[].text`
 
 ### Session Auto-Link
 
@@ -410,7 +406,7 @@ Timeouts: 300s request, 600s resource.
 - **Speech** — On-device transcription (SFSpeechRecognizer)
 - **SQLite3** — Hermes session database (C API, readonly)
 - **PDFKit** — PDF text extraction
-- **URLSession.bytes** — Async SSE streaming
+- **URLSession** — Async HTTP requests
 
 ---
 
