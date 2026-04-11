@@ -4,13 +4,15 @@ import AppKit
 struct MessageBubble: View {
     let message: ChatMessage
     var searchQuery: String? = nil
+    var onCopy: (() -> Void)? = nil
     var onRetry: (() -> Void)? = nil
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
     @State private var showToolCalls = false
-    @State private var isHovered = false
-    @State private var showCopied = false
+    @State private var showCopyConfirm = false
+    @State private var isHoveredCopy = false
+    @State private var isHoveredRetry = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -39,22 +41,23 @@ struct MessageBubble: View {
             }
 
             // Action buttons for completed assistant messages
-            if !isUser && !message.content.isEmpty && !message.isStreaming {
+            if !isUser && !message.isStreaming && !message.content.isEmpty {
                 HStack(spacing: 12) {
                     Button {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(message.content, forType: .string)
-                        showCopied = true
+                        NSPasteboard.general.setString(displayContent, forType: .string)
+                        showCopyConfirm = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            showCopied = false
+                            showCopyConfirm = false
                         }
                     } label: {
-                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        Image(systemName: showCopyConfirm ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.3))
+                            .foregroundStyle(.white.opacity(isHoveredCopy ? 0.5 : 0.25))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
+                    .onHover { isHoveredCopy = $0 }
 
                     if let onRetry {
                         Button {
@@ -62,14 +65,14 @@ struct MessageBubble: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(0.3))
+                                .foregroundStyle(.white.opacity(isHoveredRetry ? 0.5 : 0.25))
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
+                        .onHover { isHoveredRetry = $0 }
                     }
                 }
-                .opacity(isHovered ? 1 : 0)
-                .animation(.easeInOut(duration: 0.15), value: isHovered)
+                .padding(.top, 2)
             }
         }
         .padding(.horizontal, isUser ? 12 : 0)
@@ -82,8 +85,6 @@ struct MessageBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
     }
 
     // MARK: - Thinking toggle
