@@ -13,9 +13,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let onboardingVM = OnboardingViewModel()
     private let clipperListener = ClipperListener()
     private var statusItem: NSStatusItem?
-    private var enterHotKeyRef: EventHotKeyRef?
-    private var shiftEnterHotKeyRef: EventHotKeyRef?
-    private var escapeHotKeyRef: EventHotKeyRef?
     private var flagsMonitor: Any?
     private var controlTapTimestamps: [Date] = []
     private var controlWasDown = false
@@ -42,9 +39,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             notchVM.open()
         }
 
-        notchVM.onDiscardAction = { [weak self] in self?.handleDiscardAction() }
+        notchVM.onTalkAction = { [weak self] in self?.talkAction() }
+        notchVM.onBrainDumpAction = { [weak self] in self?.brainDumpAction() }
 
-        registerGlobalHotkey()
+        registerTripleTapMonitor()
         setupMenuBarItem()
         startClipperListener()
     }
@@ -92,37 +90,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
-    // MARK: - Triple-tap Control detection + Carbon hotkeys for classification
+    // MARK: - Triple-tap Control detection
 
-    private func registerGlobalHotkey() {
-        // Carbon event handler for dynamic hotkeys (Enter, Shift+Enter, Escape)
-        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-
-        InstallEventHandler(GetApplicationEventTarget(), { (_, event, _) -> OSStatus in
-            var hotKeyID = EventHotKeyID()
-            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                              nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
-            guard let delegate = AppDelegate.shared else { return noErr }
-            DispatchQueue.main.async {
-                switch hotKeyID.id {
-                case 2: delegate.handleEnterHotkey()
-                case 3: delegate.handleBrainDumpAction()   // Shift+Enter
-                case 4: delegate.handleDiscardAction()      // Escape
-                default: break
-                }
-            }
-            return noErr
-        }, 1, &eventType, nil, nil)
-
-        // Triple-tap Control via flagsChanged monitor
+    private func registerTripleTapMonitor() {
         flagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             self?.handleFlagsChanged(event)
         }
     }
 
     private func handleFlagsChanged(_ event: NSEvent) {
-        // Only react to Control-key events (left or right Control).
-        // flagsChanged fires for ALL modifiers (Fn, Caps Lock, Shift, etc.) — gate strictly.
         let keyCode = Int(event.keyCode)
         guard keyCode == kVK_Control || keyCode == kVK_RightControl else { return }
 
@@ -130,7 +106,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let wasDown = controlWasDown
         controlWasDown = nowDown
 
-        // Detect a clean down→up release with no other modifiers held
         let otherModifiers = event.modifierFlags.intersection([.shift, .command, .option])
         guard wasDown, !nowDown, otherModifiers.isEmpty else { return }
 
@@ -140,47 +115,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if controlTapTimestamps.count >= 3 {
             controlTapTimestamps.removeAll()
-            DispatchQueue.main.async { self.toggleRecording() }
+            DispatchQueue.main.async {
+                if self.audioRecorder.isRecording {
+                    // Triple-tap while recording = cancel
+                    _ = self.audioRecorder.stopRecording()
+                    self.notchVM.isRecording = false
+                } else {
+                    self.audioRecorder.startRecording()
+                    self.notchVM.isRecording = true
+                }
+            }
         }
     }
 
-    // MARK: - Recording toggle
+    // MARK: - Recording actions (called from toast buttons)
 
-    private func toggleRecording() {
-        // Triple-tap during classification = discard
-        if case .awaitingClassification = notchVM.state {
-            handleDiscardAction()
-            return
-        }
-
-        if audioRecorder.isRecording {
-            finishRecording()
-        } else {
-            audioRecorder.startRecording()
-            notchVM.isRecording = true
-        }
-    }
-
-    /// Enter hotkey is only registered during the classification window
-    private func handleEnterHotkey() {
-        if case .awaitingClassification = notchVM.state {
-            handleTalkAction()
-        }
-    }
-
-    private func finishRecording() {
-        guard let url = audioRecorder.stopRecording() else {
-            notchVM.isRecording = false
-            return
-        }
+    /// Stop recording → transcribe → send to chat
+    private func talkAction() {
+        guard let url = audioRecorder.stopRecording() else { return }
         notchVM.isRecording = false
 
         Task { @MainActor in
-            if let text = await SpeechTranscriber.transcribe(audioURL: url) {
-                notchVM.showClassification(transcript: text)
-                registerClassificationHotkeys()
+            let text = await SpeechTranscriber.transcribe(audioURL: url)
+            if let text, !text.isEmpty {
+                print("[notchnotch] Transcription OK: \(text.prefix(50))…")
+                notchVM.open()
+                chatVM.draft = text
+                chatVM.send()
             } else {
-                // Transcription failed — fall back to direct send with attachment
+                print("[notchnotch] Transcription failed for \(url.lastPathComponent)")
                 let attachment = Attachment(
                     fileName: url.lastPathComponent,
                     fileType: "m4a",
@@ -189,65 +152,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 )
                 chatVM.pendingAttachments = [attachment]
                 chatVM.draft = "[Voice memo — transcription failed]"
+                notchVM.open()
                 chatVM.send()
             }
         }
     }
 
-    // MARK: - Classification actions
+    /// Stop recording → transcribe → save to brain
+    private func brainDumpAction() {
+        guard let url = audioRecorder.stopRecording() else { return }
+        notchVM.isRecording = false
 
-    private func handleTalkAction() {
-        guard let transcript = notchVM.pendingTranscript else { return }
-        unregisterClassificationHotkeys()
-        notchVM.pendingTranscript = nil
-        notchVM.open()
-        chatVM.draft = transcript
-        chatVM.send()
-    }
-
-    private func handleBrainDumpAction() {
-        guard let transcript = notchVM.pendingTranscript else { return }
-        unregisterClassificationHotkeys()
-        notchVM.pendingTranscript = nil
-        chatVM.saveToBrain(content: transcript, fileName: "voice-note")
-        notchVM.showClipperToast("Note archivée 🧠")
-    }
-
-    private func handleDiscardAction() {
-        unregisterClassificationHotkeys()
-        notchVM.dismissClassification()
-    }
-
-    // MARK: - Dynamic Carbon hotkeys
-
-    private func registerEnterHotkey() {
-        guard enterHotKeyRef == nil else { return }
-        let enterID = EventHotKeyID(signature: OSType(0x424E4348), id: 2)
-        RegisterEventHotKey(UInt32(kVK_Return), 0, enterID, GetApplicationEventTarget(), 0, &enterHotKeyRef)
-    }
-
-    private func unregisterEnterHotkey() {
-        if let ref = enterHotKeyRef { UnregisterEventHotKey(ref); enterHotKeyRef = nil }
-    }
-
-    private func registerClassificationHotkeys() {
-        registerEnterHotkey()
-
-        if shiftEnterHotKeyRef == nil {
-            let shiftEnterID = EventHotKeyID(signature: OSType(0x424E4348), id: 3)
-            RegisterEventHotKey(UInt32(kVK_Return), UInt32(shiftKey), shiftEnterID, GetApplicationEventTarget(), 0, &shiftEnterHotKeyRef)
+        Task { @MainActor in
+            let text = await SpeechTranscriber.transcribe(audioURL: url)
+            if let text, !text.isEmpty {
+                print("[notchnotch] Brain dump OK: \(text.prefix(50))…")
+                chatVM.saveToBrain(content: text, fileName: "voice-note")
+                notchVM.showClipperToast("Note archivée 🧠")
+            } else {
+                print("[notchnotch] Brain dump — transcription failed for \(url.lastPathComponent)")
+                notchVM.showToast("Transcription échouée")
+            }
         }
-
-        if escapeHotKeyRef == nil {
-            let escapeID = EventHotKeyID(signature: OSType(0x424E4348), id: 4)
-            RegisterEventHotKey(UInt32(kVK_Escape), 0, escapeID, GetApplicationEventTarget(), 0, &escapeHotKeyRef)
-        }
-    }
-
-    private func unregisterClassificationHotkeys() {
-        unregisterEnterHotkey()
-        if let ref = shiftEnterHotKeyRef { UnregisterEventHotKey(ref); shiftEnterHotKeyRef = nil }
-        if let ref = escapeHotKeyRef { UnregisterEventHotKey(ref); escapeHotKeyRef = nil }
     }
 
     // MARK: - OAuth URL handler
@@ -261,7 +187,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        unregisterClassificationHotkeys()
         if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
         clipperListener.stop()
     }

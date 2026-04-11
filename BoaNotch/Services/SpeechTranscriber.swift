@@ -8,13 +8,22 @@ class SpeechTranscriber {
                 cont.resume(returning: status)
             }
         }
-        guard status == .authorized else { return nil }
+        guard status == .authorized else {
+            print("[notchnotch] Speech auth denied: \(status.rawValue)")
+            return nil
+        }
 
         guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "fr-FR"))
                 ?? SFSpeechRecognizer(locale: Locale.current)
-                ?? SFSpeechRecognizer() else { return nil }
+                ?? SFSpeechRecognizer() else {
+            print("[notchnotch] No speech recognizer available for any locale")
+            return nil
+        }
 
-        guard recognizer.isAvailable else { return nil }
+        guard recognizer.isAvailable else {
+            print("[notchnotch] Speech recognizer not available (locale: \(recognizer.locale))")
+            return nil
+        }
 
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = false
@@ -26,8 +35,9 @@ class SpeechTranscriber {
                 if let result, result.isFinal {
                     resumed = true
                     cont.resume(returning: result.bestTranscription.formattedString)
-                } else if error != nil {
+                } else if let error {
                     resumed = true
+                    print("[notchnotch] Speech recognition error: \(error.localizedDescription)")
                     cont.resume(returning: nil)
                 }
             }

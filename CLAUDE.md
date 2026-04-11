@@ -39,7 +39,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `HermesClient.swift` — Single-request streaming via `POST /v1/responses` with `stream: true` and server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults). Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context.
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
 - `SSEParser.swift` — Routes SSE events from `/v1/responses` streaming: `response.output_text.delta` (with `<think>` tag parsing), `tool.started`, `tool.completed`, `response.completed`. Also supports legacy `/v1/runs` format (`message.delta`, `run.completed`) via `json["event"]` fallback. No heuristics.
-- `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch
+- `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -52,6 +52,18 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 3. `SSEParser` routes deltas through `routeContent()` for `<think>` tag detection, tool events formatted as `→ tool preview` / `✓ tool (0.1s)`
 4. Server persists the full conversation history (including tool calls) in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
 5. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID — no `/new` command sent
+
+### Voice recording flow
+
+Triple-tap the Control (⌃) key to start recording. A toast appears below the closed notch with a pulsing red dot and two buttons:
+
+1. **Talk** — stops recording, transcribes via `SpeechTranscriber` (macOS `SFSpeechRecognizer`, French locale), opens notch, sends transcript as chat message
+2. **Brain Dump** — stops recording, transcribes, saves transcript to Hermes memory via `saveToBrain()`, shows pacman toast "Note archivée 🧠"
+3. **Triple-tap ⌃ again** while recording — cancels, discards audio
+
+The triple-tap detection uses `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` gated on `event.keyCode == kVK_Control || kVK_RightControl` with down→up transition tracking. 0.5s sliding window, 3 releases to trigger. No Carbon hotkeys — all keyboard shortcuts were removed to avoid global key hijacking (Enter, Escape).
+
+If transcription fails, the Talk path falls back to sending the audio file as an attachment. The Brain Dump path shows a "Transcription échouée" toast.
 
 ### Brain save pattern (v0.9)
 
@@ -72,7 +84,7 @@ The NotchNotch Clipper Chrome extension uses the identical API pattern, then pin
 - **Bundle.module path**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Logo loading via `Bundle.module` currently fails at runtime — needs fixing.
 - **Ad-hoc signed**: Triggers Gatekeeper. Users need `xattr -cr` or right-click > Open.
 - **SPM target name**: Still `BoaNotch` in Package.swift (renamed to `notchnotch` only at the app bundle level).
-- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum requires updating the switch in `NotchWindowController.swift` (line ~61) or the build fails.
+- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum (`closed`, `open`, `toast`, `clipperToast`) requires updating the switch in `NotchWindowController.swift` (line ~61) or the build fails.
 - **Chrome extension local path**: The extension is loaded from `~/NotchNotch Extension/` on the dev machine, NOT from the git repo clone. Changes to the repo must be copied there and the extension reloaded in Chrome.
 
 ## Companion projects
@@ -82,8 +94,69 @@ The NotchNotch Clipper Chrome extension uses the identical API pattern, then pin
 ## Conventions
 
 - Language: Swift 5.9, macOS 14+ deployment target
-- UI: SwiftUI with AppKit (NSPanel, NSStatusItem, Carbon hotkeys)
+- UI: SwiftUI with AppKit (NSPanel, NSStatusItem, NSEvent global monitors)
 - No external dependencies — all standard frameworks (Network.framework for ClipperListener)
 - French locale for speech transcription
 - Purple/violet accent color throughout
-- Pacman icon for clipper toasts (animated purple circle, Canvas + TimelineView)
+- Pacman icon for clipper toasts (animated purple circle, 
+Canvas + TimelineView)
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

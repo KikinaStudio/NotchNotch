@@ -5,7 +5,6 @@ enum NotchState: Equatable {
     case open
     case toast(String)
     case clipperToast(String)  // brain dump toast with pacman icon
-    case awaitingClassification
 }
 
 enum DropZone {
@@ -45,11 +44,9 @@ class NotchViewModel: ObservableObject {
 
     var onStateChange: ((NotchState) -> Void)?
 
-    /// Transcript waiting for user classification (Talk vs Brain Dump)
-    @Published var pendingTranscript: String?
-
-    /// Action closure wired by AppDelegate — called on classification timeout
-    var onDiscardAction: (() -> Void)?
+    /// Action closures wired by AppDelegate for recording toast buttons
+    var onTalkAction: (() -> Void)?
+    var onBrainDumpAction: (() -> Void)?
 
     private var hoverTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
@@ -205,30 +202,4 @@ class NotchViewModel: ObservableObject {
         openHeight = clamped
     }
 
-    // MARK: - Classification (post-recording intent picker)
-
-    func showClassification(transcript: String) {
-        toastTask?.cancel()
-        pendingTranscript = transcript
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            state = .awaitingClassification
-        }
-        onStateChange?(.awaitingClassification)
-
-        // Auto-timeout: discard after 10 seconds
-        toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(10))
-            guard !Task.isCancelled else { return }
-            self.onDiscardAction?()
-        }
-    }
-
-    func dismissClassification() {
-        toastTask?.cancel()
-        pendingTranscript = nil
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            state = .closed
-        }
-        onStateChange?(.closed)
-    }
 }

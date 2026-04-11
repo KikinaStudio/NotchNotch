@@ -35,10 +35,6 @@ struct NotchView: View {
                         value: notchVM.isOpen
                     )
                     .animation(
-                        .interactiveSpring(response: 0.35, dampingFraction: 0.7, blendDuration: 0),
-                        value: notchVM.isRecording
-                    )
-                    .animation(
                         .interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0),
                         value: notchVM.isThinkingClosed
                     )
@@ -47,11 +43,14 @@ struct NotchView: View {
                         value: notchVM.openHeight
                     )
 
-                // KITT scanner — directly below the closed notch
+                // Recording toast — directly below the closed notch
                 if notchVM.isRecording && !notchVM.isOpen {
-                    KITTScanner(width: notchVM.closedSize.width - 20)
-                        .offset(y: -4)
-                        .transition(.opacity)
+                    RecordingToastView(notchVM: notchVM)
+                        .padding(.top, 8)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity
+                        ))
                 }
 
                 if notchVM.isToastVisible, let msg = notchVM.toastMessage {
@@ -109,9 +108,6 @@ struct NotchView: View {
                     VStack(spacing: 0) {
                         if notchVM.isSettingsOpen {
                             settingsTopBar
-                        } else if notchVM.isRecording {
-                            recordingIndicator
-                                .transition(.opacity)
                         } else if notchVM.isSearchOpen {
                             SearchBarView(searchVM: searchVM) {
                                 searchVM.close()
@@ -133,7 +129,7 @@ struct NotchView: View {
                             .transition(.opacity)
                         } else {
                             ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
-                                .padding(.top, notchVM.isRecording ? 8 : 4)
+                                .padding(.top, 4)
                                 .padding(.horizontal, 35)
                                 .padding(.bottom, 18)
                         }
@@ -165,7 +161,7 @@ struct NotchView: View {
         .overlay(alignment: .top) {
             // Flanking buttons — beside the hardware notch, on the same line
             if notchVM.isOpen && !onboardingVM.needsOnboarding
-                && !notchVM.isSearchOpen && !notchVM.isRecording {
+                && !notchVM.isSearchOpen {
                 HStack(spacing: 0) {
                     FlankingButton(
                         icon: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass",
@@ -210,27 +206,64 @@ struct NotchView: View {
             .padding(.top, 4)
     }
 
-    // MARK: - Recording indicator (inside open notch)
+}
 
-    private var recordingIndicator: some View {
-        HStack(spacing: 6) {
+// MARK: - Recording toast (below closed notch, with action buttons)
+
+struct RecordingToastView: View {
+    @ObservedObject var notchVM: NotchViewModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Blinking red dot
             Circle()
                 .fill(AppColors.recordingDot)
-                .frame(width: 10, height: 10)
+                .frame(width: 8, height: 8)
                 .modifier(PulsingModifier())
 
-            Text("Recording...")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(AppColors.recordingLabel)
+            // Talk button
+            Button { notchVM.onTalkAction?() } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "text.bubble.fill")
+                        .font(.system(size: 10))
+                    Text("Talk")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    LinearGradient(
+                        colors: [AppColors.kittViolet, AppColors.accent],
+                        startPoint: .leading, endPoint: .trailing
+                    )
+                )
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
 
-            Text("Triple-tap ⌃ to stop")
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.4))
+            // Brain Dump button
+            Button { notchVM.onBrainDumpAction?() } label: {
+                HStack(spacing: 5) {
+                    Text("🧠")
+                        .font(.system(size: 10))
+                    Text("Dump")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(0.1))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
         }
-        .padding(.top, 36)
-        .padding(.bottom, 4)
+        .foregroundStyle(.white.opacity(0.9))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.black)
+        .clipShape(Capsule())
     }
-
 }
 
 // MARK: - Resize handle (drag bottom edge of open notch)
