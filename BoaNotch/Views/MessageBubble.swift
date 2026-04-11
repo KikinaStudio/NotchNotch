@@ -4,10 +4,13 @@ import AppKit
 struct MessageBubble: View {
     let message: ChatMessage
     var searchQuery: String? = nil
+    var onRetry: (() -> Void)? = nil
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
     @State private var showToolCalls = false
+    @State private var isHovered = false
+    @State private var showCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -34,9 +37,45 @@ struct MessageBubble: View {
             if !displayContent.isEmpty {
                 filePathAwareContent
             }
+
+            // Action buttons for completed assistant messages
+            if !isUser && !message.content.isEmpty && !message.isStreaming {
+                HStack(spacing: 12) {
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.content, forType: .string)
+                        showCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            showCopied = false
+                        }
+                    } label: {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+
+                    if let onRetry {
+                        Button {
+                            onRetry()
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.3))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                    }
+                }
+                .opacity(isHovered ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: isHovered)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
     }
 
     // MARK: - Thinking toggle

@@ -20,13 +20,14 @@ struct ChatView: View {
                             ForEach(chatVM.messages) { message in
                                 MessageBubble(
                                     message: message,
-                                    searchQuery: searchVM.query
+                                    searchQuery: searchVM.query,
+                                    onRetry: message.role == .assistant ? { chatVM.retryLastAssistant() } : nil
                                 )
                                 .id(message.id)
                             }
                         }
                         .padding(.horizontal, 2)
-                        .padding(.bottom, 6)
+                        .padding(.bottom, 14)
                         .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
                     }
                     .scrollIndicators(.hidden)
@@ -43,7 +44,7 @@ struct ChatView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 32)
+                .frame(height: 24)
                 .allowsHitTesting(false)
             }
 
