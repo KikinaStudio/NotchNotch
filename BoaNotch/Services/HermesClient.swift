@@ -39,7 +39,7 @@ class HermesClient {
         let toolCalls: String
     }
 
-    func sendResponse(input: String) async throws -> ResponseResult {
+    func sendResponse(input: String, systemContext: String? = nil) async throws -> ResponseResult {
         guard let url = URL(string: "\(baseURL)/v1/responses") else {
             throw HermesError.invalidURL
         }
@@ -51,9 +51,19 @@ class HermesClient {
             request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
         }
 
+        let inputValue: Any
+        if let systemContext {
+            inputValue = [
+                ["role": "system", "content": systemContext],
+                ["role": "user", "content": input]
+            ]
+        } else {
+            inputValue = input
+        }
+
         let body: [String: Any] = [
             "model": "hermes-agent",
-            "input": input,
+            "input": inputValue,
             "conversation": conversationId,
             "store": true,
         ]

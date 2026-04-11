@@ -121,9 +121,44 @@ struct ChatView: View {
                 .transition(.opacity)
             }
 
+            if let routine = chatVM.activeRoutineContext {
+                routineContextTag(routine)
+            }
+
             inputBar
         }
         .onAppear { isInputFocused = true }
+    }
+
+    private func routineContextTag(_ job: CronJob) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.system(size: 9))
+                .foregroundStyle(AppColors.accent)
+
+            Text(job.name)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(1)
+
+            Button {
+                chatVM.clearRoutineContext()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(AppColors.accent.opacity(0.12))
+        .clipShape(Capsule())
+        .padding(.horizontal, 2)
+        .padding(.bottom, 4)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .animation(.easeInOut(duration: 0.2), value: chatVM.activeRoutineContext?.id)
     }
 
     // MARK: - Input bar (bare text field, buttons on right)

@@ -15,6 +15,7 @@ class ChatViewModel: ObservableObject {
     @Published var connectionError: String?
     @Published var voiceState: VoiceState = .idle
     @Published var showNewConversationConfirm = false
+    @Published var activeRoutineContext: CronJob? = nil
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -90,7 +91,13 @@ class ChatViewModel: ObservableObject {
         streamTask = Task { @MainActor in
             let startTime = Date()
             do {
-                let result = try await client.sendResponse(input: input)
+                var systemContext: String? = nil
+                if let routine = activeRoutineContext {
+                    let statusInfo = routine.enabled ? "active" : "paused"
+                    let promptPreview = String(routine.prompt.prefix(200))
+                    systemContext = "The user is referring to their scheduled routine \"\(routine.name)\" (id: \(routine.id), schedule: \"\(routine.schedule_display)\", status: \(statusInfo)). Current prompt: \"\(promptPreview)\". Interpret their message as instructions about this specific cron job. Use your cronjob tools to make any requested changes."
+                }
+                let result = try await client.sendResponse(input: input, systemContext: systemContext)
 
                 guard !Task.isCancelled else { return }
                 guard let lastIndex = messages.indices.last else { return }
@@ -169,6 +176,14 @@ class ChatViewModel: ObservableObject {
                 notchVM?.showToast("Brain save failed")
             }
         }
+    }
+
+    func setRoutineContext(_ job: CronJob) {
+        activeRoutineContext = job
+    }
+
+    func clearRoutineContext() {
+        activeRoutineContext = nil
     }
 
     func removeAttachment(_ id: UUID) {
