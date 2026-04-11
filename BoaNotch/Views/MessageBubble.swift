@@ -72,8 +72,16 @@ struct MessageBubble: View {
                 .animation(.easeInOut(duration: 0.15), value: isHovered)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
+        .padding(.horizontal, isUser ? 12 : 0)
+        .padding(.vertical, isUser ? 8 : 4)
+        .frame(maxWidth: isUser ? nil : .infinity, alignment: isUser ? .trailing : .leading)
+        .background {
+            if isUser {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.white.opacity(0.1))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
     }
@@ -170,7 +178,7 @@ struct MessageBubble: View {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
                                     .font(.system(size: 14))
-                                    .foregroundStyle(isUser ? AppColors.accent : .white.opacity(0.88))
+                                    .foregroundStyle(.white.opacity(0.88))
                                     .textSelection(.enabled)
 
                                 if message.isStreaming && idx == blocks.count - 1 && part == parts.last {
