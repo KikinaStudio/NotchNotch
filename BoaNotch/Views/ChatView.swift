@@ -58,19 +58,30 @@ struct ChatView: View {
                 .padding(.bottom, 100)
             }
 
-            // Connection error indicator
-            if chatVM.connectionError != nil {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.red.opacity(0.8))
-                        .frame(width: 6, height: 6)
-                    Text("Offline")
+            // Connection error banner
+            if let errorMessage = chatVM.connectionError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 10))
-                        .foregroundStyle(.red.opacity(0.6))
+                    Text(errorMessage)
+                        .font(.system(size: 10, weight: .medium))
+                        .lineLimit(3)
                 }
+                .foregroundStyle(.orange)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.1))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
                 .padding(.horizontal, 2)
-                .padding(.bottom, 4)
+                .onTapGesture { chatVM.connectionError = nil }
+                .task(id: errorMessage) {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000)
+                    if !Task.isCancelled {
+                        chatVM.connectionError = nil
+                    }
+                }
+                .transition(.opacity)
             }
 
             // Pending attachment chips

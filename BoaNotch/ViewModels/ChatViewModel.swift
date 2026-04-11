@@ -40,7 +40,7 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             let ok = await client.healthCheck()
             if !ok {
-                connectionError = "Hermes offline"
+                connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
             }
         }
     }
@@ -113,11 +113,20 @@ class ChatViewModel: ObservableObject {
                 if !Task.isCancelled {
                     let desc = error.localizedDescription
                     if desc.contains("Could not connect") || desc.contains("Connection refused") {
-                        connectionError = "Hermes offline"
+                        connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
                     } else if desc.contains("timed out") || desc.contains("Timeout") {
-                        connectionError = "Timeout"
+                        connectionError = "Hermes took too long to respond. Try reducing max iterations in settings, or check if the agent is stuck (hermes logs)"
+                    } else if let hermesError = error as? HermesError,
+                              case .httpErrorWithBody(let code, _) = hermesError {
+                        if code == 401 || code == 403 {
+                            connectionError = "Authentication error. If you set API_SERVER_KEY in ~/.hermes/.env, notchnotch doesn't send it yet. Remove API_SERVER_KEY or leave it empty for local use."
+                        } else if code >= 500 {
+                            connectionError = "Hermes internal error. Check ~/.hermes/logs/err.log or run: hermes logs --tail 50"
+                        } else {
+                            connectionError = "Unexpected error: \(desc)"
+                        }
                     } else {
-                        connectionError = desc
+                        connectionError = "Unexpected error: \(desc)"
                     }
                     if let lastIndex = messages.indices.last {
                         messages[lastIndex].isStreaming = false

@@ -64,7 +64,11 @@ class HermesClient {
             throw HermesError.invalidResponse
         }
         guard httpResponse.statusCode == 200 else {
-            throw HermesError.httpError(httpResponse.statusCode)
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -129,12 +133,16 @@ class HermesClient {
             "store": false,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw HermesError.invalidResponse
         }
         guard httpResponse.statusCode == 200 else {
-            throw HermesError.httpError(httpResponse.statusCode)
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
         }
     }
 
@@ -163,12 +171,14 @@ enum HermesError: LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
+    case httpErrorWithBody(Int, String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL: return "Invalid API URL"
         case .invalidResponse: return "Bad response"
         case .httpError(let code): return "HTTP \(code)"
+        case .httpErrorWithBody(let code, let body): return "HTTP \(code): \(body)"
         }
     }
 }
