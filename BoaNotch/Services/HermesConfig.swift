@@ -16,7 +16,7 @@ class HermesConfig: ObservableObject {
     // Zone B: Expanded bar
     @Published var activeProfile: String = "default"
     @Published var modelDefault: String = ""
-    @Published var modelProvider: String = "openrouter"
+    @Published var modelProvider: String = "nous"
     @Published var reasoningEffort: String = "medium"
     @Published var skipMemory: Bool = false
     @Published var maxIterations: Int = 50
@@ -46,13 +46,33 @@ class HermesConfig: ObservableObject {
     // Profiles
     @Published var availableProfiles: [String] = ["default"]
 
-    // Only models with working API keys
-    var availableModels: [(value: String, label: String, provider: String, baseURL: String)] {
-        [
-            ("MiniMax-M2.7", "m2.7", "minimax", "https://api.minimax.io/v1"),
-            ("MiniMax-M2.5", "m2.5", "minimax", "https://api.minimax.io/v1"),
-            ("nous/mimo-v2-pro", "mimo v2", "openrouter", "https://openrouter.ai/api/v1"),
-        ]
+    var availableModels: [(value: String, label: String)] {
+        switch modelProvider {
+        case "openai":
+            return [
+                ("gpt-4o-mini", "gpt-4o mini"),
+                ("gpt-4o", "gpt-4o"),
+                ("gpt-5", "gpt-5"),
+            ]
+        case "anthropic":
+            return [
+                ("claude-sonnet-4-6-20250514", "sonnet 4.6"),
+                ("claude-opus-4-6-20250514", "opus 4.6"),
+            ]
+        case "openrouter":
+            return [
+                ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
+                ("google/gemini-3-flash-preview", "gemini flash"),
+                ("minimax/minimax-m2.7", "minimax m2.7"),
+                ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
+            ]
+        default:
+            return [
+                ("xiaomi/mimo-v2-pro", "mimo v2 pro"),
+                ("nousresearch/hermes-4-70b", "hermes 4 70b"),
+                ("nousresearch/deephermes-3-8b", "deephermes 3 8b"),
+            ]
+        }
     }
 
     var modelDisplayName: String {
@@ -60,23 +80,33 @@ class HermesConfig: ObservableObject {
             ?? modelDefault.split(separator: "/").last.map(String.init) ?? modelDefault
     }
 
-    /// Switch model, provider, and base_url in a single atomic write
-    func switchModel(_ model: (value: String, label: String, provider: String, baseURL: String)) {
+    func switchModel(_ model: (value: String, label: String)) {
         modelDefault = model.value
-        modelProvider = model.provider
-        guard var content = try? String(contentsOfFile: configPath, encoding: .utf8) else {
-            print("[notchnotch] switchModel: cannot read \(configPath)")
-            return
+        setImmediate("model.default", value: model.value)
+    }
+
+    // MARK: - API key storage (~/.hermes/.env)
+
+    func writeAPIKey(provider: String, key: String) {
+        let envKey: String
+        switch provider {
+        case "openai": envKey = "OPENAI_API_KEY"
+        case "anthropic": envKey = "ANTHROPIC_API_KEY"
+        default: envKey = "OPENROUTER_API_KEY"
         }
-        content = replaceNestedYAML(content, section: "model", key: "default", value: model.value)
-        content = replaceNestedYAML(content, section: "model", key: "provider", value: model.provider)
-        content = replaceNestedYAML(content, section: "model", key: "base_url", value: model.baseURL)
-        do {
-            let data = content.data(using: .utf8)!
-            try data.write(to: URL(fileURLWithPath: configPath), options: .atomic)
-        } catch {
-            print("[notchnotch] switchModel write error: \(error)")
+
+        let hermesHome = ProcessInfo.processInfo.environment["HERMES_HOME"]
+            ?? "\(NSHomeDirectory())/.hermes"
+        let envPath = "\(hermesHome)/.env"
+
+        try? FileManager.default.createDirectory(atPath: hermesHome, withIntermediateDirectories: true)
+
+        var content = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
+        if !content.isEmpty && !content.hasSuffix("\n") {
+            content += "\n"
         }
+        content += "\(envKey)=\(key)\n"
+        try? content.write(toFile: envPath, atomically: true, encoding: .utf8)
     }
 
     // MARK: - File watcher

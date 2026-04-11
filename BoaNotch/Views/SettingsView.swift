@@ -4,6 +4,7 @@ struct SettingsView: View {
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var hermesConfig: HermesConfig
+    @State private var apiKey = ""
 
     var body: some View {
         ScrollView {
@@ -12,6 +13,43 @@ struct SettingsView: View {
                 Text("Settings")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.8))
+
+                // ── AI Provider ──
+                settingsSection("AI Provider") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Model provider")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.5))
+
+                        HStack(spacing: 6) {
+                            ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic")], id: \.0) { value, label in
+                                Button {
+                                    hermesConfig.modelProvider = value
+                                    hermesConfig.setImmediate("model.provider", value: value)
+                                } label: {
+                                    Text(label)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(hermesConfig.modelProvider == value ? .white : .white.opacity(0.5))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 4)
+                                        .background(hermesConfig.modelProvider == value ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        if hermesConfig.modelProvider == "nous" {
+                            Text("Free models via Nous Portal. No API key needed.")
+                                .font(.system(size: 9))
+                                .foregroundStyle(AppColors.accent.opacity(0.4))
+                        }
+
+                        if hermesConfig.modelProvider != "nous" {
+                            apiKeyField
+                        }
+                    }
+                }
 
                 // ── Agent ──
                 settingsSection("Agent") {
@@ -192,6 +230,43 @@ struct SettingsView: View {
                 .foregroundStyle(.white.opacity(0.25))
                 .tracking(1.5)
             content()
+        }
+    }
+
+    private var apiKeyPlaceholder: String {
+        switch hermesConfig.modelProvider {
+        case "openrouter": return "sk-or-v1-..."
+        case "openai": return "sk-..."
+        case "anthropic": return "sk-ant-..."
+        default: return ""
+        }
+    }
+
+    private var apiKeyField: some View {
+        HStack(spacing: 6) {
+            SecureField(apiKeyPlaceholder, text: $apiKey)
+                .textFieldStyle(.plain)
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+
+            Button {
+                hermesConfig.writeAPIKey(provider: hermesConfig.modelProvider, key: apiKey)
+                apiKey = ""
+            } label: {
+                Text("Save")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(apiKey.isEmpty ? .white.opacity(0.3) : .white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(apiKey.isEmpty ? .white.opacity(0.06) : AppColors.accent.opacity(0.3))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(apiKey.isEmpty)
         }
     }
 

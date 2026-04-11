@@ -9,18 +9,17 @@ struct OnboardingContainerView: View {
                 switch onboardingVM.currentStep {
                 case 0: WelcomeStep(onboardingVM: onboardingVM)
                 case 1: PrivacyStep(onboardingVM: onboardingVM)
-                case 2: ConnectProviderStep(onboardingVM: onboardingVM)
-                case 3: InstallHermesStep(onboardingVM: onboardingVM)
-                case 4: ChooseModelStep(onboardingVM: onboardingVM)
-                case 5: TelegramStep(onboardingVM: onboardingVM)
-                case 6: ReadyStep(onboardingVM: onboardingVM)
+                case 2: InstallHermesStep(onboardingVM: onboardingVM)
+                case 3: ChooseModelStep(onboardingVM: onboardingVM)
+                case 4: TelegramStep(onboardingVM: onboardingVM)
+                case 5: ReadyStep(onboardingVM: onboardingVM)
                 default: ReadyStep(onboardingVM: onboardingVM)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Navigation — back + dots (no back on welcome/ready, no dots on welcome/ready)
-            if onboardingVM.currentStep > 0 && onboardingVM.currentStep < 6 {
+            if onboardingVM.currentStep > 0 && onboardingVM.currentStep < 5 {
                 HStack {
                     Button { onboardingVM.goBack() } label: {
                         HStack(spacing: 3) {
@@ -38,7 +37,7 @@ struct OnboardingContainerView: View {
 
                     // Step dots
                     HStack(spacing: 5) {
-                        ForEach(0..<7, id: \.self) { i in
+                        ForEach(0..<6, id: \.self) { i in
                             Circle()
                                 .fill(.white.opacity(i == onboardingVM.currentStep ? 0.5 : 0.1))
                                 .frame(width: 4, height: 4)

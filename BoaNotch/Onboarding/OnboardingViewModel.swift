@@ -13,12 +13,6 @@ class OnboardingViewModel: ObservableObject {
         didSet { UserDefaults.standard.set(selectedProvider, forKey: "selectedProvider") }
     }
 
-    // MARK: - OAuth state
-
-    @Published var oauthInProgress = false
-    @Published var oauthError: String?
-    private var codeVerifier: String?
-
     // MARK: - Install state
 
     @Published var isInstalling = false
@@ -30,12 +24,6 @@ class OnboardingViewModel: ObservableObject {
 
     @Published var telegramToken = ""
     @Published var telegramConnected = false
-
-    // MARK: - API key entry (manual path)
-
-    @Published var manualOpenRouterKey = ""
-    @Published var manualOpenAIKey = ""
-    @Published var manualAnthropicKey = ""
 
     // MARK: - Model selection
 
@@ -86,67 +74,6 @@ class OnboardingViewModel: ObservableObject {
         withAnimation {
             currentStep = max(0, currentStep - 1)
         }
-    }
-
-    // MARK: - OAuth flow
-
-    func startOAuth() {
-        let verifier = OAuthService.generateCodeVerifier()
-        self.codeVerifier = verifier
-        let challenge = OAuthService.codeChallenge(from: verifier)
-        let url = OAuthService.authorizationURL(codeChallenge: challenge)
-
-        oauthInProgress = true
-        oauthError = nil
-        NSWorkspace.shared.open(url)
-    }
-
-    func handleOAuthCallback(url: URL) {
-        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-              let verifier = codeVerifier else {
-            oauthInProgress = false
-            oauthError = "Connection cancelled. Try again?"
-            return
-        }
-
-        Task { @MainActor in
-            do {
-                let key = try await OAuthService.exchangeCode(code, verifier: verifier)
-                writeAPIKey(provider: "openrouter", key: key)
-                selectedProvider = "openrouter"
-                oauthInProgress = false
-                advance()
-            } catch {
-                oauthInProgress = false
-                oauthError = error.localizedDescription
-            }
-        }
-    }
-
-    func cancelOAuth() {
-        oauthInProgress = false
-        codeVerifier = nil
-    }
-
-    // MARK: - Manual API key
-
-    func connectManualKey() {
-        if !manualOpenRouterKey.isEmpty {
-            writeAPIKey(provider: "openrouter", key: manualOpenRouterKey)
-            selectedProvider = "openrouter"
-        } else if !manualOpenAIKey.isEmpty {
-            writeAPIKey(provider: "openai", key: manualOpenAIKey)
-            selectedProvider = "openai"
-        } else if !manualAnthropicKey.isEmpty {
-            writeAPIKey(provider: "anthropic", key: manualAnthropicKey)
-            selectedProvider = "anthropic"
-        }
-        advance()
-    }
-
-    var hasManualKey: Bool {
-        !manualOpenRouterKey.isEmpty || !manualOpenAIKey.isEmpty || !manualAnthropicKey.isEmpty
     }
 
     // MARK: - API key storage (~/.hermes/.env)
@@ -279,7 +206,8 @@ class OnboardingViewModel: ObservableObject {
         switch selectedProvider {
         case "openai": provider = "openai"
         case "anthropic": provider = "anthropic"
-        default: provider = "openrouter"
+        case "openrouter": provider = "openrouter"
+        default: provider = "nous"
         }
 
         hermesConfig?.setImmediate("model.default", value: selectedModel)

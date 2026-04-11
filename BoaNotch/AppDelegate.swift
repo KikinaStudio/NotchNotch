@@ -179,11 +179,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - OAuth URL handler
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            if url.scheme == "boanotch" && url.host == "oauth" {
-                onboardingVM.handleOAuthCallback(url: url)
-            }
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

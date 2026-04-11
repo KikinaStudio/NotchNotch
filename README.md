@@ -52,11 +52,10 @@ On first launch (when Hermes is not installed), notchnotch walks you through set
 
 1. **Welcome** — the notchnotch logo
 2. **Privacy** — explains what stays local, what goes to your AI provider
-3. **Connect** — sign in to OpenRouter (free, one click) or paste an API key (OpenAI, Anthropic)
-4. **Install** — Hermes agent installs automatically in the background
-5. **Model** — pick a free or paid AI model
-6. **Telegram** — optionally connect a Telegram bot for mobile access
-7. **Ready** — start chatting
+3. **Install** — Hermes agent installs automatically in the background
+4. **Model** — pick a free AI model (Nous Portal, zero config)
+5. **Telegram** — optionally connect a Telegram bot for mobile access
+6. **Ready** — start chatting
 
 If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding is skipped entirely.
 
@@ -79,7 +78,7 @@ Magnifying glass icon (top-left) opens full-text search across all messages:
 - Auto-scroll to matched message, purple highlight on matching text
 
 ### Settings
-Gear icon (top-right) opens settings: max iterations (Quick/Normal/Deep), streaming toggle, terminal backend (local/docker/ssh), and Telegram session status.
+Gear icon (top-right) opens settings: AI provider picker with API key entry, max iterations (Quick/Normal/Deep), streaming toggle, terminal backend (local/docker/ssh), and Telegram session status.
 
 ### Voice memos
 `Ctrl+Shift+R` anywhere to record. KITT-style purple scanner line under the closed notch. Press again or `Enter` to stop — transcribed locally (macOS Speech, French locale) and sent as text. Mic button in the input bar does the same.
@@ -122,7 +121,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |     Right: settings button
     |
     +-- Content (when open)
-    |     Onboarding flow (7 screens, first launch only)
+    |     Onboarding flow (6 screens, first launch only)
     |     Welcome screen (logo + tagline, before first message)
     |     ChatView: messages + input bar
     |       MessageBubble: thinking/tool toggles, code blocks, file cards
@@ -185,16 +184,15 @@ BoaNotch/
     |   +-- NotchWindowController.swift  # Positioning, drag monitor, screen tracking
     |
     +-- Onboarding/
-    |   +-- OnboardingViewModel.swift    # Step state, OAuth, install, config writes
+    |   +-- OnboardingViewModel.swift    # Step state, install, config writes
     |   +-- OnboardingContainerView.swift # Step router + nav dots
     |   +-- WelcomeStep.swift            # Screen 1: logo + tagline
     |   +-- PrivacyStep.swift            # Screen 2: privacy explainer
-    |   +-- ConnectProviderStep.swift     # Screen 3: OpenRouter OAuth + API key paste
-    |   +-- InstallHermesStep.swift       # Screen 4: background installer
-    |   +-- ChooseModelStep.swift         # Screen 5: model picker
-    |   +-- TelegramStep.swift            # Screen 6: optional Telegram bot
-    |   +-- ReadyStep.swift              # Screen 7: done
-    |   +-- OAuthService.swift           # PKCE + OpenRouter token exchange
+    |   +-- InstallHermesStep.swift       # Screen 3: background installer
+    |   +-- ChooseModelStep.swift         # Screen 4: model picker (Nous Portal free models)
+    |   +-- TelegramStep.swift            # Screen 5: optional Telegram bot
+    |   +-- ReadyStep.swift              # Screen 6: done
+    |   +-- OAuthService.swift           # PKCE + OpenRouter token exchange (reserved)
     |   +-- ShellRunner.swift            # Async Process() wrapper
     |
     +-- Services/
@@ -243,6 +241,7 @@ On first use, macOS will prompt for:
 
 ### Settings
 - Click the **gear** icon (top-right)
+- AI Provider: switch provider (Nous/OpenRouter/OpenAI/Anthropic), paste API keys
 - Agent: max iterations, streaming toggle
 - Execution: terminal backend (local/docker/ssh)
 - Session: shows auto-linked Telegram session status
@@ -382,7 +381,7 @@ Timeouts: 300s request, 600s resource.
 | `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
 | `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
 | `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
-| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme for OpenRouter OAuth callback |
+| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme (reserved for future OAuth) |
 
 ---
 

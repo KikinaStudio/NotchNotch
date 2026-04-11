@@ -18,12 +18,9 @@ struct ChooseModelStep: View {
             ]
         default:
             return [
-                ("google/gemini-3-flash-preview", "Google Gemini Flash", "Fast and free, great for everyday use", "Free"),
-                ("nous/mimo-v2-pro", "Xiaomi MiMo v2 Pro", "Free on Nous Portal, good for most tasks", "Free"),
-                ("meta-llama/llama-4-scout", "Meta Llama 4 Scout", "Open source, strong reasoning", "Free"),
-                ("google/gemini-3-pro-preview", "Google Gemini Pro", "Powerful, good at complex tasks", "Free"),
-                ("anthropic/claude-sonnet-4.6", "Anthropic Claude Sonnet", "Excellent writing and analysis", "Paid"),
-                ("anthropic/claude-opus-4.6", "Anthropic Claude Opus", "Most capable, best for hard problems", "Paid"),
+                ("xiaomi/mimo-v2-pro", "Mimo v2 Pro", "Fast and capable", "Free"),
+                ("nousresearch/hermes-4-70b", "Hermes 4 70B", "Strong all-rounder", "Free"),
+                ("nousresearch/deephermes-3-8b", "DeepHermes 3 8B", "Lightweight reasoning", "Free"),
             ]
         }
     }
@@ -47,6 +44,11 @@ struct ChooseModelStep: View {
                     }
                 }
             }
+
+            Text("You can switch models and add your own API keys anytime in settings.")
+                .font(.system(size: 9))
+                .foregroundStyle(AppColors.accent.opacity(0.4))
+                .padding(.top, 6)
 
             HStack {
                 Spacer()
