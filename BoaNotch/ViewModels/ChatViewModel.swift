@@ -62,16 +62,35 @@ class ChatViewModel: ObservableObject {
 
         draft = ""
         pendingAttachments = []
-        connectionError = nil
 
+        startRequest(input: fullContent)
+    }
+
+    func retryLastAssistant() {
+        guard !isStreaming else { return }
+        guard let lastAssistantIndex = messages.lastIndex(where: { $0.role == .assistant }) else { return }
+        let userIndex = lastAssistantIndex - 1
+        guard userIndex >= 0, messages[userIndex].role == .user else { return }
+
+        let savedContent = messages[userIndex].content
+        messages.removeSubrange(userIndex...lastAssistantIndex)
+
+        let userMessage = ChatMessage(role: .user, content: savedContent)
+        messages.append(userMessage)
+
+        startRequest(input: savedContent)
+    }
+
+    private func startRequest(input: String) {
         let assistantMessage = ChatMessage(role: .assistant, content: "", isStreaming: true)
         messages.append(assistantMessage)
         isStreaming = true
+        connectionError = nil
 
         streamTask = Task { @MainActor in
             let startTime = Date()
             do {
-                let result = try await client.sendResponse(input: fullContent)
+                let result = try await client.sendResponse(input: input)
 
                 guard !Task.isCancelled else { return }
                 guard let lastIndex = messages.indices.last else { return }
