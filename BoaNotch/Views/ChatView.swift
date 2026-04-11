@@ -28,11 +28,6 @@ struct ChatView: View {
                         .padding(.horizontal, 2)
                         .padding(.bottom, 6)
                         .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(key: ChatContentHeightKey.self, value: geo.size.height)
-                            }
-                        )
                     }
                     .scrollIndicators(.hidden)
                     .defaultScrollAnchor(.bottom)
@@ -50,9 +45,6 @@ struct ChatView: View {
                 )
                 .frame(height: 32)
                 .allowsHitTesting(false)
-            }
-            .onPreferenceChange(ChatContentHeightKey.self) { height in
-                notchVM.updateContentHeight(height)
             }
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
@@ -305,13 +297,4 @@ struct PendingAttachmentChip: View {
         .clipShape(Capsule())
     }
 
-}
-
-// MARK: - Content height measurement for auto-grow
-
-private struct ChatContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
 }

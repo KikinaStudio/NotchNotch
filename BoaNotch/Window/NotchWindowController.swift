@@ -8,8 +8,9 @@ class NotchWindowController {
     private var dragMonitor: Any?
     private var dragEndMonitor: Any?
 
-    // Fixed panel width — height is now full-screen to allow dynamic notch growth
-    static let panelWidth: CGFloat = 620
+    // Fixed panel size — never changes, like BoringNotch
+    static let panelWidth: CGFloat = 680
+    static let panelHeight: CGFloat = 380
     static let shadowPadding: CGFloat = 20
 
     private let sessionStore: SessionStore
@@ -38,11 +39,10 @@ class NotchWindowController {
 
         let closedSize = Self.closedNotchSize(for: screen)
         notchVM.closedSize = closedSize
-        notchVM.screenHeight = screen.frame.height
 
         let panelRect = NSRect(
             origin: .zero,
-            size: CGSize(width: Self.panelWidth, height: screen.frame.height)
+            size: CGSize(width: Self.panelWidth, height: Self.panelHeight)
         )
 
         let panel = NotchPanel(contentRect: panelRect)
@@ -110,10 +110,10 @@ class NotchWindowController {
         guard let panel else { return }
         let screenFrame = screen.frame
         let w = Self.panelWidth
-        let h = screenFrame.height
+        let h = Self.panelHeight
 
         let x = screenFrame.origin.x + (screenFrame.width / 2) - (w / 2)
-        let y = screenFrame.origin.y  // full-screen height, anchored at bottom
+        let y = screenFrame.origin.y + screenFrame.height - h
 
         panel.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
     }
@@ -122,7 +122,6 @@ class NotchWindowController {
         guard let screen = Self.notchScreen() else { return }
         let closedSize = Self.closedNotchSize(for: screen)
         notchVM.closedSize = closedSize
-        notchVM.screenHeight = screen.frame.height
         positionPanel(on: screen)
     }
 
