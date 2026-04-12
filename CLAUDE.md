@@ -36,10 +36,11 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 
 ## Key architecture
 
-- `HermesClient.swift` — Non-streaming `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). `sendResponse(input:)` returns a `ResponseResult` with `content`, `thinkingContent`, and `toolCalls` parsed from the response `output` array. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context. `HermesError.httpErrorWithBody(Int, String)` captures the server response body on HTTP errors for actionable messages in the UI.
+- `HermesClient.swift` — Non-streaming `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). `sendResponse(input:systemContext:)` returns a `ResponseResult` with `content`, `thinkingContent`, and `toolCalls` parsed from the response `output` array. When `systemContext` is provided, `input` is sent as `[system_msg, user_msg]` array instead of a plain string. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context. `HermesError.httpErrorWithBody(Int, String)` captures the server response body on HTTP errors for actionable messages in the UI.
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
 - `SSEParser.swift` — Legacy SSE parser from the `/v1/runs` era. Currently unused but kept for potential future streaming support.
-- `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
+- `CronStore.swift` — Watches `~/.hermes/cron/jobs.json` with DispatchSource (same pattern as HermesConfig). Decodes `CronJob` array with `sortedJobs` (enabled first, soonest `next_run_at`). Fails silently to empty array if file is missing or malformed.
+- `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch (search, routines, settings — three icons, mutually exclusive). `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -76,6 +77,16 @@ The drop zone "Save to brain", voice notes, and the Clipper extension all use th
 3. Toast shown via `notchVM.showToast()`
 
 The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
+
+### Routines (cron job display)
+
+Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. Three flanking icons beside the notch: search, routines (`arrow.triangle.2.circlepath`), settings — mutually exclusive via `NotchViewModel.openRoutines()`.
+
+**Empty state** — two-column layout: 4 starter template cards on the left (Remind, Watch, Track, Habit), "Create your own" drop zone on the right. Tapping a template pre-fills `chatVM.draft` and switches to chat. Tapping the right zone pre-fills `"Schedule a new routine: "`. Dropping a file on the right zone attaches it, sets `routineCreationMode = true`, and pre-fills a contextual draft.
+
+**Job list** — when jobs exist, full-width cards sorted by enabled status then `next_run_at`. Tapping a job sets `chatVM.activeRoutineContext` (routine context tag appears above input bar) and switches to chat.
+
+**Routine context** — when `activeRoutineContext` is set, `startRequest()` passes a `systemContext` string to `sendResponse()`, which converts the API `input` from a string to `[system_msg, user_msg]` array. The system message describes the job so Hermes knows which cron job the user is referring to. `routineCreationMode` uses the same mechanism for file-based routine creation (one-shot, resets after send).
 
 ## Important gotchas
 
