@@ -133,6 +133,23 @@ struct NotchView: View {
                             }, onSelectTemplate: { draft in
                                 chatVM.draft = draft
                                 notchVM.isRoutinesOpen = false
+                            }, onCreateOwn: {
+                                chatVM.draft = "Schedule a new routine: "
+                                notchVM.isRoutinesOpen = false
+                            }, onDropFile: { providers in
+                                for provider in providers {
+                                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                                        guard let data = data as? Data,
+                                              let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
+                                        let attachment = DocumentExtractor.extract(from: url)
+                                        DispatchQueue.main.async {
+                                            chatVM.pendingAttachments.append(attachment)
+                                            chatVM.draft = "What routine would make sense for this file?"
+                                            chatVM.routineCreationMode = true
+                                            notchVM.isRoutinesOpen = false
+                                        }
+                                    }
+                                }
                             })
                             .transition(.opacity)
                         } else {

@@ -16,6 +16,7 @@ class ChatViewModel: ObservableObject {
     @Published var voiceState: VoiceState = .idle
     @Published var showNewConversationConfirm = false
     @Published var activeRoutineContext: CronJob? = nil
+    @Published var routineCreationMode: Bool = false
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -96,6 +97,9 @@ class ChatViewModel: ObservableObject {
                     let statusInfo = routine.enabled ? "active" : "paused"
                     let promptPreview = String(routine.prompt.prefix(200))
                     systemContext = "The user is referring to their scheduled routine \"\(routine.name)\" (id: \(routine.id), schedule: \"\(routine.schedule_display)\", status: \(statusInfo)). Current prompt: \"\(promptPreview)\". Interpret their message as instructions about this specific cron job. Use your cronjob tools to make any requested changes."
+                } else if routineCreationMode {
+                    systemContext = "The user dropped a file from the Routines screen. They want to create a new scheduled routine (cron job). Analyze the attached file and, based on its content and what you know about the user, suggest 1-2 routine ideas that would be useful. Explain each suggestion briefly. Ask the user to confirm or adjust before creating the cron job. Do not create any job until the user explicitly agrees."
+                    routineCreationMode = false
                 }
                 let result = try await client.sendResponse(input: input, systemContext: systemContext)
 
