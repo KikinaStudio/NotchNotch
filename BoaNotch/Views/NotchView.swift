@@ -9,6 +9,7 @@ struct NotchView: View {
     @ObservedObject var hermesConfig: HermesConfig
     @ObservedObject var onboardingVM: OnboardingViewModel
     @ObservedObject var cronStore: CronStore
+    @ObservedObject var brainVM: BrainViewModel
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -114,6 +115,8 @@ struct NotchView: View {
                             }
                         } else if notchVM.isRoutinesOpen {
                             settingsTopBar
+                        } else if notchVM.isBrainOpen {
+                            settingsTopBar
                         } else {
                             notchTopBar
                         }
@@ -165,6 +168,16 @@ struct NotchView: View {
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
+                            } else if notchVM.isBrainOpen {
+                                BrainView(brainVM: brainVM)
+                                    .padding(.top, 14)
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 18)
+                                    .background(Color.white.opacity(0.05))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 18)
+                                    .transition(.opacity)
                             } else {
                                 ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
                                     .padding(.top, 4)
@@ -175,6 +188,9 @@ struct NotchView: View {
                     }
                     .onChange(of: notchVM.isHistoryOpen) { _, isOpen in
                         if isOpen { sessionStore.loadRecentSessions() }
+                    }
+                    .onChange(of: notchVM.isBrainOpen) { _, isOpen in
+                        if isOpen { brainVM.loadIfNeeded() }
                     }
                     .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
                 }
@@ -215,6 +231,7 @@ struct NotchView: View {
                             notchVM.isRoutinesOpen = false
                             notchVM.isSearchOpen = false
                             notchVM.isHistoryOpen = false
+                            notchVM.isBrainOpen = false
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .medium))
@@ -240,6 +257,10 @@ struct NotchView: View {
                                 }
                                 menuButton("arrow.triangle.2.circlepath") {
                                     notchVM.openRoutines()
+                                    notchVM.collapseMenu()
+                                }
+                                menuButton("brain") {
+                                    notchVM.openBrain()
                                     notchVM.collapseMenu()
                                 }
                                 menuButton("gearshape") {

@@ -18,8 +18,9 @@ class NotchWindowController {
     private let hermesConfig: HermesConfig
     private let onboardingVM: OnboardingViewModel
     private let cronStore: CronStore
+    private let brainVM: BrainViewModel
 
-    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore) {
+    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore, brainVM: BrainViewModel) {
         self.chatVM = chatVM
         self.notchVM = notchVM
         self.sessionStore = sessionStore
@@ -27,6 +28,7 @@ class NotchWindowController {
         self.hermesConfig = hermesConfig
         self.onboardingVM = onboardingVM
         self.cronStore = cronStore
+        self.brainVM = brainVM
 
         NotificationCenter.default.addObserver(
             self,
@@ -49,7 +51,7 @@ class NotchWindowController {
 
         let panel = NotchPanel(contentRect: panelRect)
 
-        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore)
+        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM)
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.frame = panel.contentView!.bounds
         hostingView.autoresizingMask = [.width, .height]
