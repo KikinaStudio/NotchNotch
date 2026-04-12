@@ -131,24 +131,6 @@ struct SettingsView: View {
                         .scaleEffect(0.7)
                         .frame(width: 40)
                     }
-
-                    // Skip memory toggle
-                    HStack {
-                        Text("Skip memory")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { hermesConfig.skipMemory },
-                            set: { val in
-                                hermesConfig.skipMemory = val
-                                hermesConfig.setImmediate("skip_memory", value: val)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .scaleEffect(0.7)
-                        .frame(width: 40)
-                    }
                 }
 
                 // ── Execution ──

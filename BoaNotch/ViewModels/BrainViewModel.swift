@@ -8,19 +8,27 @@ struct SkillInfo: Identifiable {
     let content: String
 }
 
+struct MemoryBlock: Identifiable {
+    let id = UUID()
+    let title: String
+    let content: String
+}
+
 struct WikiArticle: Identifiable {
     let id: String
     let title: String
     let content: String
     let isIndex: Bool
+    let path: String
 }
 
 class BrainViewModel: ObservableObject {
-    @Published var memoryContent: String?
-    @Published var userContent: String?
+    @Published var memoryBlocks: [MemoryBlock] = []
+    @Published var userBlocks: [MemoryBlock] = []
     @Published var skills: [SkillInfo] = []
     @Published var wikiArticles: [WikiArticle] = []
     @Published var hasWiki = false
+    @Published var wikiLastUpdated: Date?
     @Published var hasLoaded = false
 
     private var hermesHome: String {
@@ -47,8 +55,37 @@ class BrainViewModel: ObservableObject {
         let memoryPath = (memoriesDir as NSString).appendingPathComponent("MEMORY.md")
         let userPath = (memoriesDir as NSString).appendingPathComponent("USER.md")
 
-        memoryContent = readFileIfExists(memoryPath)
-        userContent = readFileIfExists(userPath)
+        memoryBlocks = readFileIfExists(memoryPath).map { parseMemoryBlocks($0) } ?? []
+        userBlocks = readFileIfExists(userPath).map { parseMemoryBlocks($0) } ?? []
+    }
+
+    private func parseMemoryBlocks(_ raw: String) -> [MemoryBlock] {
+        raw.components(separatedBy: "§")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .map { block in
+                let lines = block.components(separatedBy: "\n")
+                    .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                let firstLine = lines.first ?? ""
+                let title: String
+
+                if firstLine.hasPrefix("**") && firstLine.contains("**") {
+                    let label = firstLine
+                        .replacingOccurrences(of: "**", with: "")
+                        .components(separatedBy: ":").first ?? "Note"
+                    title = label.trimmingCharacters(in: .whitespaces)
+                } else if firstLine.hasPrefix("- ") && firstLine.contains(":") {
+                    let after = String(firstLine.dropFirst(2))
+                    let label = after.components(separatedBy: ":").first ?? "Note"
+                    title = label.trimmingCharacters(in: .whitespaces)
+                } else if firstLine.hasPrefix("## ") {
+                    title = String(firstLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                } else {
+                    title = String(firstLine.prefix(40))
+                }
+
+                return MemoryBlock(title: title, content: block)
+            }
     }
 
     // MARK: - Skills
@@ -124,8 +161,13 @@ class BrainViewModel: ObservableObject {
             let title = extractFirstHeading(content) ?? baseName
             let isIndex = baseName.lowercased() == "index"
 
-            articles.append(WikiArticle(id: baseName, title: title, content: content, isIndex: isIndex))
+            articles.append(WikiArticle(id: baseName, title: title, content: content, isIndex: isIndex, path: path))
         }
+
+        wikiLastUpdated = articles.compactMap { article -> Date? in
+            let attrs = try? FileManager.default.attributesOfItem(atPath: article.path)
+            return attrs?[.modificationDate] as? Date
+        }.max()
 
         wikiArticles = articles.sorted {
             if $0.isIndex != $1.isIndex { return $0.isIndex }

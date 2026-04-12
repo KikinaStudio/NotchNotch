@@ -123,26 +123,6 @@ struct ChatView: View {
                 }
             }
 
-            // Iteration warning banner
-            if hermesConfig.iterationPercentage >= 0.80 {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
-                    Text(hermesConfig.iterationPercentage >= 0.95
-                         ? "Iteration limit reached (\(hermesConfig.currentIteration)/\(hermesConfig.effectiveMaxIterations))"
-                         : "Approaching iteration limit (\(hermesConfig.currentIteration)/\(hermesConfig.effectiveMaxIterations))")
-                        .font(.system(size: 10, weight: .medium))
-                }
-                .foregroundStyle(hermesConfig.iterationPercentage >= 0.95 ? .red : .orange)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .frame(maxWidth: .infinity)
-                .background((hermesConfig.iterationPercentage >= 0.95 ? Color.red : .orange).opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.horizontal, 2)
-                .transition(.opacity)
-            }
-
             if let routine = chatVM.activeRoutineContext {
                 routineContextTag(routine)
             }
@@ -223,7 +203,7 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Expanded bar
             if notchVM.isExpandedBarOpen {
-                ExpandedBarView(config: hermesConfig, notchVM: notchVM)
+                ExpandedBarView(config: hermesConfig, notchVM: notchVM, chatVM: chatVM)
                     .padding(.horizontal, 2)
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

@@ -11,6 +11,13 @@ struct ChatMessage: Identifiable {
     let timestamp: Date
     var attachments: [Attachment]
     var isStreaming: Bool
+    var promptTokens: Int? = nil
+    var completionTokens: Int? = nil
+
+    var totalTokens: Int? {
+        guard let p = promptTokens, let c = completionTokens else { return nil }
+        return p + c
+    }
 
     enum Role: String, Codable {
         case system

@@ -29,19 +29,6 @@ class HermesConfig: ObservableObject {
     @Published var sshPort: Int = 22
     @Published var dockerImage: String = ""
 
-    // Zone A: Session state (in-memory only)
-    @Published var currentIteration: Int = 0
-    @Published var sessionCost: Double = 0.0
-    @Published var maxIterationsOverride: Int? = nil
-
-    var effectiveMaxIterations: Int {
-        maxIterationsOverride ?? maxIterations
-    }
-
-    var iterationPercentage: Double {
-        guard effectiveMaxIterations > 0 else { return 0 }
-        return Double(currentIteration) / Double(effectiveMaxIterations)
-    }
 
     // Profiles
     @Published var availableProfiles: [String] = ["default"]

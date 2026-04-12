@@ -19,6 +19,7 @@ class ChatViewModel: ObservableObject {
     @Published var activeRoutineContext: CronJob? = nil
     @Published var routineCreationMode: Bool = false
     @Published var editingMessageId: UUID? = nil
+    @Published var lastInputTokens: Int = 0
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -113,6 +114,11 @@ class ChatViewModel: ObservableObject {
                 let (filteredTools, subagent) = Self.splitSubagentContent(result.toolCalls)
                 messages[lastIndex].toolCallContent = filteredTools
                 messages[lastIndex].subagentActivity = subagent
+                messages[lastIndex].promptTokens = result.promptTokens
+                messages[lastIndex].completionTokens = result.completionTokens
+                if let p = result.promptTokens {
+                    lastInputTokens = p
+                }
                 if !result.thinkingContent.isEmpty {
                     messages[lastIndex].thinkingDuration = Date().timeIntervalSince(startTime)
                 }
@@ -163,6 +169,7 @@ class ChatViewModel: ObservableObject {
     func startNewConversation() {
         cancelStream()
         messages.removeAll()
+        lastInputTokens = 0
         client.sessionId = nil
         client.resetConversation()
     }

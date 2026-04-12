@@ -37,6 +37,8 @@ class HermesClient {
         let content: String
         let thinkingContent: String
         let toolCalls: String
+        let promptTokens: Int?
+        let completionTokens: Int?
     }
 
     func sendResponse(input: String, systemContext: String? = nil) async throws -> ResponseResult {
@@ -86,7 +88,22 @@ class HermesClient {
             throw HermesError.invalidResponse
         }
 
-        return parseOutput(output)
+        let parsed = parseOutput(output)
+
+        var promptTokens: Int? = nil
+        var completionTokens: Int? = nil
+        if let usage = json["usage"] as? [String: Any] {
+            promptTokens = usage["input_tokens"] as? Int
+            completionTokens = usage["output_tokens"] as? Int
+        }
+
+        return ResponseResult(
+            content: parsed.content,
+            thinkingContent: parsed.thinkingContent,
+            toolCalls: parsed.toolCalls,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens
+        )
     }
 
     private func parseOutput(_ output: [[String: Any]]) -> ResponseResult {
@@ -125,7 +142,7 @@ class HermesClient {
             }
         }
 
-        return ResponseResult(content: content, thinkingContent: thinkingContent, toolCalls: toolCalls)
+        return ResponseResult(content: content, thinkingContent: thinkingContent, toolCalls: toolCalls, promptTokens: nil, completionTokens: nil)
     }
 
     // MARK: - Non-streaming via /v1/responses (brain saves)

@@ -3,6 +3,7 @@ import SwiftUI
 struct ExpandedBarView: View {
     @ObservedObject var config: HermesConfig
     @ObservedObject var notchVM: NotchViewModel
+    @ObservedObject var chatVM: ChatViewModel
 
     var body: some View {
         HStack(spacing: 12) {
@@ -112,41 +113,26 @@ struct ExpandedBarView: View {
 
             Spacer()
 
-            // Iteration counter + cost (read-only)
-            HStack(spacing: 8) {
-                Text("\(config.currentIteration)/\(config.effectiveMaxIterations)")
+            // Context window usage
+            if chatVM.lastInputTokens > 0 {
+                Text(formatTokenCount(chatVM.lastInputTokens))
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(iterationColor)
-
-                if config.sessionCost > 0 {
-                    Text(String(format: "$%.2f", config.sessionCost))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
+                    .foregroundStyle(.white.opacity(0.4))
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .overlay(alignment: .bottom) {
-            // Thin iteration progress bar
-            GeometryReader { geo in
-                let pct = config.iterationPercentage
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(iterationColor)
-                    .frame(width: geo.size.width * min(pct, 1.0), height: 2)
-                    .animation(.easeOut(duration: 0.3), value: pct)
-            }
-            .frame(height: 2)
-        }
         .background(.white.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    private var iterationColor: Color {
-        let pct = config.iterationPercentage
-        if pct >= 0.95 { return .red }
-        if pct >= 0.80 { return .orange }
-        return .white.opacity(0.4)
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        } else if count >= 1_000 {
+            return String(format: "%.1fk", Double(count) / 1_000)
+        }
+        return "\(count)"
     }
 
     private func shortLabel(_ level: String) -> String {

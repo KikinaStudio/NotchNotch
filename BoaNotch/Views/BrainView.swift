@@ -8,9 +8,9 @@ enum BrainTab: String, CaseIterable {
 
 struct BrainView: View {
     @ObservedObject var brainVM: BrainViewModel
+    var onSendToChat: ((String) -> Void)?
     @State private var activeTab: BrainTab = .memory
     @State private var selectedSkill: SkillInfo?
-    @State private var selectedArticle: WikiArticle?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,24 +35,12 @@ struct BrainView: View {
             // Content
             ZStack {
                 contentForTab
-                    .opacity(selectedSkill == nil && selectedArticle == nil ? 1 : 0)
+                    .opacity(selectedSkill == nil ? 1 : 0)
 
                 if let skill = selectedSkill {
                     detailView(title: skill.name, content: skill.content) {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             selectedSkill = nil
-                        }
-                    }
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .trailing)
-                    ))
-                }
-
-                if let article = selectedArticle {
-                    detailView(title: article.title, content: article.content) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                            selectedArticle = nil
                         }
                     }
                     .transition(.asymmetric(
@@ -70,7 +58,6 @@ struct BrainView: View {
         Button {
             activeTab = tab
             selectedSkill = nil
-            selectedArticle = nil
         } label: {
             Text(tab.rawValue)
                 .font(.system(size: 10, weight: .medium))
@@ -99,29 +86,37 @@ struct BrainView: View {
 
     private var memoryTab: some View {
         Group {
-            if brainVM.userContent == nil && brainVM.memoryContent == nil {
+            if brainVM.userBlocks.isEmpty && brainVM.memoryBlocks.isEmpty {
                 emptyState("Hermes hasn't learned anything yet.\nStart chatting and it will remember what matters.")
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if let user = brainVM.userContent {
-                            sectionHeader("ABOUT YOU")
-                            markdownText(user)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !brainVM.userBlocks.isEmpty {
+                            memorySectionHeader("ABOUT YOU")
+                            ForEach(brainVM.userBlocks) { block in
+                                MemoryCard(block: block)
+                            }
                         }
-                        if brainVM.userContent != nil && brainVM.memoryContent != nil {
-                            Rectangle()
-                                .fill(.white.opacity(0.1))
-                                .frame(height: 1)
-                                .padding(.vertical, 4)
-                        }
-                        if let memory = brainVM.memoryContent {
-                            sectionHeader("LEARNED FACTS")
-                            markdownText(memory)
+
+                        if !brainVM.memoryBlocks.isEmpty {
+                            memorySectionHeader("LEARNED FACTS")
+                                .padding(.top, !brainVM.userBlocks.isEmpty ? 8 : 0)
+                            ForEach(brainVM.memoryBlocks) { block in
+                                MemoryCard(block: block)
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func memorySectionHeader(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(AppColors.accent.opacity(0.5))
+            .tracking(1.2)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Skills tab
@@ -198,46 +193,58 @@ struct BrainView: View {
         .pointingHandCursor()
     }
 
-    // MARK: - Wiki tab
+    // MARK: - Wiki tab (dashboard + ask)
 
     private var wikiTab: some View {
         Group {
             if brainVM.wikiArticles.isEmpty {
                 emptyState("No wiki articles found.")
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Wiki (\(brainVM.wikiArticles.count) articles)")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.25))
-                            .tracking(1.5)
-                            .padding(.bottom, 8)
+                VStack(alignment: .leading, spacing: 0) {
+                    // Dashboard header
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Brain Wiki")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.7))
 
-                        LazyVStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            Text("\(brainVM.wikiArticles.count) articles")
+                            if let lastUpdate = brainVM.wikiLastUpdated {
+                                Text("—")
+                                Text(lastUpdate, style: .relative)
+                                Text("ago")
+                            }
+                        }
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+
+                    // Article list
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 2) {
                             ForEach(brainVM.wikiArticles) { article in
                                 Button {
-                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                        selectedArticle = article
-                                    }
+                                    askAboutArticle(article)
                                 } label: {
-                                    HStack(spacing: 8) {
+                                    HStack {
                                         if article.isIndex {
                                             Image(systemName: "pin.fill")
-                                                .font(.system(size: 9))
-                                                .foregroundStyle(AppColors.accent.opacity(0.6))
+                                                .font(.system(size: 8))
+                                                .foregroundStyle(AppColors.accent.opacity(0.5))
                                         }
                                         Text(article.title)
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(.white.opacity(0.82))
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.white.opacity(0.7))
+                                            .lineLimit(1)
                                         Spacer()
-                                        Image(systemName: "chevron.right")
+                                        Text("Ask")
                                             .font(.system(size: 9, weight: .medium))
-                                            .foregroundStyle(.white.opacity(0.15))
+                                            .foregroundStyle(AppColors.accent.opacity(0.5))
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 8)
-                                    .background(.white.opacity(0.04))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .padding(.vertical, 6)
+                                    .padding(.horizontal, 8)
                                 }
                                 .buttonStyle(.plain)
                                 .pointingHandCursor()
@@ -249,7 +256,15 @@ struct BrainView: View {
         }
     }
 
-    // MARK: - Detail view
+    private func askAboutArticle(_ article: WikiArticle) {
+        if article.isIndex {
+            onSendToChat?("Résume-moi ton wiki")
+        } else {
+            onSendToChat?("Qu'est-ce que tu sais sur \(article.title) ?")
+        }
+    }
+
+    // MARK: - Skill detail view
 
     private func detailView(title: String, content: String, onBack: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -275,13 +290,6 @@ struct BrainView: View {
 
     // MARK: - Shared components
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.25))
-            .tracking(1.5)
-    }
-
     private func markdownText(_ text: String) -> some View {
         let rendered = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
@@ -298,5 +306,35 @@ struct BrainView: View {
             .foregroundStyle(.white.opacity(0.3))
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Memory card
+
+struct MemoryCard: View {
+    let block: MemoryBlock
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(block.title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AppColors.accent.opacity(0.7))
+
+            Text(markdownContent)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.6))
+                .textSelection(.enabled)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var markdownContent: AttributedString {
+        (try? AttributedString(
+            markdown: block.content,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(block.content)
     }
 }
