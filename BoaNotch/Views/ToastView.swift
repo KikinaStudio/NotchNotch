@@ -55,7 +55,7 @@ struct ToastView: View {
     }
 }
 
-// MARK: - Animated pacman (chomping purple circle)
+// MARK: - Animated pacman (chomping circle)
 
 struct PacmanView: View {
     @State private var chomping = false

@@ -627,7 +627,7 @@ struct MessageBubble: View {
             while let range = lower.range(of: q, range: searchStart..<lower.endIndex) {
                 let attrStart = result.characters.index(result.startIndex, offsetBy: lower.distance(from: lower.startIndex, to: range.lowerBound))
                 let attrEnd = result.characters.index(attrStart, offsetBy: q.count)
-                result[attrStart..<attrEnd].backgroundColor = .purple.opacity(0.35)
+                result[attrStart..<attrEnd].backgroundColor = NSColor(red: 0.15, green: 0.38, blue: 0.51, alpha: 0.35)
                 searchStart = range.upperBound
             }
         }

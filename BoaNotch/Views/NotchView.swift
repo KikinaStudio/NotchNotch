@@ -350,7 +350,7 @@ struct RecordingToastView: View {
                 .padding(.vertical, 5)
                 .background(
                     LinearGradient(
-                        colors: [AppColors.kittViolet, AppColors.accent],
+                        colors: [AppColors.kittDeep, AppColors.accent],
                         startPoint: .leading, endPoint: .trailing
                     )
                 )
@@ -437,7 +437,7 @@ struct NotchDropDelegate: DropDelegate {
     }
 }
 
-// MARK: - Recording pulse (closed notch glows purple)
+// MARK: - Recording pulse (closed notch glow)
 
 struct KITTScanner: View {
     let width: CGFloat
@@ -463,7 +463,7 @@ struct KITTScanner: View {
                     (6,  0.9),   // hot center
                 ]
 
-                let violet = AppColors.kittViolet
+                let deep = AppColors.kittDeep
 
                 for (spread, alpha) in layers {
                     let rect = CGRect(
@@ -474,7 +474,7 @@ struct KITTScanner: View {
                     )
                     context.fill(
                         Path(roundedRect: rect, cornerRadius: 3),
-                        with: .color(violet.opacity(alpha))
+                        with: .color(deep.opacity(alpha))
                     )
                 }
 
@@ -496,7 +496,7 @@ struct KITTScanner: View {
                     )
                     context.fill(
                         Path(roundedRect: rect, cornerRadius: 3),
-                        with: .color(violet.opacity(alpha))
+                        with: .color(deep.opacity(alpha))
                     )
                 }
 
@@ -504,7 +504,7 @@ struct KITTScanner: View {
                 let baseLine = CGRect(x: 0, y: (size.height - 2) / 2, width: size.width, height: 2)
                 context.fill(
                     Path(roundedRect: baseLine, cornerRadius: 1),
-                    with: .color(violet.opacity(0.06))
+                    with: .color(deep.opacity(0.06))
                 )
             }
         }

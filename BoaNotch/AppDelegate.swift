@@ -178,11 +178,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - OAuth URL handler
-
-    func application(_ application: NSApplication, open urls: [URL]) {
-    }
-
     func applicationWillTerminate(_ notification: Notification) {
         if let flagsMonitor { NSEvent.removeMonitor(flagsMonitor) }
         clipperListener.stop()
