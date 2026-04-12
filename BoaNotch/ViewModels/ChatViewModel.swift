@@ -17,6 +17,7 @@ class ChatViewModel: ObservableObject {
     @Published var showNewConversationConfirm = false
     @Published var activeRoutineContext: CronJob? = nil
     @Published var routineCreationMode: Bool = false
+    @Published var editingMessageId: UUID? = nil
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -108,7 +109,9 @@ class ChatViewModel: ObservableObject {
 
                 messages[lastIndex].content = result.content
                 messages[lastIndex].thinkingContent = result.thinkingContent
-                messages[lastIndex].toolCallContent = result.toolCalls
+                let (filteredTools, subagent) = Self.splitSubagentContent(result.toolCalls)
+                messages[lastIndex].toolCallContent = filteredTools
+                messages[lastIndex].subagentActivity = subagent
                 if !result.thinkingContent.isEmpty {
                     messages[lastIndex].thinkingDuration = Date().timeIntervalSince(startTime)
                 }
@@ -190,6 +193,18 @@ class ChatViewModel: ObservableObject {
         activeRoutineContext = nil
     }
 
+    func editMessage(id: UUID, newContent: String) {
+        guard !isStreaming else { return }
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        guard messages[index].role == .user else { return }
+
+        messages[index].content = newContent
+        messages.removeSubrange((index + 1)...)
+        editingMessageId = nil
+
+        startRequest(input: newContent)
+    }
+
     func removeAttachment(_ id: UUID) {
         pendingAttachments.removeAll { $0.id == id }
     }
@@ -225,5 +240,20 @@ class ChatViewModel: ObservableObject {
         case .transcribing:
             break
         }
+    }
+
+    private static func splitSubagentContent(_ toolCalls: String) -> (toolCalls: String, subagent: String) {
+        guard toolCalls.contains("🤖") else { return (toolCalls, "") }
+        let lines = toolCalls.components(separatedBy: "\n")
+        var tools: [String] = []
+        var subagent: [String] = []
+        for line in lines {
+            if line.contains("🤖") || line.contains("delegate_task") {
+                subagent.append(line)
+            } else {
+                tools.append(line)
+            }
+        }
+        return (tools.joined(separator: "\n"), subagent.joined(separator: "\n"))
     }
 }

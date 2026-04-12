@@ -23,6 +23,12 @@ struct ChatView: View {
                                     searchQuery: searchVM.query,
                                     onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
                                         ? { chatVM.retryLastAssistant() }
+                                        : nil,
+                                    onEdit: (message.role == .user && !chatVM.isStreaming)
+                                        ? { msg in
+                                            chatVM.editingMessageId = msg.id
+                                            chatVM.draft = msg.content
+                                        }
                                         : nil
                                 )
                                 .id(message.id)
@@ -140,6 +146,24 @@ struct ChatView: View {
                 routineContextTag(routine)
             }
 
+            if chatVM.editingMessageId != nil {
+                HStack {
+                    Text("Editing message")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.4))
+                    Spacer()
+                    Button("Cancel") {
+                        chatVM.editingMessageId = nil
+                        chatVM.draft = ""
+                    }
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 2)
+            }
+
             inputBar
         }
         .onAppear { isInputFocused = true }
@@ -246,7 +270,11 @@ struct ChatView: View {
     }
 
     private func sendAndCloseBar() {
-        chatVM.send()
+        if let editId = chatVM.editingMessageId {
+            chatVM.editMessage(id: editId, newContent: chatVM.draft)
+        } else {
+            chatVM.send()
+        }
         if notchVM.isExpandedBarOpen {
             withAnimation(.easeOut(duration: 0.2)) {
                 notchVM.isExpandedBarOpen = false

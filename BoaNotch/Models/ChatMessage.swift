@@ -7,6 +7,7 @@ struct ChatMessage: Identifiable {
     var thinkingContent: String
     var thinkingDuration: TimeInterval?
     var toolCallContent: String
+    var subagentActivity: String
     let timestamp: Date
     var attachments: [Attachment]
     var isStreaming: Bool
@@ -23,6 +24,7 @@ struct ChatMessage: Identifiable {
         content: String,
         thinkingContent: String = "",
         toolCallContent: String = "",
+        subagentActivity: String = "",
         timestamp: Date = Date(),
         attachments: [Attachment] = [],
         isStreaming: Bool = false
@@ -32,6 +34,7 @@ struct ChatMessage: Identifiable {
         self.content = content
         self.thinkingContent = thinkingContent
         self.toolCallContent = toolCallContent
+        self.subagentActivity = subagentActivity
         self.timestamp = timestamp
         self.attachments = attachments
         self.isStreaming = isStreaming

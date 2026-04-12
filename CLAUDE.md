@@ -52,9 +52,11 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 2. `startRequest(input:)` appends a placeholder assistant message, sets `isStreaming`, and launches a Task that calls `HermesClient.sendResponse(input:)` — single `POST /v1/responses` with `store: true`, `conversation: <UUID>` (non-streaming)
 3. Server runs the full agent loop (including tool calls), returns a complete JSON response with `output` array containing `function_call`, `function_call_output`, `reasoning`, and `message` items
 4. `HermesClient.parseOutput()` extracts `content`, `thinkingContent` (from `reasoning` items), and `toolCalls` (formatted from `function_call`/`function_call_output` items)
-5. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
-6. `retryLastAssistant()` removes the last user+assistant pair, re-appends the user message, and calls `startRequest(input:)` to get a fresh response
-7. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
+5. `ChatViewModel.startRequest()` runs `splitSubagentContent()` on the tool calls — lines containing `🤖` or `delegate_task` are extracted into `ChatMessage.subagentActivity`, the rest stays in `toolCallContent`
+6. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
+7. `retryLastAssistant()` removes the last user+assistant pair, re-appends the user message, and calls `startRequest(input:)` to get a fresh response
+8. `editMessage(id:newContent:)` updates the user message content, truncates all subsequent messages, and calls `startRequest(input:)` to regenerate. Server-side history retains the pre-edit version (acceptable for v1). Editing is blocked while streaming.
+9. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
 
 ### Voice recording flow
 

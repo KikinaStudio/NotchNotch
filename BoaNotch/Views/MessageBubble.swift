@@ -6,6 +6,7 @@ struct MessageBubble: View {
     var searchQuery: String? = nil
     var onCopy: (() -> Void)? = nil
     var onRetry: (() -> Void)? = nil
+    var onEdit: ((ChatMessage) -> Void)? = nil
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
@@ -13,6 +14,7 @@ struct MessageBubble: View {
     @State private var showCopyConfirm = false
     @State private var isHoveredCopy = false
     @State private var isHoveredRetry = false
+    @State private var isHovered = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,6 +30,11 @@ struct MessageBubble: View {
             // Collapsible thinking section
             if !message.thinkingContent.isEmpty {
                 thinkingToggle
+            }
+
+            // Subagent indicator
+            if !message.subagentActivity.isEmpty {
+                subagentIndicator
             }
 
             // Collapsible tool calling section
@@ -85,6 +92,20 @@ struct MessageBubble: View {
                     .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0).opacity(0.8))
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if isUser && !message.isStreaming && onEdit != nil {
+                Button { onEdit?(message) } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .padding(6)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0)
+                .animation(.easeInOut(duration: 0.15), value: isHovered)
+            }
+        }
+        .onHover { isHovered = $0 }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 
@@ -159,6 +180,30 @@ struct MessageBubble: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    // MARK: - Subagent indicator
+
+    private var subagentLabel: String {
+        let parts = message.subagentActivity.components(separatedBy: "🤖").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        if parts.count > 1 {
+            return "\(parts.count) sub-tasks delegated"
+        }
+        if let desc = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            return "Delegated: \(desc)"
+        }
+        return "Working with a sub-agent..."
+    }
+
+    private var subagentIndicator: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 9))
+            Text(subagentLabel)
+                .font(.system(size: 11))
+        }
+        .foregroundStyle(AppColors.accent.opacity(0.6))
+        .padding(.vertical, 2)
     }
 
     // MARK: - Content with clickable file paths
