@@ -1,42 +1,92 @@
 # NotchNotch
 
-A native macOS app that lives in your MacBook's notch, providing instant access to your [Hermes](https://github.com/NousResearch/hermes-agent) AI agent without switching windows.
+Your MacBook already has an AI agent. It just doesn't know it yet.
 
-**No terminal required.** notchnotch includes a guided onboarding that installs the Hermes agent, connects your AI provider, picks a model, and optionally sets up Telegram — all from a visual interface. Your non-technical friends can use it too.
+[Hermes](https://github.com/NousResearch/hermes-agent) is an open-source AI agent that reads your files, runs scripts, browses the web, manages your calendar, and handles the tedious stuff on your behalf. It's powerful, but today it lives in a terminal. You have to open a new window, type commands, copy-paste context back and forth. That works if you're a developer. It doesn't work for everyone else.
 
-Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
+notchnotch fixes that. It puts Hermes inside your MacBook's notch. Hover, talk, done. No window to open, no app to switch to, no context lost. Your agent is just there, always, in a space that was doing nothing until now.
+
+It also gives your agent a brain you can feed. Drop a file on the notch, paste an image, record a voice memo, clip a web page from Chrome. Everything lands in Hermes's memory and wiki, and your agent gets smarter over time. Set up routines so it works while you sleep. Pick up the same conversation on Telegram from your phone. One agent, everywhere.
+
+No terminal. No API keys to find. No config files. notchnotch installs Hermes for you on first launch, picks a free model, and you're talking to your computer in under two minutes.
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![Version](https://img.shields.io/badge/version-0.8.0-violet)
 
+Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
+
 ---
 
-## Install
+## Features
 
-### Download DMG
+### Chat in the notch
+Hover or click the notch to expand a chat panel. Your agent remembers context across app restarts via server-side conversation persistence. Edit any message you sent, edit any answer, copy, or retry for a fresh response.
 
-Download from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/releases). Drag to Applications.
+### Routines
+Create and monitor automated tasks from a visual panel. 25 ready-made templates across 7 categories (Personal, Professional, Research, Travel, Health, Finance, Creator), or describe your own in plain English. Active jobs display as cards with live status, human-readable schedule, run count, and next execution time. Pause, reschedule, or remove with a right-click.
 
-**Gatekeeper will block it** (unsigned app). Run this once:
+### Brain
+Three-tab panel to browse everything your agent knows:
+- **Memory** -- facts, project context, and preferences parsed from Hermes's memory files.
+- **Skills** -- installed agent skills with category badges and descriptions.
+- **Wiki** -- Karpathy-style knowledge base. Articles your agent has written or that you've fed it. "Ask" button on each article to query Hermes directly.
 
-```bash
-xattr -cr /Applications/notchnotch.app
-```
+### Brain dumps
+Multiple ways to feed your agent's brain:
+- **Voice memo** -- `Ctrl+Shift+R` from anywhere, transcribed locally and sent as text.
+- **Drag and drop** -- drop any file onto the notch. Images, PDFs, code (35+ languages), CSV, JSON, YAML.
+- **Paste images** -- `Cmd+V` an image from clipboard, attached to the message.
+- **[NotchNotch Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper)** -- Chrome extension that clips any web page straight into your agent's brain.
 
-Then open normally. Don't look for "Allow Anyway" in System Settings — it's buried and unreliable. `xattr -cr` is the canonical bypass.
+### Conversation history
+Browse and resume past sessions. Color-coded source icons (orange=CLI, blue=Telegram, purple=Discord). Tap to resume with full context. New conversation button always accessible from the notch.
 
-### Homebrew
+### Telegram continuity
+notchnotch auto-detects your Telegram session. Same conversation on your Mac and your phone, no manual linking. One agent, two interfaces.
+
+### Expanded bar
+When the notch is open, a bar shows model name, reasoning effort selector (none to xhigh), context window gauge, and incognito mode toggle.
+
+### Inline images and smart file paths
+Images in responses render as inline thumbnails. File paths render as color-coded cards. Click to open, right-click to reveal in Finder.
+
+### Voice memos
+`Ctrl+Shift+R` from any app. KITT-style purple scanner line under the notch. Transcribed on-device (macOS Speech). Mic button in the input bar does the same.
+
+### Collapsible thinking and tool calls
+Hermes's internal reasoning and tool execution are hidden behind toggles. You see the clean answer. Expand if you're curious.
+
+### Search
+Full-text search across all messages. Match counter, navigation, auto-scroll, purple highlights.
+
+### Code blocks and markdown
+Fenced code with language labels, bold, italic, inline code, links.
+
+### Toast notifications
+When the notch is closed, a black toast slides under the notch with the response preview. Tap to expand.
+
+---
+
+## Getting started
+
+### 1. Install
+
+**Homebrew (recommended):**
 
 ```bash
 brew install --cask KikinaStudio/tap/notchnotch --no-quarantine
 ```
 
-The `--no-quarantine` flag bypasses Gatekeeper automatically. No `xattr` needed.
+**Or download the DMG** from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/releases). Drag to Applications, then run once:
 
-> **Setup:** requires a personal tap repo. See [Publishing a release](#publishing-a-release).
+```bash
+xattr -cr /Applications/notchnotch.app
+```
 
-### Build from source
+This clears the macOS quarantine flag (the app is not signed with an Apple Developer certificate yet).
+
+**Or build from source:**
 
 ```bash
 git clone https://github.com/KikinaStudio/Notchnotch.git
@@ -44,103 +94,97 @@ cd NotchNotch
 bash scripts/run.sh
 ```
 
-No Xcode required — only Command Line Tools (`xcode-select --install`).
+No Xcode required. Command Line Tools only (`xcode-select --install`).
 
-### First launch
+### 2. First launch
 
-On first launch (when Hermes is not installed), notchnotch walks you through setup:
+notchnotch handles everything on first open:
 
-1. **Welcome** — the notchnotch logo
-2. **Privacy** — explains what stays local, what goes to your AI provider
-3. **Install** — Hermes agent installs automatically in the background
-4. **Model** — pick a free AI model (Nous Portal, zero config)
-5. **Telegram** — optionally connect a Telegram bot for mobile access
-6. **Ready** — start chatting
+1. **Welcome** -- the notchnotch logo
+2. **Privacy** -- what stays local, what goes to your AI provider
+3. **Install** -- Hermes installs automatically in the background
+4. **Model** -- pick a free model (Nous Portal, zero config)
+5. **Telegram** -- optionally connect a Telegram bot for mobile access
+6. **Ready** -- start chatting
 
-If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding is skipped entirely.
+If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding is skipped.
+
+### 3. Talk to your agent
+
+Hover the notch or click it. Type your question, press Return. That's it.
+
+A few things to try first:
+- Ask it to summarize a file: drag a PDF onto the notch
+- Set up a daily routine: open Routines from the burger menu, pick a template
+- Record a voice memo: `Ctrl+Shift+R`, speak, press again to send
+- Clip a web page: install [NotchNotch Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper), click the extension on any page
+- Check what your agent knows: open the Brain panel, browse Memory, Skills, Wiki
+- Continue from your phone: set up Telegram in Settings, same conversation carries over
+
+### 4. Settings
+
+Click the gear icon (top-right):
+- **AI Provider** -- switch between Nous, OpenRouter, OpenAI, Anthropic. Paste API keys.
+- **Agent** -- max iterations (Quick/Normal/Deep), streaming toggle.
+- **Execution** -- terminal backend (local/docker/ssh).
+- **Session** -- Telegram session status.
+
+---
+
+## Requirements
+
+- **macOS 14** (Sonoma) or later
+- **MacBook with notch** (works on non-notch Macs too, positioned at top-center)
+
+Hermes is installed automatically on first launch. No terminal required.
+
+### Permissions
+
+macOS will prompt for:
+- **Microphone** -- voice memos (only when you tap mic)
+- **Speech Recognition** -- on-device transcription
+- **Accessibility** (manual) -- for the global `Ctrl+Shift+R` hotkey. Add the app in System Settings > Privacy & Security > Accessibility.
 
 ---
 
-## Features
+## Known limitations
 
-### Chat in the notch
-Hover or click the notch to expand a chat panel with spring animations. Responses arrive via the Hermes `/v1/responses` API with server-side conversation persistence — your agent remembers context across app restarts.
-
-### Telegram continuity
-notchnotch auto-detects your Telegram DM session with the Hermes bot from `~/.hermes/state.db` on launch. The same `session_id` (your Telegram `chat_id`) is sent as `X-Hermes-Session-Id` on every API request — giving you full continuity between Telegram and notchnotch. No manual linking, no picker. One session, two interfaces.
-
-### Collapsible thinking & tool calls
-Hermes's internal reasoning (`<think>` blocks) and tool execution are hidden behind collapsible toggles. Only the clean response is shown. Thinking and tool calls are parsed from the response `output` array (`reasoning`, `function_call`, `function_call_output` items).
-
-### Search in conversation
-Magnifying glass icon (top-left) opens full-text search across all messages:
-- Match counter (`N/M`), Previous/Next navigation
-- Auto-scroll to matched message, purple highlight on matching text
-
-### Settings
-Gear icon (top-right) opens settings: AI provider picker with API key entry, max iterations (Quick/Normal/Deep), streaming toggle, terminal backend (local/docker/ssh), and Telegram session status.
-
-### Voice memos
-`Ctrl+Shift+R` anywhere to record. KITT-style purple scanner line under the closed notch. Press again or `Enter` to stop — transcribed locally (macOS Speech, French locale) and sent as text. Mic button in the input bar does the same.
-
-### Drag & drop files
-Drag any file onto the notch. Supports images (vision analysis), PDFs, code (35+ languages), text, CSV, JSON, YAML, RTF. Violet overlay on drag hover.
-
-### Onboarding
-First launch walks new users through Hermes installation, AI provider setup, model selection, and optional Telegram connection — no terminal needed.
-
-### Welcome screen
-Before the first message, notchnotch shows the logo with "notch notch ! Who's there ? Your futchure." — disappears after first input.
-
-### Routines — cron job creation & monitoring
-Open the Routines panel from the burger menu to browse, create, and manage Hermes cron jobs:
-
-- **Template browser** — 25 ready-made templates across 7 categories (Personal, Professional, Research, Travel, Health, Finance, Creator). Pick a category, select a template, fill in the form fields, and hit "Create routine" — the composed prompt is sent to Hermes, which creates the cron job via its `cronjob` tool.
-- **Job monitoring** — active jobs display as cards with status dot (green=scheduled, orange=paused, pulsing violet=running), human-readable schedule ("Daily at 9 AM"), run count, and next execution time. Cards highlight on hover.
-- **Quick actions** — right-click any job card to change its schedule, pause/resume, or remove it. Actions are sent as natural language through the chat — Hermes handles the rest.
-- **"Create your own"** — skip templates and describe your routine in plain English.
-
-All cron management flows through the chat. NotchNotch never calls the cron API directly.
-
-### Brain — browse Hermes knowledge
-Three-tab panel (Memory, Skills, Wiki) for browsing what Hermes knows:
-
-- **Memory** — cards parsed from `~/.hermes/memories/MEMORY.md` and `USER.md`, split on `§` separators. Each card shows a thematic block (facts, project context, preferences).
-- **Skills** — lists all installed skills from `~/.hermes/skills/` with category badges and descriptions. Tap for full SKILL.md detail view.
-- **Wiki** — Karpathy-style LLM wiki from `~/.hermes/brain/wiki/`. Dashboard shows article count and last-updated timestamp. Each article has an "Ask" button that sends a question directly to Hermes via chat — no article content preview, the wiki tab is a launchpad, not a reader.
-
-### Conversation history
-Browse past Hermes sessions from the history panel. Sessions show color-coded source icon (orange=CLI, blue=Telegram, purple=Discord), title, and relative timestamp. Tap to resume a session with full context. The **[+ New]** button starts a fresh conversation — also accessible via the `plus.bubble` icon on the left side of the notch.
-
-### Edit, copy & retry
-Hover any message to reveal action buttons:
-- **Edit** — rewrite a sent prompt or answer. Truncates the conversation from that point and regenerates.
-- **Copy** — copies to clipboard with checkmark feedback.
-- **Retry** — re-sends the last user message for a fresh response.
-
-### Inline images & smart file paths
-Image paths in responses (png, jpg, gif…) render as **inline thumbnails** (280×200, rounded corners). Click to open; right-click for "Reveal in Finder". **Paste images** from clipboard with Cmd+V — they're saved to `~/.hermes/cache/images/` and attached to the message.
-
-Non-image file paths render as color-coded cards (purple=code, pink=audio, blue=video, green=image, red=PDF…). Click to open in default app.
-
-### Expanded bar
-When the notch is open, a slim bar below the input shows:
-- **Model name** and provider
-- **Reasoning effort** selector (none → xhigh)
-- **Context window gauge** — token usage from the last request
-- **Incognito mode** toggle (`store: false` — messages aren't saved server-side)
-
-### Streaming indicator
-- **Closed**: notch extends slightly with a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
-- **Open**: send button becomes a spinner (click to cancel)
-
-### Toast notifications
-When closed, a black toast slides out below the notch with the response preview. Tap to expand.
-
-### Code blocks & markdown
-Fenced code blocks with language labels, bold, italic, inline code, and links via `AttributedString`.
+- **No local message history on restart** -- the UI starts blank after relaunch, but Hermes preserves full conversation context server-side. Your agent remembers everything.
+- **Fixed notch size** -- 580x340pt. Dynamic height and drag-to-resize are planned.
+- **Hardcoded localhost:8642** -- no UI to change the Hermes URL yet.
+- **Read-only cron management** -- routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
+- **Unsigned** -- triggers Gatekeeper. Use `xattr -cr` or install via Homebrew with `--no-quarantine`.
 
 ---
+
+## Roadmap
+
+- [x] Guided onboarding (zero-terminal install)
+- [x] Telegram session continuity
+- [x] Conversation history UI
+- [x] Routines with template browser
+- [x] Brain panel (Memory, Skills, Wiki)
+- [x] NotchNotch Clipper extension
+- [x] Inline images and paste from clipboard
+- [x] Edit messages and answers
+- [x] Expanded bar (model, reasoning effort, context gauge, incognito)
+- [ ] Dynamic notch height (auto-grow with content, drag handle)
+- [ ] Memory provider selection UI
+- [ ] Auto-update via Sparkle
+- [ ] Universal binary (requires Xcode)
+- [ ] Apple Developer signing + notarization
+- [ ] Telegram Mini App (cron jobs, system monitoring, full mobile UI)
+
+---
+
+## License
+
+MIT
+
+---
+
+<details>
+<summary><strong>Technical documentation</strong> (for contributors)</summary>
 
 ## Architecture
 
@@ -177,7 +221,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
           SSEParser, SpeechTranscriber, DocumentExtractor, AudioRecorder
 ```
 
-## Project Structure
+## Project structure
 
 ```
 BoaNotch/
@@ -215,7 +259,7 @@ BoaNotch/
     |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards, copy/retry
     |   +-- SearchBarView.swift          # Search input + match counter
     |   +-- RoutinesView.swift            # Job cards + template browser toggle
-    |   +-- TemplateBrowserView.swift    # 3-screen drill-down: categories → templates → form
+    |   +-- TemplateBrowserView.swift    # 3-screen drill-down: categories -> templates -> form
     |   +-- ConversationHistoryView.swift # Session browser from state.db
     |   +-- BrainView.swift              # Memory/Skills/Wiki tabs
     |   +-- SettingsView.swift           # Agent config + session status
@@ -250,62 +294,70 @@ BoaNotch/
         +-- AudioRecorder.swift          # AVAudioRecorder, M4A
 ```
 
----
+## How it works
 
-## Requirements
+### Response parsing
 
-- **macOS 14** (Sonoma) or later
-- **MacBook with notch** (works on non-notch Macs too, positioned at top-center)
+`HermesClient.parseOutput()` walks the `output` array from `/v1/responses` and extracts three channels:
 
-Hermes agent is installed automatically on first launch via the onboarding flow. No terminal required.
+1. **Thinking** -- `type: "reasoning"` items
+2. **Tool calls** -- `type: "function_call"` (name + args preview) and `type: "function_call_output"` (checkmark + name)
+3. **Response** -- `type: "message"` -> `content[].text`
 
-If you already have Hermes installed, notchnotch detects it and skips the onboarding.
+### Session auto-link
 
-### Permissions
+On launch, `SessionStore` reads `~/.hermes/state.db`:
 
-On first use, macOS will prompt for:
-- **Microphone** — for voice memos (only when you tap the mic button)
-- **Speech Recognition** — for on-device transcription
-- **Accessibility** (manual) — for global Ctrl+Shift+R hotkey. Add the app in System Settings > Privacy & Security > Accessibility.
+```sql
+SELECT id FROM sessions WHERE source = 'telegram'
+ORDER BY started_at DESC LIMIT 1
+```
 
----
+This `id` is the Telegram `chat_id` of your DM with the Hermes bot. Sent as `X-Hermes-Session-Id` on every request. Persisted in `UserDefaults`.
 
-## Usage
+### Window system
 
-### Chat
-- **Hover** the notch (300ms delay) or **click** to expand
-- Type and press **Return** to send
-- Braille spinner replaces send button while streaming (click to cancel)
-- Move cursor away to collapse (600ms delay)
+Custom `NSPanel` -- borderless, transparent, non-activating, level `mainMenu + 3`. Fixed panel size (620x380pt). Content animates inside via `NotchShape` clipping. Panel joins all spaces and only becomes key when open.
 
-### Search
-- Click the **magnifying glass** icon (top-left)
-- Type to search — matches highlighted in purple
-- **Chevron arrows** or **Enter** to jump between matches
-- Counter shows position (`3/12`)
+### Notch shape
 
-### Settings
-- Click the **gear** icon (top-right)
-- AI Provider: switch provider (Nous/OpenRouter/OpenAI/Anthropic), paste API keys
-- Agent: max iterations, streaming toggle
-- Execution: terminal backend (local/docker/ssh)
-- Session: shows auto-linked Telegram session status
+Custom `Shape` with `animatableData` for smooth corner radius transitions. Quad curves approximate the hardware notch silhouette. Closed: top 6pt, bottom 10pt. Open: top 14pt, bottom 18pt.
 
-### Voice Memos
-- **Ctrl+Shift+R** — start recording (KITT scanner appears)
-- **Ctrl+Shift+R** or **Enter** — stop, transcribe, send
-- **Mic button** in input bar — same flow
-- Uses Carbon `RegisterEventHotKey` — works from any app, no error beep
+## API
 
-### Attach Files
-- **Drag & drop** onto the notch, or click **+** in the input bar
-- Images copied to `~/.hermes/cache/images/` for vision analysis
-- 50K character extraction limit
+| Endpoint | Method | Headers | Description |
+|----------|--------|---------|-------------|
+| `localhost:8642/health` | GET | -- | Health check |
+| `localhost:8642/v1/responses` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Responses API (server-side conversation state) |
 
-### Quit
-Menu bar icon > Quit notchnotch, or Cmd+Q.
+Request:
+```json
+{
+  "model": "hermes-agent",
+  "input": "Hello!",
+  "conversation": "notchnotch-abc12345",
+  "store": true
+}
+```
 
----
+Timeouts: 300s request, 600s resource.
+
+## Configuration
+
+| Setting | Location | Purpose |
+|---------|----------|---------|
+| `LSUIElement` | Info.plist | Hides from Dock |
+| `NSAllowsLocalNetworking` | Info.plist | HTTP to localhost |
+| `NSMicrophoneUsageDescription` | Info.plist | Mic permission prompt |
+| `NSSpeechRecognitionUsageDescription` | Info.plist | Speech recognition prompt |
+| `com.apple.security.network.client` | Entitlements | Network access |
+| `API_SERVER_ENABLED=true` | `~/.hermes/.env` | Enables Hermes API |
+| `hermesSessionId` | UserDefaults | Auto-linked Telegram session ID |
+| `hermesConversationId` | UserDefaults | Server-side conversation ID |
+| `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
+| `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
+| `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
+| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme (reserved for future OAuth) |
 
 ## Distribution
 
@@ -318,7 +370,7 @@ bash scripts/release.sh
 This script:
 1. Builds a release binary (universal `arm64+x86_64` if Xcode is installed, `arm64` only with Command Line Tools)
 2. Creates a `.app` bundle with Info.plist, resources, and icons
-3. Signs with ad-hoc certificate (`codesign --force --deep --sign -`) — avoids runtime crashes on macOS 14+ even without an Apple Developer account
+3. Signs with ad-hoc certificate (`codesign --force --deep --sign -`)
 4. Creates a DMG via `create-dmg` (install with `brew install create-dmg`) or `hdiutil` fallback
 
 Output: `.build/notchnotch-v0.8.0.dmg`
@@ -341,131 +393,26 @@ shasum -a 256 .build/notchnotch-v0.8.0.dmg
 
 ### Homebrew tap setup
 
-To enable `brew install --cask KikinaStudio/tap/boanotch`:
+To enable `brew install --cask KikinaStudio/tap/notchnotch`:
 
 1. Create repo `KikinaStudio/homebrew-tap` on GitHub
 2. Copy `homebrew/notchnotch.rb` to `Casks/notchnotch.rb` in that repo
 3. Fill in the `sha256` from `shasum -a 256` of the DMG
 4. Users install with: `brew install --cask KikinaStudio/tap/notchnotch --no-quarantine`
 
-The `--no-quarantine` flag bypasses Gatekeeper automatically — no `xattr` needed.
-
 ### Signing notes
 
-The app is currently **ad-hoc signed** (`codesign --sign -`). This:
-- Avoids runtime crashes from macOS 14+ code signing enforcement
-- Does NOT satisfy Gatekeeper (users still need `xattr -cr` or `--no-quarantine`)
-- If you later get an Apple Developer account ($99/year), just change `--sign -` to `--sign "Developer ID Application: Your Name"` — no other changes needed
+The app is currently **ad-hoc signed** (`codesign --sign -`). This avoids runtime crashes from macOS 14+ code signing enforcement but does NOT satisfy Gatekeeper. If you later get an Apple Developer account ($99/year), change `--sign -` to `--sign "Developer ID Application: Your Name"`.
 
----
+## Tech stack
 
-## How It Works
+- **Swift 5.9 / SwiftUI** -- UI, animations, layout
+- **AppKit** -- NSPanel, NSEvent, NSWorkspace, NSStatusItem
+- **Carbon.HIToolbox** -- Global hotkeys (RegisterEventHotKey)
+- **AVFoundation** -- Audio recording
+- **Speech** -- On-device transcription (SFSpeechRecognizer)
+- **SQLite3** -- Hermes session database (C API, readonly)
+- **PDFKit** -- PDF text extraction
+- **URLSession** -- Async HTTP requests
 
-### Response Parsing
-
-`HermesClient.parseOutput()` walks the `output` array from `/v1/responses` and extracts three channels:
-
-1. **Thinking** — `type: "reasoning"` items (exposed by a gateway patch; `<think>` blocks are stripped from `final_response` but preserved in the raw messages)
-2. **Tool calls** — `type: "function_call"` (→ name + args preview) and `type: "function_call_output"` (✓ name)
-3. **Response** — `type: "message"` → `content[].text`
-
-### Session Auto-Link
-
-On launch, `SessionStore` reads `~/.hermes/state.db`:
-
-```sql
-SELECT id FROM sessions WHERE source = 'telegram'
-ORDER BY started_at DESC LIMIT 1
-```
-
-This `id` is the Telegram `chat_id` of your DM with the Hermes bot. It's sent as `X-Hermes-Session-Id` on every request, giving full context continuity between Telegram and notchnotch. Persisted in `UserDefaults` across restarts.
-
-### Window System
-
-Custom `NSPanel` — borderless, transparent, non-activating, level `mainMenu + 3`. Fixed panel size (620x380pt). Content animates inside via `NotchShape` clipping. Panel joins all spaces and only becomes key when open.
-
-### Notch Shape
-
-Custom `Shape` with `animatableData` for smooth corner radius transitions. Quad curves approximate the hardware notch silhouette. Closed: top 6pt, bottom 10pt. Open: top 14pt, bottom 18pt.
-
----
-
-## API
-
-| Endpoint | Method | Headers | Description |
-|----------|--------|---------|-------------|
-| `localhost:8642/health` | GET | — | Health check |
-| `localhost:8642/v1/responses` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Responses API (server-side conversation state) |
-
-Request:
-```json
-{
-  "model": "hermes-agent",
-  "input": "Hello!",
-  "conversation": "notchnotch-abc12345",
-  "store": true
-}
-```
-
-Timeouts: 300s request, 600s resource.
-
----
-
-## Configuration
-
-| Setting | Location | Purpose |
-|---------|----------|---------|
-| `LSUIElement` | Info.plist | Hides from Dock |
-| `NSAllowsLocalNetworking` | Info.plist | HTTP to localhost |
-| `NSMicrophoneUsageDescription` | Info.plist | Mic permission prompt |
-| `NSSpeechRecognitionUsageDescription` | Info.plist | Speech recognition prompt |
-| `com.apple.security.network.client` | Entitlements | Network access |
-| `API_SERVER_ENABLED=true` | `~/.hermes/.env` | Enables Hermes API |
-| `hermesSessionId` | UserDefaults | Auto-linked Telegram session ID |
-| `hermesConversationId` | UserDefaults | Server-side conversation ID for Responses API persistence |
-| `onboardingCompleted` | UserDefaults | Skips onboarding on future launches |
-| `onboardingStep` | UserDefaults | Resume point if app quits mid-onboarding |
-| `selectedProvider` | UserDefaults | AI provider chosen during onboarding |
-| `CFBundleURLTypes` | Info.plist | `boanotch://` URL scheme (reserved for future OAuth) |
-
----
-
-## Known Limitations
-
-- **No local message history on restart** — the UI starts blank after relaunch, but Hermes preserves full conversation context server-side via the Responses API. Your agent remembers everything from previous turns.
-- **Fixed notch size** — 580x340pt. Dynamic height and drag-to-resize are planned.
-- **Hardcoded localhost:8642** — no UI to change the Hermes URL.
-- **Read-only cron management** — routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
-- **Tool detection is heuristic** — some tool output may leak into the response or vice versa. Post-processing fallback catches most cases.
-- **Unsigned** — triggers Gatekeeper. Use `xattr -cr` or `brew install --no-quarantine`.
-
----
-
-## Tech Stack
-
-- **Swift 5.9 / SwiftUI** — UI, animations, layout
-- **AppKit** — NSPanel, NSEvent, NSWorkspace, NSStatusItem
-- **Carbon.HIToolbox** — Global hotkeys (RegisterEventHotKey)
-- **AVFoundation** — Audio recording
-- **Speech** — On-device transcription (SFSpeechRecognizer)
-- **SQLite3** — Hermes session database (C API, readonly)
-- **PDFKit** — PDF text extraction
-- **URLSession** — Async HTTP requests
-
----
-
-## Roadmap
-
-- [x] Flanking search/settings buttons beside physical notch
-- [ ] Dynamic notch height (auto-grow with content, drag handle)
-- [x] Conversation history UI (browse and reload sessions from Hermes `state.db`)
-- [ ] Memory provider selection UI (choose among Hermes's 6 external memory providers)
-- [ ] Auto-update via Sparkle
-- [ ] Universal binary (requires Xcode)
-- [ ] Apple Developer signing + notarization
-
----
-
-## License
-
-MIT
+</details>
