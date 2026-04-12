@@ -2,7 +2,7 @@
 
 ## What is this
 
-A native macOS SwiftUI app that lives in the MacBook notch, providing instant access to a [Hermes](https://github.com/NousResearch/hermes-agent) AI agent. Built with Swift 5.9 / SwiftUI, no Xcode required (Command Line Tools only).
+A native macOS SwiftUI app that lives in the MacBook notch, providing instant access to a [Hermes](https://github.com/NousResearch/hermes-agent) AI agent. Runs entirely on the local machine (not on a VPS) — a true on-device assistant with direct access to the user's files, tools, and system. Built with Swift 5.9 / SwiftUI, no Xcode required (Command Line Tools only).
 
 ## Before every session
 
@@ -143,7 +143,7 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 
 **Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the job list with a "Browse templates" link at the bottom (toggles `@State showingBrowser`).
 
-**Job list** — when jobs exist, full-width cards sorted by enabled status then `next_run_at`. Each card shows: status dot (green=scheduled, orange=paused, pulsing accent=running), job name, human-readable schedule via `humanSchedule()` (converts cron expressions like `0 9 * * *` → "Daily at 9 AM"), run count from `repeat.completed`, and formatted next run time. Paused cards are dimmed. Count badge shows next to "Routines" title. Tapping a card sets `chatVM.activeRoutineContext` and switches to chat. Right-click context menu offers: "Change schedule" (prefills draft), "Pause"/"Resume" (auto-sends), "Remove" (prefills draft, user confirms). All actions go through chat — Hermes executes via its `cronjob` tool. Wired via `onDraftAction: ((String, Bool) -> Void)?` where the Bool triggers auto-send.
+**Job list** — when jobs exist, full-width cards (spacing 8) sorted by enabled status then `next_run_at`. Each card shows: status dot (7pt, green=scheduled, orange=paused, pulsing accent=running), job name (size 12), human-readable schedule in a monospace pill/chip (`white.opacity(0.08)` bg, capsule shape) via `humanSchedule()`, run count from `repeat.completed`, and formatted next run time. Card background is `white.opacity(0.08)` with hover state pushing to `0.12` (150ms ease). Paused cards are dimmed. Count badge shows next to "Routines" title. Tapping a card sets `chatVM.activeRoutineContext` and switches to chat. Right-click context menu offers: "Change schedule" (prefills draft), "Pause"/"Resume" (auto-sends), "Remove" (prefills draft, user confirms). All actions go through chat — Hermes executes via its `cronjob` tool. Wired via `onDraftAction: ((String, Bool) -> Void)?` where the Bool triggers auto-send.
 
 **`humanSchedule()` cron parser** — converts common 5-field cron expressions to readable text: `0 9 * * *` → "Daily at 9 AM", `0 9 * * 1-5` → "Weekdays at 9 AM", `0 9 * * 0` → "Suns at 9 AM", `0 9 * * 1,4` → "Mon & Thu at 9 AM", `*/30 * * * *` → "Every 30 min", `0 */6 * * *` → "Every 6h", `0 9 15 * *` → "Day 15, 9 AM". Falls back to raw string for unrecognized patterns. Also passes through `every Xh/Xm` interval syntax unchanged.
 
