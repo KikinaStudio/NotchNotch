@@ -23,6 +23,7 @@ struct CronJob: Identifiable, Codable {
     let schedule_display: String
     let `repeat`: CronJobRepeat?
     let enabled: Bool
+    let state: String?
     let next_run_at: String?
     let last_run_at: String?
     let last_status: String?
