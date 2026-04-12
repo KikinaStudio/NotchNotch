@@ -82,7 +82,7 @@ struct MessageBubble: View {
         .background {
             if isUser {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(0.7))
+                    .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0).opacity(0.8))
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
