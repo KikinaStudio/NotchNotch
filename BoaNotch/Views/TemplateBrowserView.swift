@@ -265,10 +265,10 @@ struct TemplateBrowserView: View {
             case .freeText(let placeholder):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 10))
+                    .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 6)
                     .background(.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
 
@@ -293,10 +293,10 @@ struct TemplateBrowserView: View {
             case .number(let placeholder, _):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 10))
+                    .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
+                    .padding(.vertical, 6)
                     .background(.white.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: 6))
                     .frame(width: 80)
@@ -304,13 +304,13 @@ struct TemplateBrowserView: View {
             case .filePath(let placeholder):
                 HStack(spacing: 6) {
                     Text(inputValues[input.id] ?? placeholder)
-                        .font(.system(size: 10))
+                        .font(.system(size: 13))
                         .foregroundStyle(inputValues[input.id] != nil ? .white.opacity(0.7) : .white.opacity(0.25))
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 6)
                         .background(.white.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
 

@@ -60,13 +60,22 @@ class CronStore: ObservableObject {
         startWatching()
     }
 
+    private struct JobsWrapper: Codable {
+        let jobs: [CronJob]
+    }
+
     func load() {
         guard let data = FileManager.default.contents(atPath: jobsPath) else {
             jobs = []
             return
         }
         do {
-            jobs = try JSONDecoder().decode([CronJob].self, from: data)
+            // jobs.json can be {"jobs": [...]} or bare [...]
+            if let wrapper = try? JSONDecoder().decode(JobsWrapper.self, from: data) {
+                jobs = wrapper.jobs
+            } else {
+                jobs = try JSONDecoder().decode([CronJob].self, from: data)
+            }
         } catch {
             print("[notchnotch] Failed to parse jobs.json: \(error)")
             jobs = []

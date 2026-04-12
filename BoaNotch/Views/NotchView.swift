@@ -156,6 +156,10 @@ struct NotchView: View {
                                             }
                                         }
                                     }
+                                }, onDraftAction: { draft, autoSend in
+                                    chatVM.draft = draft
+                                    notchVM.isRoutinesOpen = false
+                                    if autoSend { chatVM.send() }
                                 })
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
@@ -169,7 +173,11 @@ struct NotchView: View {
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
                             } else if notchVM.isBrainOpen {
-                                BrainView(brainVM: brainVM)
+                                BrainView(brainVM: brainVM, onSendToChat: { message in
+                                    chatVM.draft = message
+                                    notchVM.isBrainOpen = false
+                                    chatVM.send()
+                                })
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)

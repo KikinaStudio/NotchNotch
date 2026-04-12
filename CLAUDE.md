@@ -43,8 +43,8 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `RoutineTemplates.swift` — Data model for the routine template system. `RoutineCategory` (7 categories: Personal, Professional, Research, Travel, Health, Finance, Creator), `RoutineTemplate` (25 templates with icon, title, subtitle, schedule, deliver, inputs, and `promptTemplate` with `{{placeholder}}` tokens), `TemplateInput` (structured inputs: `.freeText`, `.picker`, `.number`, `.filePath`). `composeDraft(values:)` substitutes placeholders and prepends schedule/deliver info as natural language for Hermes to parse via its `cronjob` tool. All data is static — zero runtime cost until accessed.
 - `TemplateBrowserView.swift` — Three-screen drill-down for browsing routine templates within the 640×340px notch panel. Screen 1: category picker (7 rows + "Create your own"). Screen 2: template list for selected category. Screen 3: form with input fields (TextField, capsule picker buttons, number field, NSOpenPanel file picker) and a "Create routine" button. Navigation uses `@State` with spring-animated `.move` transitions. Output: calls `onSelectTemplate(draft)` with the composed prompt string — same callback contract as the old starter templates.
 - `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
-- `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md` as strings, scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`, and checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each). `SkillInfo` and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a refresh. All FileManager reads, no network calls.
-- `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses capsule buttons (same style as SettingsView). Memory tab shows USER.md ("About you") and MEMORY.md ("Learned facts") rendered via `AttributedString(markdown:)`. Skills tab lists all installed skills with category badges, descriptions, and drill-down detail view. Wiki tab (hidden when no wiki directory exists) lists articles with drill-down. Navigation uses `@State` with spring-animated `.move` transitions. Refresh button reloads all sections.
+- `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` separator into `[MemoryBlock]` (title extracted from first bold label, dash-prefix, or heading). Scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`. Checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each) and computes `wikiLastUpdated` from file modification dates. `SkillInfo`, `MemoryBlock`, and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a refresh. All FileManager reads, no network calls.
+- `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses capsule buttons (same style as SettingsView). Memory tab renders `§`-separated blocks as individual `MemoryCard` views (title + markdown content, subtle card background). Skills tab lists all installed skills with category badges, descriptions, and drill-down detail view. Wiki tab (hidden when no wiki directory exists) shows a compact dashboard with article count, last-updated timestamp, and "Ask" buttons — tapping sends a question to Hermes via `onSendToChat` callback (no article content preview). Refresh button reloads all sections.
 - `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
@@ -86,6 +86,53 @@ The drop zone "Save to brain", voice notes, and the Clipper extension all use th
 
 The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
 
+### Brain panel (v0.12)
+
+The Brain panel is a read-only viewer for Hermes knowledge, opened via the `brain` icon in the burger menu (`NotchViewModel.isBrainOpen`, `openBrain()`). Three tabs: Memory, Skills, Wiki.
+
+**Memory tab — card-based display:**
+- `BrainViewModel` reads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` (section sign) into `[MemoryBlock]`
+- Title extraction priority: `**Bold Label**:` → `- Dash prefix:` → `## Heading` → first 40 chars
+- Each block renders as a `MemoryCard` (purple title, markdown body, `.white.opacity(0.04)` card background)
+- Section headers: "ABOUT YOU" (from USER.md) and "LEARNED FACTS" (from MEMORY.md)
+- If a file has no `§` separators, the entire content becomes one card. Missing files = empty state.
+
+**Hermes memory file format** (important for Clipper compatibility):
+```
+~/.hermes/memories/
+  MEMORY.md    # Agent-curated facts, § separated blocks
+  USER.md      # User profile/preferences, § separated blocks
+  MEMORY.md.lock / USER.md.lock  # Lock files (ignore)
+```
+When Hermes saves to memory (via `saveToBrain` or its own `memory` tool), it appends `§`-separated blocks to MEMORY.md. Each block is a thematic group — a single fact, a project context, a person's details, etc. The `§` separator is Hermes's convention, not a NotchNotch invention.
+
+**Skills tab** — Lists all installed skills from `~/.hermes/skills/<category>/<skill-name>/SKILL.md`. Each SKILL.md has YAML frontmatter (`name`, `description`). Tapping a skill shows full content in a drill-down detail view.
+
+**Wiki tab — dashboard + ask pattern:**
+- Only visible when `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` exists (`hasWiki`)
+- Shows article count and relative "last updated" timestamp (from file modification dates)
+- Each article row has an "Ask" button — tapping it:
+  1. Closes the brain panel (`notchVM.isBrainOpen = false`)
+  2. Sets `chatVM.draft` to a question (e.g. `"Qu'est-ce que tu sais sur Attention Mechanisms ?"`)
+  3. Calls `chatVM.send()` immediately
+- Index article sends `"Résume-moi ton wiki"` instead
+- NO article content preview — the wiki tab is a dashboard, not a reader
+- `onSendToChat: ((String) -> Void)?` callback wired in NotchView.swift
+
+**Wiki filesystem** (important for Clipper compatibility):
+```
+~/.hermes/brain/wiki/     # Primary location (Karpathy-style LLM wiki)
+  index.md                # Wiki index — pinned first in the list
+  topic-name.md           # One article per topic
+~/.hermes/wiki/           # Fallback location (checked if brain/wiki/ doesn't exist)
+```
+Wiki articles are LLM-compiled summaries from ingested raw material. The Clipper could feed raw content into `~/.hermes/brain/raw/` for Hermes to compile into wiki articles, or save directly to memory via the existing `saveToBrain` pattern.
+
+**Integration points for Clipper:**
+- **Saving clipped content** → goes through `saveToBrain` → Hermes decides whether to store in MEMORY.md (facts) or process into wiki (if wiki pipeline is active)
+- **ClipperListener** (`localhost:19944/clip`) → only handles the toast notification, NOT the save itself. The Clipper must call the Hermes API directly for the actual save, then ping ClipperListener for the toast.
+- **Brain panel refresh** → `BrainViewModel.reload()` re-reads all files. After a Clipper save, the user can hit the refresh button in the Brain panel to see the new content. No automatic refresh on file change (no DispatchSource watcher on memory files — could be added).
+
 ### Routines (cron job display + template browser)
 
 Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger menu (right-aligned overlay) reveals search, routines, and settings icons on hover — panels are mutually exclusive via `NotchViewModel.openRoutines()`, `isSearchOpen`, `isSettingsOpen`. `NotchViewModel.isMenuExpanded` drives the expand/collapse state with a 3-second auto-collapse timer (`expandMenu()`/`collapseMenu()`). `isAnyPanelOpen` computed property switches the overlay between action icons and an xmark close button.
@@ -96,7 +143,11 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 
 **Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the job list with a "Browse templates" link at the bottom (toggles `@State showingBrowser`).
 
-**Job list** — when jobs exist, full-width cards sorted by enabled status then `next_run_at`. Tapping a job sets `chatVM.activeRoutineContext` (routine context tag appears above input bar) and switches to chat.
+**Job list** — when jobs exist, full-width cards sorted by enabled status then `next_run_at`. Each card shows: status dot (green=scheduled, orange=paused, pulsing accent=running), job name, human-readable schedule via `humanSchedule()` (converts cron expressions like `0 9 * * *` → "Daily at 9 AM"), run count from `repeat.completed`, and formatted next run time. Paused cards are dimmed. Count badge shows next to "Routines" title. Tapping a card sets `chatVM.activeRoutineContext` and switches to chat. Right-click context menu offers: "Change schedule" (prefills draft), "Pause"/"Resume" (auto-sends), "Remove" (prefills draft, user confirms). All actions go through chat — Hermes executes via its `cronjob` tool. Wired via `onDraftAction: ((String, Bool) -> Void)?` where the Bool triggers auto-send.
+
+**`humanSchedule()` cron parser** — converts common 5-field cron expressions to readable text: `0 9 * * *` → "Daily at 9 AM", `0 9 * * 1-5` → "Weekdays at 9 AM", `0 9 * * 0` → "Suns at 9 AM", `0 9 * * 1,4` → "Mon & Thu at 9 AM", `*/30 * * * *` → "Every 30 min", `0 */6 * * *` → "Every 6h", `0 9 15 * *` → "Day 15, 9 AM". Falls back to raw string for unrecognized patterns. Also passes through `every Xh/Xm` interval syntax unchanged.
+
+**CronStore JSON format** — `jobs.json` is `{"jobs": [...]}` (wrapper object), not a bare array. `CronStore.load()` tries `JobsWrapper` first, falls back to bare `[CronJob]`.
 
 **Routine context** — when `activeRoutineContext` is set, `startRequest()` passes a `systemContext` string to `sendResponse()`, which converts the API `input` from a string to `[system_msg, user_msg]` array. The system message describes the job so Hermes knows which cron job the user is referring to. `routineCreationMode` uses the same mechanism for file-based routine creation (one-shot, resets after send).
 
@@ -137,7 +188,29 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 
 ## Companion projects
 
-- **[NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper)** — Chrome extension that clips web pages to Hermes's brain. After a successful Hermes save, it POSTs `{"title","url"}` to `localhost:19944/clip` which triggers the pacman toast in NotchNotch. Loaded locally from `~/NotchNotch Extension/`.
+### NotchNotch Clipper
+
+**Repo:** [KikinaStudio/NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) — Chrome extension that clips web pages to Hermes's brain.
+
+**Current flow:**
+1. User clicks the Clipper extension icon on a web page
+2. Extension extracts page content (title, URL, text/selection)
+3. Extension calls the Hermes API directly (`POST /v1/responses` to `localhost:8642`) with a save-to-memory prompt
+4. On success, extension POSTs `{"title": "...", "url": "..."}` to `localhost:19944/clip`
+5. `ClipperListener.swift` receives the POST, triggers `notchVM.showClipperToast(title)` — pacman animation + page title
+
+**How clipped content appears in NotchNotch Brain panel:**
+- Hermes processes the save prompt and writes to `~/.hermes/memories/MEMORY.md` as a `§`-separated block
+- Next time the user opens Brain > Memory tab (or hits refresh), the clipped content appears as a card
+- The card title is extracted from the first bold label or dash-prefixed line that Hermes wrote
+
+**Key integration contracts:**
+- Hermes API: `localhost:8642` (health check: `GET /health`)
+- ClipperListener: `localhost:19944` — only accepts `POST /clip` with JSON `{"title": String, "url": String}`
+- ClipperListener response: HTTP 200 with `{"status":"ok"}` on success
+- The toast uses the pacman icon (purple animated circle) and auto-dismisses after 4 seconds
+
+**Local dev path:** Extension is loaded from `~/NotchNotch Extension/` (NOT the git repo clone). Changes to the repo must be copied there and the extension reloaded in `chrome://extensions`.
 
 ## Conventions
 
