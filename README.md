@@ -14,6 +14,20 @@ No terminal. No API keys to find. No config files. notchnotch installs Hermes fo
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
 ![Version](https://img.shields.io/badge/version-0.8.0-violet)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-white.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo-black.png">
+    <img alt="notchnotch" src="docs/logo-black.png" width="400">
+  </picture>
+</p>
+
+<p align="center">
+  <img src="docs/onboarding-welcome.png" alt="Welcome screen" width="32%">
+  <img src="docs/onboarding-privacy.png" alt="Privacy screen" width="32%">
+  <img src="docs/onboarding-install.png" alt="Install screen" width="32%">
+</p>
+
 Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBoredTeam/boring.notch) and [NotchNook](https://lo.cafe/notchnook).
 
 ---
