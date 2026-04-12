@@ -10,7 +10,7 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Messages — bottom-anchored, with fade overlay
-            ZStack(alignment: .bottom) {
+            ZStack {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 10) {
@@ -40,14 +40,29 @@ struct ChatView: View {
                     .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
                 }
 
+                // Fade to black at the top of the scroll area
+                VStack {
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 20)
+                    .allowsHitTesting(false)
+                    Spacer()
+                }
+
                 // Fade to black at the bottom of the scroll area
-                LinearGradient(
-                    colors: [.clear, .black],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 24)
-                .allowsHitTesting(false)
+                VStack {
+                    Spacer()
+                    LinearGradient(
+                        colors: [.clear, .black],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 20)
+                    .allowsHitTesting(false)
+                }
             }
 
             if chatVM.messages.isEmpty && chatVM.connectionError == nil {
@@ -190,7 +205,8 @@ struct ChatView: View {
 
 }
             .padding(.horizontal, 2)
-            .padding(.vertical, 6)
+            .padding(.top, 2)
+            .padding(.bottom, 6)
         }
     }
 
