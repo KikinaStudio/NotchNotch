@@ -69,6 +69,7 @@ class HermesConfig: ObservableObject {
         default:
             return [
                 ("xiaomi/mimo-v2-pro", "mimo v2 pro"),
+                ("MiniMax-M2.7-highspeed", "minimax m2.7"),
                 ("nousresearch/hermes-4-70b", "hermes 4 70b"),
                 ("nousresearch/deephermes-3-8b", "deephermes 3 8b"),
             ]

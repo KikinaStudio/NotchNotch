@@ -17,40 +17,97 @@ struct MessageBubble: View {
     @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Attachment pills
-            if !message.attachments.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(message.attachments) { att in
-                        attachmentCard(att)
+        VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Attachment pills
+                if !message.attachments.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(message.attachments) { att in
+                            attachmentCard(att)
+                        }
                     }
+                }
+
+                // Collapsible thinking section
+                if !message.thinkingContent.isEmpty {
+                    thinkingToggle
+                }
+
+                // Subagent indicator
+                if !message.subagentActivity.isEmpty {
+                    subagentIndicator
+                }
+
+                // Collapsible tool calling section
+                if !message.toolCallContent.isEmpty {
+                    toolCallToggle
+                }
+
+                // Message content with clickable file paths (final response only)
+                if !displayContent.isEmpty {
+                    filePathAwareContent
+                        .padding(.top, (!message.thinkingContent.isEmpty || !message.toolCallContent.isEmpty) ? 4 : 0)
+                }
+
+                // Action buttons for completed assistant messages
+                if !isUser && !message.isStreaming && !message.content.isEmpty {
+                    HStack(spacing: 12) {
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(displayContent, forType: .string)
+                            showCopyConfirm = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                showCopyConfirm = false
+                            }
+                        } label: {
+                            Image(systemName: showCopyConfirm ? "checkmark" : "square.on.square")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(isHoveredCopy ? 0.5 : 0.25))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                        .onHover { isHoveredCopy = $0 }
+
+                        if let onRetry {
+                            Button {
+                                onRetry()
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.white.opacity(isHoveredRetry ? 0.5 : 0.25))
+                            }
+                            .buttonStyle(.plain)
+                            .pointingHandCursor()
+                            .onHover { isHoveredRetry = $0 }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .padding(.horizontal, isUser ? 12 : 0)
+            .padding(.vertical, isUser ? 8 : 4)
+            .frame(maxWidth: isUser ? nil : .infinity, alignment: isUser ? .trailing : .leading)
+            .background {
+                if isUser {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0).opacity(0.8))
                 }
             }
 
-            // Collapsible thinking section
-            if !message.thinkingContent.isEmpty {
-                thinkingToggle
-            }
-
-            // Subagent indicator
-            if !message.subagentActivity.isEmpty {
-                subagentIndicator
-            }
-
-            // Collapsible tool calling section
-            if !message.toolCallContent.isEmpty {
-                toolCallToggle
-            }
-
-            // Message content with clickable file paths (final response only)
-            if !displayContent.isEmpty {
-                filePathAwareContent
-                    .padding(.top, (!message.thinkingContent.isEmpty || !message.toolCallContent.isEmpty) ? 4 : 0)
-            }
-
-            // Action buttons for completed assistant messages
-            if !isUser && !message.isStreaming && !message.content.isEmpty {
+            // Action buttons below user bubble
+            if isUser && !message.isStreaming && !message.content.isEmpty {
                 HStack(spacing: 12) {
+                    if let onEdit {
+                        Button { onEdit(message) } label: {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(isHovered ? 0.5 : 0.25))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                        .onHover { isHovered = $0 }
+                    }
+
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(displayContent, forType: .string)
@@ -59,53 +116,16 @@ struct MessageBubble: View {
                             showCopyConfirm = false
                         }
                     } label: {
-                        Image(systemName: showCopyConfirm ? "checkmark" : "doc.on.doc")
+                        Image(systemName: showCopyConfirm ? "checkmark" : "square.on.square")
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(isHoveredCopy ? 0.5 : 0.25))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
                     .onHover { isHoveredCopy = $0 }
-
-                    if let onRetry {
-                        Button {
-                            onRetry()
-                        } label: {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(isHoveredRetry ? 0.5 : 0.25))
-                        }
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
-                        .onHover { isHoveredRetry = $0 }
-                    }
                 }
-                .padding(.top, 2)
             }
         }
-        .padding(.horizontal, isUser ? 12 : 0)
-        .padding(.vertical, isUser ? 8 : 4)
-        .frame(maxWidth: isUser ? nil : .infinity, alignment: isUser ? .trailing : .leading)
-        .background {
-            if isUser {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0).opacity(0.8))
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if isUser && !message.isStreaming && onEdit != nil {
-                Button { onEdit?(message) } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.3))
-                        .padding(6)
-                }
-                .buttonStyle(.plain)
-                .opacity(isHovered ? 1 : 0)
-                .animation(.easeInOut(duration: 0.15), value: isHovered)
-            }
-        }
-        .onHover { isHovered = $0 }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
     }
 
