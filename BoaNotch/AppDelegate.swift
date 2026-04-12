@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let searchVM = SearchViewModel()
     let hermesConfig = HermesConfig()
     let onboardingVM = OnboardingViewModel()
+    let cronStore = CronStore()
     private let clipperListener = ClipperListener()
     private var statusItem: NSStatusItem?
     private var flagsMonitor: Any?
@@ -30,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         onboardingVM.notchVM = notchVM
         onboardingVM.hermesConfig = hermesConfig
 
-        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM)
+        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore)
         panelController?.showPanel()
 
         // If onboarding is needed, open notch immediately and suppress auto-close

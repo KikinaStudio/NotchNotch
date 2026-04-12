@@ -18,6 +18,7 @@ class NotchViewModel: ObservableObject {
     @Published var isRecording = false
     @Published var isSettingsOpen = false
     @Published var isSearchOpen = false
+    @Published var isRoutinesOpen = false
     @Published var isExpandedBarOpen = false
     @Published var suppressAutoClose = false
 
@@ -139,6 +140,16 @@ class NotchViewModel: ObservableObject {
             }
             self.onStateChange?(.closed)
         }
+    }
+
+    func openRoutines() {
+        isRoutinesOpen = true
+        isSettingsOpen = false
+        isSearchOpen = false
+    }
+
+    func closeRoutines() {
+        isRoutinesOpen = false
     }
 
     func showClipperToast(_ title: String) {

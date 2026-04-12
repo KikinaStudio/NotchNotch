@@ -8,6 +8,7 @@ struct NotchView: View {
     @ObservedObject var searchVM: SearchViewModel
     @ObservedObject var hermesConfig: HermesConfig
     @ObservedObject var onboardingVM: OnboardingViewModel
+    @ObservedObject var cronStore: CronStore
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -109,6 +110,8 @@ struct NotchView: View {
                                 searchVM.close()
                                 notchVM.isSearchOpen = false
                             }
+                        } else if notchVM.isRoutinesOpen {
+                            settingsTopBar
                         } else {
                             notchTopBar
                         }
@@ -122,6 +125,32 @@ struct NotchView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 8))
                             .padding(.horizontal, 30)
                             .padding(.bottom, 18)
+                            .transition(.opacity)
+                        } else if notchVM.isRoutinesOpen {
+                            RoutinesView(cronStore: cronStore, onSelectJob: { job in
+                                chatVM.setRoutineContext(job)
+                                notchVM.isRoutinesOpen = false
+                            }, onSelectTemplate: { draft in
+                                chatVM.draft = draft
+                                notchVM.isRoutinesOpen = false
+                            }, onCreateOwn: {
+                                chatVM.draft = "Schedule a new routine: "
+                                notchVM.isRoutinesOpen = false
+                            }, onDropFile: { providers in
+                                for provider in providers {
+                                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                                        guard let data = data as? Data,
+                                              let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
+                                        let attachment = DocumentExtractor.extract(from: url)
+                                        DispatchQueue.main.async {
+                                            chatVM.pendingAttachments.append(attachment)
+                                            chatVM.draft = "What routine would make sense for this file?"
+                                            chatVM.routineCreationMode = true
+                                            notchVM.isRoutinesOpen = false
+                                        }
+                                    }
+                                }
+                            })
                             .transition(.opacity)
                         } else {
                             ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
@@ -154,13 +183,27 @@ struct NotchView: View {
 
                     HStack(spacing: 14) {
                         FlankingButton(
-                            icon: notchVM.isSettingsOpen ? "xmark" : "magnifyingglass",
+                            icon: notchVM.isSettingsOpen || notchVM.isRoutinesOpen ? "xmark" : "magnifyingglass",
                             isActive: false
                         ) {
                             if notchVM.isSettingsOpen {
                                 notchVM.isSettingsOpen = false
+                            } else if notchVM.isRoutinesOpen {
+                                notchVM.isRoutinesOpen = false
                             } else {
                                 notchVM.isSearchOpen = true
+                                notchVM.isRoutinesOpen = false
+                            }
+                        }
+
+                        FlankingButton(
+                            icon: "arrow.triangle.2.circlepath",
+                            isActive: notchVM.isRoutinesOpen
+                        ) {
+                            if notchVM.isRoutinesOpen {
+                                notchVM.isRoutinesOpen = false
+                            } else {
+                                notchVM.openRoutines()
                             }
                         }
 
@@ -168,6 +211,7 @@ struct NotchView: View {
                             icon: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape",
                             isActive: notchVM.isSettingsOpen
                         ) {
+                            notchVM.isRoutinesOpen = false
                             notchVM.isSettingsOpen.toggle()
                         }
                     }
