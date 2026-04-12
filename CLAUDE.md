@@ -40,7 +40,8 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field. Also provides conversation history via `loadRecentSessions()` (max 30, last 30 days) and `messagesForSession(sessionId:)` — both read-only SQLite3 C API queries. `SessionSummary` and `SessionMessage` models live in the same file.
 - `SSEParser.swift` — Legacy SSE parser from the `/v1/runs` era. Currently unused but kept for potential future streaming support.
 - `CronStore.swift` — Watches `~/.hermes/cron/jobs.json` with DispatchSource (same pattern as HermesConfig). Decodes `CronJob` array with `sortedJobs` (enabled first, soonest `next_run_at`). Fails silently to empty array if file is missing or malformed.
-- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. Content switching uses a `Group` wrapper to help Swift's type checker with the if-else chain. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
+- `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
+- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -96,6 +97,20 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 `ConversationHistoryView` — read-only browser for past Hermes sessions from `~/.hermes/state.db`. Opened via `clock.arrow.circlepath` in the burger menu. `NotchViewModel.isHistoryOpen` toggles visibility, mutually exclusive with all other panels via `openHistory()`. Sessions reload on open via `.onChange`.
 
 Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purple for Discord), title (or "Untitled"), and relative timestamp. Active session highlighted with `AppColors.accent` tint. Tapping a row loads its messages into `chatVM.messages` and sets `chatVM.sessionId` for session continuity. The [+ New] button calls `chatVM.startNewConversation()` (also accessible via the `plus.bubble` flanking button on the left side of the notch).
+
+### Rich media in messages
+
+**Inline image previews** — `MessageBubble.filePathAwareContent` detects image paths (png, jpg, gif, etc.) in both `.text` and `.code` blocks via `splitByFilePaths()`. Image paths render as inline thumbnails (280×200 max, rounded corners, subtle border) via `imagePreview()`. Click opens in default app; context menu offers "Open in default app" and "Reveal in Finder". Non-image paths render as `fileCard()`. If NSImage fails to load, falls through to `fileCard()`.
+
+**Color-coded file cards** — `fileCard()` uses `colorForFileType(ext)` from `AppConstants.swift` for category-based coloring: purple for code, pink for audio, blue for video, green for images, red for PDF, orange for text, yellow for data formats, teal for CSV, gray for archives. Background is `color.opacity(0.15)` with a subtle `color.opacity(0.25)` border stroke and full-saturation icon+text.
+
+**Smart file open** — File cards open the file in its default app on click (not reveal in Finder). Right-click context menu provides "Reveal in Finder" via `revealInFinder()`.
+
+**Code block path extraction** — When a code block contains a file path and is under 300 chars, the code block is replaced by a file card (or image preview). Longer code blocks render normally. This handles Hermes's habit of wrapping file paths in code fences.
+
+**Backtick path regex** — `splitByFilePaths()` has two regex branches: backtick-delimited paths (`` `~/path with spaces/file.ext` ``) that allow spaces, and bare paths that stop at whitespace. Hermes frequently backtick-wraps paths with spaces.
+
+**Clipboard image paste** — `ChatView` installs a local `NSEvent` monitor for Cmd+V (stored in `@State pasteMonitor`, cleaned up on disappear). When the notch is open and the pasteboard contains `.png`/`.tiff` data, `ChatViewModel.pasteFromClipboard()` calls `DocumentExtractor.extractFromClipboardImage()` to save to cache and adds a pending attachment. Normal text paste falls through. `PendingAttachmentChip` shows a 20×20 thumbnail for image attachments instead of the generic SF Symbol.
 
 ## Important gotchas
 

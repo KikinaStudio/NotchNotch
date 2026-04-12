@@ -12,6 +12,33 @@ enum AppColors {
     static let searchHighlight = Color(red: 0.75, green: 0.6, blue: 1.0).opacity(0.3)
 }
 
+// MARK: - File type colors
+
+func colorForFileType(_ type: String) -> Color {
+    switch type {
+    case "png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff", "bmp":
+        return Color(red: 0.2, green: 0.85, blue: 0.4)       // green
+    case "pdf":
+        return Color(red: 0.95, green: 0.35, blue: 0.35)     // red/coral
+    case "txt", "md":
+        return Color(red: 0.95, green: 0.65, blue: 0.15)     // orange/amber
+    case "swift", "py", "js", "ts", "rs", "go", "c", "cpp", "h", "java", "rb":
+        return Color(red: 0.65, green: 0.45, blue: 1.0)      // purple
+    case "json", "yaml", "yml", "toml", "xml":
+        return Color(red: 0.85, green: 0.75, blue: 0.15)     // yellow/olive
+    case "csv":
+        return Color(red: 0.2, green: 0.8, blue: 0.8)        // teal/cyan
+    case "mp3", "wav", "m4a", "aac", "ogg", "flac":
+        return Color(red: 0.95, green: 0.4, blue: 0.6)       // pink
+    case "mp4", "mov", "avi", "mkv":
+        return Color(red: 0.3, green: 0.55, blue: 0.95)      // blue
+    case "zip", "tar", "gz", "rar":
+        return Color(red: 0.6, green: 0.6, blue: 0.65)       // gray
+    default:
+        return Color(red: 0.6, green: 0.6, blue: 0.65)       // gray
+    }
+}
+
 // MARK: - File type icons
 
 func sfIconForFileType(_ type: String) -> String {

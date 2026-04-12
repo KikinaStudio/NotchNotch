@@ -436,6 +436,7 @@ struct MessageBubble: View {
         let fileName = url.lastPathComponent
         let ext = url.pathExtension.lowercased()
         let shortPath = shortenPath(expanded)
+        let color = colorForFileType(ext)
 
         return Button {
             NSWorkspace.shared.open(url)
@@ -448,12 +449,13 @@ struct MessageBubble: View {
                         .font(.system(size: 13, weight: .medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(.black.opacity(0.85))
+                .foregroundStyle(color)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.92))
+                .background(color.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.25), lineWidth: 0.5))
 
                 Text(shortPath)
                     .font(.system(size: 11, design: .monospaced))
@@ -496,7 +498,10 @@ struct MessageBubble: View {
     }
 
     private func splitByFilePaths(_ text: String) -> [ContentPart] {
-        let pattern = #"(?:~/|/(?:Users|tmp|var|opt|Library|Applications|Volumes|Downloads|Documents|Desktop)[^\s,;:\"')\]}>]*)"#
+        // Two branches:
+        // 1. Backtick-delimited paths (allows spaces): `~/path with spaces/file.ext`
+        // 2. Bare paths (no spaces): ~/path/file.ext
+        let pattern = #"`((?:~/|/(?:Users|tmp|var|opt|Library|Applications|Volumes|Downloads|Documents|Desktop))[^`]+)`|(?:~/|/(?:Users|tmp|var|opt|Library|Applications|Volumes|Downloads|Documents|Desktop))[^\s,;:\"')\]}>]*"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return [ContentPart(text: text, isPath: false)]
         }
@@ -506,17 +511,24 @@ struct MessageBubble: View {
         let nsText = text as NSString
 
         for match in regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)) {
-            guard let range = Range(match.range, in: text) else { continue }
-            if lastEnd < range.lowerBound {
-                let before = String(text[lastEnd..<range.lowerBound])
+            guard let fullRange = Range(match.range, in: text) else { continue }
+            if lastEnd < fullRange.lowerBound {
+                let before = String(text[lastEnd..<fullRange.lowerBound])
                 parts.append(ContentPart(text: before, isPath: false))
             }
-            var pathStr = String(text[range])
+            // Group 1 = backtick-delimited path (without backticks), else full match
+            var pathStr: String
+            if match.range(at: 1).location != NSNotFound,
+               let groupRange = Range(match.range(at: 1), in: text) {
+                pathStr = String(text[groupRange])
+            } else {
+                pathStr = String(text[fullRange])
+            }
             while pathStr.hasSuffix(".") || pathStr.hasSuffix(",") || pathStr.hasSuffix(":") {
                 pathStr = String(pathStr.dropLast())
             }
             parts.append(ContentPart(text: pathStr, isPath: true))
-            lastEnd = range.upperBound
+            lastEnd = fullRange.upperBound
         }
         if lastEnd < text.endIndex {
             parts.append(ContentPart(text: String(text[lastEnd...]), isPath: false))
