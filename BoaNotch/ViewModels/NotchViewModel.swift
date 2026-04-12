@@ -21,6 +21,7 @@ class NotchViewModel: ObservableObject {
     @Published var isRoutinesOpen = false
     @Published var isExpandedBarOpen = false
     @Published var suppressAutoClose = false
+    @Published var isMenuExpanded: Bool = false
 
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
@@ -36,6 +37,7 @@ class NotchViewModel: ObservableObject {
 
     private var hoverTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
+    private var menuCollapseTask: Task<Void, Never>?
 
     var isOpen: Bool { state == .open }
     var isClosed: Bool { state == .closed }
@@ -64,6 +66,10 @@ class NotchViewModel: ObservableObject {
     /// Whether to show the thinking indicator on the closed notch
     var isThinkingClosed: Bool {
         !isOpen && isStreaming
+    }
+
+    var isAnyPanelOpen: Bool {
+        isSettingsOpen || isSearchOpen || isRoutinesOpen
     }
 
     @Published var isStreaming = false
@@ -118,6 +124,8 @@ class NotchViewModel: ObservableObject {
 
     func close() {
         isDragTargeted = false
+        isMenuExpanded = false
+        menuCollapseTask?.cancel()
         withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)) {
             state = .closed
         }
@@ -150,6 +158,23 @@ class NotchViewModel: ObservableObject {
 
     func closeRoutines() {
         isRoutinesOpen = false
+    }
+
+    func expandMenu() {
+        isMenuExpanded = true
+        menuCollapseTask?.cancel()
+        menuCollapseTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                isMenuExpanded = false
+            }
+        }
+    }
+
+    func collapseMenu() {
+        menuCollapseTask?.cancel()
+        isMenuExpanded = false
     }
 
     func showClipperToast(_ title: String) {

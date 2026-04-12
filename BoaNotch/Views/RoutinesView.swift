@@ -57,7 +57,7 @@ struct RoutinesView: View {
             }
         }
         .padding(.top, 8)
-        .padding(.horizontal, 30)
+        .padding(.horizontal, 42)
         .padding(.bottom, 18)
     }
 

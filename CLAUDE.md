@@ -40,7 +40,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
 - `SSEParser.swift` — Legacy SSE parser from the `/v1/runs` era. Currently unused but kept for potential future streaming support.
 - `CronStore.swift` — Watches `~/.hermes/cron/jobs.json` with DispatchSource (same pattern as HermesConfig). Decodes `CronJob` array with `sortedJobs` (enabled first, soonest `next_run_at`). Fails silently to empty array if file is missing or malformed.
-- `NotchView.swift` — Root view with flanking buttons overlay beside the hardware notch (search, routines, settings — three icons, mutually exclusive). `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
+- `NotchView.swift` — Root view with burger menu overlay (right-aligned, 42pt inset matching the input bar). On hover the burger (`line.3.horizontal`) expands into three action icons (search, routines, settings) that fan out to the left via a ZStack with opacity/offset animation — all views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -80,7 +80,7 @@ The NotchNotch Clipper Chrome extension uses the identical API pattern, then pin
 
 ### Routines (cron job display)
 
-Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. Three flanking icons beside the notch: search, routines (`arrow.triangle.2.circlepath`), settings — mutually exclusive via `NotchViewModel.openRoutines()`.
+Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger menu (right-aligned overlay) reveals search, routines, and settings icons on hover — panels are mutually exclusive via `NotchViewModel.openRoutines()`, `isSearchOpen`, `isSettingsOpen`. `NotchViewModel.isMenuExpanded` drives the expand/collapse state with a 3-second auto-collapse timer (`expandMenu()`/`collapseMenu()`). `isAnyPanelOpen` computed property switches the overlay between action icons and an xmark close button.
 
 **Empty state** — two-column layout: 4 starter template cards on the left (Remind, Watch, Track, Habit), "Create your own" drop zone on the right. Tapping a template pre-fills `chatVM.draft` and switches to chat. Tapping the right zone pre-fills `"Schedule a new routine: "`. Dropping a file on the right zone attaches it, sets `routineCreationMode = true`, and pre-fills a contextual draft.
 

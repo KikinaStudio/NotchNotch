@@ -56,7 +56,7 @@ struct SearchBarView: View {
         .padding(.vertical, 6)
         .background(Color.white.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .padding(.horizontal, 38)
+        .padding(.horizontal, 42)
         .padding(.top, 36)
         .padding(.bottom, 4)
         .onAppear { isFocused = true }

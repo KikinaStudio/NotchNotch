@@ -98,7 +98,7 @@ struct NotchView: View {
                 if onboardingVM.needsOnboarding {
                     OnboardingContainerView(onboardingVM: onboardingVM)
                         .padding(.top, 36)
-                        .padding(.horizontal, 38)
+                        .padding(.horizontal, 42)
                         .padding(.bottom, 18)
                         .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
                 } else {
@@ -119,11 +119,11 @@ struct NotchView: View {
                         if notchVM.isSettingsOpen {
                             SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
                             .padding(.top, 14)
-                            .padding(.horizontal, 30)
+                            .padding(.horizontal, 42)
                             .padding(.bottom, 18)
                             .background(Color.white.opacity(0.05))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .padding(.horizontal, 30)
+                            .padding(.horizontal, 42)
                             .padding(.bottom, 18)
                             .transition(.opacity)
                         } else if notchVM.isRoutinesOpen {
@@ -155,7 +155,7 @@ struct NotchView: View {
                         } else {
                             ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
                                 .padding(.top, 4)
-                                .padding(.horizontal, 38)
+                                .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
                         }
                     }
@@ -175,52 +175,73 @@ struct NotchView: View {
             )
         )
         .overlay(alignment: .top) {
-            // Flanking buttons — beside the hardware notch, on the same line
-            if notchVM.isOpen && !onboardingVM.needsOnboarding
-                && !notchVM.isSearchOpen {
-                HStack(spacing: 0) {
-                    Spacer(minLength: notchVM.closedSize.width + 16)
+            // Flanking buttons — burger menu beside the hardware notch
+            if notchVM.isOpen && !onboardingVM.needsOnboarding {
+                HStack {
+                    Spacer()
 
-                    HStack(spacing: 14) {
-                        FlankingButton(
-                            icon: notchVM.isSettingsOpen || notchVM.isRoutinesOpen ? "xmark" : "magnifyingglass",
-                            isActive: false
-                        ) {
-                            if notchVM.isSettingsOpen {
-                                notchVM.isSettingsOpen = false
-                            } else if notchVM.isRoutinesOpen {
-                                notchVM.isRoutinesOpen = false
-                            } else {
-                                notchVM.isSearchOpen = true
-                                notchVM.isRoutinesOpen = false
-                            }
-                        }
-
-                        FlankingButton(
-                            icon: "arrow.triangle.2.circlepath",
-                            isActive: notchVM.isRoutinesOpen
-                        ) {
-                            if notchVM.isRoutinesOpen {
-                                notchVM.isRoutinesOpen = false
-                            } else {
-                                notchVM.openRoutines()
-                            }
-                        }
-
-                        FlankingButton(
-                            icon: notchVM.isSettingsOpen ? "gearshape.fill" : "gearshape",
-                            isActive: notchVM.isSettingsOpen
-                        ) {
+                    if notchVM.isAnyPanelOpen {
+                        Button {
+                            notchVM.isSettingsOpen = false
                             notchVM.isRoutinesOpen = false
-                            notchVM.isSettingsOpen.toggle()
+                            notchVM.isSearchOpen = false
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                    } else {
+                        ZStack(alignment: .trailing) {
+                            Image(systemName: "line.3.horizontal")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.25))
+                                .opacity(notchVM.isMenuExpanded ? 0 : 1)
+
+                            HStack(spacing: 12) {
+                                menuButton("magnifyingglass") {
+                                    notchVM.isSearchOpen = true
+                                    notchVM.collapseMenu()
+                                }
+                                menuButton("arrow.triangle.2.circlepath") {
+                                    notchVM.openRoutines()
+                                    notchVM.collapseMenu()
+                                }
+                                menuButton("gearshape") {
+                                    notchVM.isSettingsOpen = true
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                            .opacity(notchVM.isMenuExpanded ? 1 : 0)
+                            .offset(x: notchVM.isMenuExpanded ? 0 : 8)
+                            .allowsHitTesting(notchVM.isMenuExpanded)
+                        }
+                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: notchVM.isMenuExpanded)
+                        .onHover { hovering in
+                            if hovering && !notchVM.isMenuExpanded {
+                                notchVM.expandMenu()
+                            }
                         }
                     }
                 }
-                .padding(.horizontal, 38)
-                .padding(.top, 2)
+                .padding(.horizontal, 42)
+                .padding(.top, 6)
                 .transition(.opacity.animation(.easeIn(duration: 0.15).delay(0.1)))
             }
         }
+    }
+
+    // MARK: - Burger menu icon button
+
+    private func menuButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white.opacity(0.4))
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     // MARK: - Settings top bar spacer (buttons moved to flanking overlay)
@@ -350,28 +371,6 @@ struct NotchDropDelegate: DropDelegate {
 
     private func updateZone(info: DropInfo) {
         notchVM.activeDropZone = info.location.x < notchWidth / 2.0 ? .left : .right
-    }
-}
-
-// MARK: - Flanking button (search / settings beside notch)
-
-private struct FlankingButton: View {
-    let icon: String
-    let isActive: Bool
-    let action: () -> Void
-    @State private var hovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(isActive ? AppColors.accent : .white.opacity(hovered ? 0.5 : 0.1))
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hovered = $0 }
-        .pointingHandCursor()
     }
 }
 
