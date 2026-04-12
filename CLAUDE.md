@@ -37,10 +37,10 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 ## Key architecture
 
 - `HermesClient.swift` — Non-streaming `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). `sendResponse(input:systemContext:)` returns a `ResponseResult` with `content`, `thinkingContent`, and `toolCalls` parsed from the response `output` array. When `systemContext` is provided, `input` is sent as `[system_msg, user_msg]` array instead of a plain string. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context. `HermesError.httpErrorWithBody(Int, String)` captures the server response body on HTTP errors for actionable messages in the UI.
-- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field
+- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the `session_id` field. Also provides conversation history via `loadRecentSessions()` (max 30, last 30 days) and `messagesForSession(sessionId:)` — both read-only SQLite3 C API queries. `SessionSummary` and `SessionMessage` models live in the same file.
 - `SSEParser.swift` — Legacy SSE parser from the `/v1/runs` era. Currently unused but kept for potential future streaming support.
 - `CronStore.swift` — Watches `~/.hermes/cron/jobs.json` with DispatchSource (same pattern as HermesConfig). Decodes `CronJob` array with `sortedJobs` (enabled first, soonest `next_run_at`). Fails silently to empty array if file is missing or malformed.
-- `NotchView.swift` — Root view with burger menu overlay (right-aligned, 42pt inset matching the input bar). On hover the burger (`line.3.horizontal`) expands into three action icons (search, routines, settings) that fan out to the left via a ZStack with opacity/offset animation — all views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
+- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. Content switching uses a `Group` wrapper to help Swift's type checker with the if-else chain. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -56,7 +56,8 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 6. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
 7. `retryLastAssistant()` removes the last user+assistant pair, re-appends the user message, and calls `startRequest(input:)` to get a fresh response
 8. `editMessage(id:newContent:)` updates the user message content, truncates all subsequent messages, and calls `startRequest(input:)` to regenerate. Server-side history retains the pre-edit version (acceptable for v1). Editing is blocked while streaming.
-9. `confirmNewConversation()` calls `client.resetConversation()` to generate a fresh UUID
+9. `startNewConversation()` cancels any stream, clears messages, nils `sessionId`, and calls `resetConversation()` for a fresh UUID. `confirmNewConversation()` delegates to it (used by the confirmation dialog).
+10. Loading a historical session: `ConversationHistoryView` reads messages via `SessionStore.messagesForSession()`, converts to `ChatMessage` array, sets `chatVM.sessionId` to the session ID for `X-Hermes-Session-Id` continuity.
 
 ### Voice recording flow
 
@@ -89,6 +90,12 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 **Job list** — when jobs exist, full-width cards sorted by enabled status then `next_run_at`. Tapping a job sets `chatVM.activeRoutineContext` (routine context tag appears above input bar) and switches to chat.
 
 **Routine context** — when `activeRoutineContext` is set, `startRequest()` passes a `systemContext` string to `sendResponse()`, which converts the API `input` from a string to `[system_msg, user_msg]` array. The system message describes the job so Hermes knows which cron job the user is referring to. `routineCreationMode` uses the same mechanism for file-based routine creation (one-shot, resets after send).
+
+### Conversation history
+
+`ConversationHistoryView` — read-only browser for past Hermes sessions from `~/.hermes/state.db`. Opened via `clock.arrow.circlepath` in the burger menu. `NotchViewModel.isHistoryOpen` toggles visibility, mutually exclusive with all other panels via `openHistory()`. Sessions reload on open via `.onChange`.
+
+Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purple for Discord), title (or "Untitled"), and relative timestamp. Active session highlighted with `AppColors.accent` tint. Tapping a row loads its messages into `chatVM.messages` and sets `chatVM.sessionId` for session continuity. The [+ New] button calls `chatVM.startNewConversation()` (also accessible via the `plus.bubble` flanking button on the left side of the notch).
 
 ## Important gotchas
 

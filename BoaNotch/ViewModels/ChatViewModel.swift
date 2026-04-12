@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Combine
 
 enum VoiceState {
@@ -156,8 +157,13 @@ class ChatViewModel: ObservableObject {
 
     func confirmNewConversation() {
         showNewConversationConfirm = false
+        startNewConversation()
+    }
+
+    func startNewConversation() {
         cancelStream()
         messages.removeAll()
+        client.sessionId = nil
         client.resetConversation()
     }
 
@@ -207,6 +213,18 @@ class ChatViewModel: ObservableObject {
 
     func removeAttachment(_ id: UUID) {
         pendingAttachments.removeAll { $0.id == id }
+    }
+
+    /// Returns true if clipboard contained an image and was handled
+    func pasteFromClipboard() -> Bool {
+        let pb = NSPasteboard.general
+        let hasImageType = pb.types?.contains(where: { [.png, .tiff].contains($0) }) ?? false
+        guard hasImageType, let image = NSImage(pasteboard: pb) else { return false }
+        if let attachment = DocumentExtractor.extractFromClipboardImage(image) {
+            pendingAttachments.append(attachment)
+            return true
+        }
+        return false
     }
 
     func toggleVoiceRecord() {

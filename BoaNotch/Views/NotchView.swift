@@ -105,6 +105,8 @@ struct NotchView: View {
                     VStack(spacing: 0) {
                         if notchVM.isSettingsOpen {
                             settingsTopBar
+                        } else if notchVM.isHistoryOpen {
+                            settingsTopBar
                         } else if notchVM.isSearchOpen {
                             SearchBarView(searchVM: searchVM) {
                                 searchVM.close()
@@ -116,48 +118,63 @@ struct NotchView: View {
                             notchTopBar
                         }
 
-                        if notchVM.isSettingsOpen {
-                            SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
-                            .padding(.top, 14)
-                            .padding(.horizontal, 42)
-                            .padding(.bottom, 18)
-                            .background(Color.white.opacity(0.05))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .padding(.horizontal, 42)
-                            .padding(.bottom, 18)
-                            .transition(.opacity)
-                        } else if notchVM.isRoutinesOpen {
-                            RoutinesView(cronStore: cronStore, onSelectJob: { job in
-                                chatVM.setRoutineContext(job)
-                                notchVM.isRoutinesOpen = false
-                            }, onSelectTemplate: { draft in
-                                chatVM.draft = draft
-                                notchVM.isRoutinesOpen = false
-                            }, onCreateOwn: {
-                                chatVM.draft = "Schedule a new routine: "
-                                notchVM.isRoutinesOpen = false
-                            }, onDropFile: { providers in
-                                for provider in providers {
-                                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
-                                        guard let data = data as? Data,
-                                              let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
-                                        let attachment = DocumentExtractor.extract(from: url)
-                                        DispatchQueue.main.async {
-                                            chatVM.pendingAttachments.append(attachment)
-                                            chatVM.draft = "What routine would make sense for this file?"
-                                            chatVM.routineCreationMode = true
-                                            notchVM.isRoutinesOpen = false
-                                        }
-                                    }
-                                }
-                            })
-                            .transition(.opacity)
-                        } else {
-                            ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
-                                .padding(.top, 4)
+                        Group {
+                            if notchVM.isSettingsOpen {
+                                SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
+                                .padding(.top, 14)
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
+                                .background(Color.white.opacity(0.05))
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .padding(.horizontal, 42)
+                                .padding(.bottom, 18)
+                                .transition(.opacity)
+                            } else if notchVM.isRoutinesOpen {
+                                RoutinesView(cronStore: cronStore, onSelectJob: { job in
+                                    chatVM.setRoutineContext(job)
+                                    notchVM.isRoutinesOpen = false
+                                }, onSelectTemplate: { draft in
+                                    chatVM.draft = draft
+                                    notchVM.isRoutinesOpen = false
+                                }, onCreateOwn: {
+                                    chatVM.draft = "Schedule a new routine: "
+                                    notchVM.isRoutinesOpen = false
+                                }, onDropFile: { providers in
+                                    for provider in providers {
+                                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                                            guard let data = data as? Data,
+                                                  let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
+                                            let attachment = DocumentExtractor.extract(from: url)
+                                            DispatchQueue.main.async {
+                                                chatVM.pendingAttachments.append(attachment)
+                                                chatVM.draft = "What routine would make sense for this file?"
+                                                chatVM.routineCreationMode = true
+                                                notchVM.isRoutinesOpen = false
+                                            }
+                                        }
+                                    }
+                                })
+                                .transition(.opacity)
+                            } else if notchVM.isHistoryOpen {
+                                ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM)
+                                    .padding(.top, 14)
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 18)
+                                    .background(Color.white.opacity(0.05))
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 18)
+                                    .transition(.opacity)
+                            } else {
+                                ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
+                                    .padding(.top, 4)
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 18)
+                            }
                         }
+                    }
+                    .onChange(of: notchVM.isHistoryOpen) { _, isOpen in
+                        if isOpen { sessionStore.loadRecentSessions() }
                     }
                     .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
                 }
@@ -178,6 +195,18 @@ struct NotchView: View {
             // Flanking buttons — burger menu beside the hardware notch
             if notchVM.isOpen && !onboardingVM.needsOnboarding {
                 HStack {
+                    if !notchVM.isAnyPanelOpen {
+                        Button {
+                            chatVM.startNewConversation()
+                        } label: {
+                            Image(systemName: "plus.bubble")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                    }
+
                     Spacer()
 
                     if notchVM.isAnyPanelOpen {
@@ -185,6 +214,7 @@ struct NotchView: View {
                             notchVM.isSettingsOpen = false
                             notchVM.isRoutinesOpen = false
                             notchVM.isSearchOpen = false
+                            notchVM.isHistoryOpen = false
                         } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14, weight: .medium))
@@ -200,6 +230,10 @@ struct NotchView: View {
                                 .opacity(notchVM.isMenuExpanded ? 0 : 1)
 
                             HStack(spacing: 12) {
+                                menuButton("clock.arrow.circlepath") {
+                                    notchVM.openHistory()
+                                    notchVM.collapseMenu()
+                                }
                                 menuButton("magnifyingglass") {
                                     notchVM.isSearchOpen = true
                                     notchVM.collapseMenu()

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import PDFKit
 
 struct DocumentExtractor {
@@ -49,6 +50,33 @@ struct DocumentExtractor {
             fileType: fileType,
             textContent: truncate(textContent),
             fileURL: url
+        )
+    }
+
+    /// Save an NSImage from clipboard to Hermes cache, return an Attachment
+    static func extractFromClipboardImage(_ image: NSImage) -> Attachment? {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+
+        let filename = "clipboard_\(UUID().uuidString.prefix(12).lowercased()).png"
+        let dest = hermesCacheDir.appendingPathComponent(filename)
+
+        do {
+            try pngData.write(to: dest)
+        } catch {
+            return nil
+        }
+
+        let textContent = "[Image attached at: \(dest.path)]\nPlease analyze this image using your vision tool."
+
+        return Attachment(
+            fileName: filename,
+            fileType: "png",
+            textContent: textContent,
+            fileURL: dest
         )
     }
 

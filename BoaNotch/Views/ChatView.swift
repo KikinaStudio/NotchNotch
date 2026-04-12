@@ -6,6 +6,7 @@ struct ChatView: View {
     @ObservedObject var searchVM: SearchViewModel
     @ObservedObject var hermesConfig: HermesConfig
     @FocusState private var isInputFocused: Bool
+    @State private var pasteMonitor: Any?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -166,7 +167,23 @@ struct ChatView: View {
 
             inputBar
         }
-        .onAppear { isInputFocused = true }
+        .onAppear {
+            isInputFocused = true
+            pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "v" {
+                    if notchVM.isOpen && chatVM.pasteFromClipboard() {
+                        return nil
+                    }
+                }
+                return event
+            }
+        }
+        .onDisappear {
+            if let monitor = pasteMonitor {
+                NSEvent.removeMonitor(monitor)
+                pasteMonitor = nil
+            }
+        }
     }
 
     private func routineContextTag(_ job: CronJob) -> some View {
@@ -370,10 +387,22 @@ struct PendingAttachmentChip: View {
     let attachment: Attachment
     let onRemove: () -> Void
 
+    private static let imageTypes: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic"]
+
     var body: some View {
         HStack(spacing: 4) {
-            Image(systemName: sfIconForFileType(attachment.fileType))
-                .font(.system(size: 9))
+            if Self.imageTypes.contains(attachment.fileType),
+               let url = attachment.fileURL,
+               let nsImage = NSImage(contentsOf: url) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 20, height: 20)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            } else {
+                Image(systemName: sfIconForFileType(attachment.fileType))
+                    .font(.system(size: 9))
+            }
             Text(attachment.fileName)
                 .font(.system(size: 10))
                 .lineLimit(1)
@@ -389,5 +418,4 @@ struct PendingAttachmentChip: View {
         .background(.white.opacity(0.06))
         .clipShape(Capsule())
     }
-
 }

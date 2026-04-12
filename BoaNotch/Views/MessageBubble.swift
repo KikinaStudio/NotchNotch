@@ -215,7 +215,24 @@ struct MessageBubble: View {
             ForEach(Array(blocks.enumerated()), id: \.offset) { idx, block in
                 switch block {
                 case .code(let lang, let code):
-                    codeBlock(language: lang, code: code)
+                    let codeParts = splitByFilePaths(code)
+                    let hasPath = codeParts.contains(where: { $0.isPath })
+                    // If the code block is just a path (possibly with a short command prefix), replace with file card/image
+                    if hasPath && code.trimmingCharacters(in: .whitespacesAndNewlines).count < 300 {
+                        ForEach(Array(codeParts.enumerated()), id: \.offset) { _, part in
+                            if part.isPath {
+                                let expanded = (part.text as NSString).expandingTildeInPath
+                                let ext = URL(fileURLWithPath: expanded).pathExtension.lowercased()
+                                if imageExtensions.contains(ext) {
+                                    imagePreview(part.text)
+                                } else {
+                                    fileCard(part.text)
+                                }
+                            }
+                        }
+                    } else {
+                        codeBlock(language: lang, code: code)
+                    }
                 case .blockquote(let text):
                     HStack(alignment: .top, spacing: 8) {
                         RoundedRectangle(cornerRadius: 1)
@@ -232,7 +249,13 @@ struct MessageBubble: View {
                     let parts = splitByFilePaths(text)
                     ForEach(Array(parts.enumerated()), id: \.offset) { _, part in
                         if part.isPath {
-                            fileCard(part.text)
+                            let expanded = (part.text as NSString).expandingTildeInPath
+                            let ext = URL(fileURLWithPath: expanded).pathExtension.lowercased()
+                            if imageExtensions.contains(ext) {
+                                imagePreview(part.text)
+                            } else {
+                                fileCard(part.text)
+                            }
                         } else if !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
@@ -368,6 +391,43 @@ struct MessageBubble: View {
         return final.isEmpty ? [.text(text)] : final
     }
 
+    private let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "svg", "tiff", "bmp"]
+
+    // MARK: - Inline image preview
+
+    @ViewBuilder
+    private func imagePreview(_ path: String) -> some View {
+        let expanded = (path as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded)
+        let shortPath = shortenPath(expanded)
+
+        if let nsImage = NSImage(contentsOf: url) {
+            VStack(alignment: .leading, spacing: 3) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 280, maxHeight: 200)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.1), lineWidth: 0.5))
+                    .onTapGesture { NSWorkspace.shared.open(url) }
+                    .contextMenu {
+                        Button("Open in default app") { NSWorkspace.shared.open(url) }
+                        Button("Reveal in Finder") { revealInFinder(path) }
+                    }
+
+                Text(shortPath)
+                    .font(.system(size: 11, design: .monospaced))
+                    .italic()
+                    .foregroundStyle(.white.opacity(0.35))
+                    .lineLimit(1)
+                    .padding(.horizontal, 4)
+            }
+            .pointingHandCursor()
+        } else {
+            fileCard(path)
+        }
+    }
+
     // MARK: - File card (white pill + path below)
 
     private func fileCard(_ path: String) -> some View {
@@ -378,7 +438,7 @@ struct MessageBubble: View {
         let shortPath = shortenPath(expanded)
 
         return Button {
-            revealInFinder(path)
+            NSWorkspace.shared.open(url)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
@@ -406,6 +466,9 @@ struct MessageBubble: View {
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
+        .contextMenu {
+            Button("Reveal in Finder") { revealInFinder(path) }
+        }
     }
 
     // MARK: - Attachment card (same style, subtler)

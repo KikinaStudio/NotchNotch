@@ -68,8 +68,10 @@ class NotchViewModel: ObservableObject {
         !isOpen && isStreaming
     }
 
+    @Published var isHistoryOpen = false
+
     var isAnyPanelOpen: Bool {
-        isSettingsOpen || isSearchOpen || isRoutinesOpen
+        isSettingsOpen || isSearchOpen || isRoutinesOpen || isHistoryOpen
     }
 
     @Published var isStreaming = false
@@ -154,6 +156,14 @@ class NotchViewModel: ObservableObject {
         isRoutinesOpen = true
         isSettingsOpen = false
         isSearchOpen = false
+        isHistoryOpen = false
+    }
+
+    func openHistory() {
+        isHistoryOpen = true
+        isSettingsOpen = false
+        isSearchOpen = false
+        isRoutinesOpen = false
     }
 
     func closeRoutines() {
