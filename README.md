@@ -92,11 +92,43 @@ First launch walks new users through Hermes installation, AI provider setup, mod
 ### Welcome screen
 Before the first message, notchnotch shows the logo with "notch notch ! Who's there ? Your futchure." — disappears after first input.
 
-### Copy & Retry
-Hover any completed assistant message to reveal action buttons: **Copy** (clipboard with checkmark feedback) and **Retry** (re-sends the last user message for a fresh response).
+### Routines — cron job creation & monitoring
+Open the Routines panel from the burger menu to browse, create, and manage Hermes cron jobs:
 
-### Smart file paths
-File paths in responses render as clickable cards with SF Symbol icons. Click to reveal in Finder.
+- **Template browser** — 25 ready-made templates across 7 categories (Personal, Professional, Research, Travel, Health, Finance, Creator). Pick a category, select a template, fill in the form fields, and hit "Create routine" — the composed prompt is sent to Hermes, which creates the cron job via its `cronjob` tool.
+- **Job monitoring** — active jobs display as cards with status dot (green=scheduled, orange=paused, pulsing violet=running), human-readable schedule ("Daily at 9 AM"), run count, and next execution time. Cards highlight on hover.
+- **Quick actions** — right-click any job card to change its schedule, pause/resume, or remove it. Actions are sent as natural language through the chat — Hermes handles the rest.
+- **"Create your own"** — skip templates and describe your routine in plain English.
+
+All cron management flows through the chat. NotchNotch never calls the cron API directly.
+
+### Brain — browse Hermes knowledge
+Three-tab panel (Memory, Skills, Wiki) for browsing what Hermes knows:
+
+- **Memory** — cards parsed from `~/.hermes/memories/MEMORY.md` and `USER.md`, split on `§` separators. Each card shows a thematic block (facts, project context, preferences).
+- **Skills** — lists all installed skills from `~/.hermes/skills/` with category badges and descriptions. Tap for full SKILL.md detail view.
+- **Wiki** — Karpathy-style LLM wiki from `~/.hermes/brain/wiki/`. Dashboard shows article count and last-updated timestamp. Each article has an "Ask" button that sends a question directly to Hermes via chat — no article content preview, the wiki tab is a launchpad, not a reader.
+
+### Conversation history
+Browse past Hermes sessions from the history panel. Sessions show color-coded source icon (orange=CLI, blue=Telegram, purple=Discord), title, and relative timestamp. Tap to resume a session with full context. The **[+ New]** button starts a fresh conversation — also accessible via the `plus.bubble` icon on the left side of the notch.
+
+### Edit, copy & retry
+Hover any message to reveal action buttons:
+- **Edit** — rewrite a sent prompt or answer. Truncates the conversation from that point and regenerates.
+- **Copy** — copies to clipboard with checkmark feedback.
+- **Retry** — re-sends the last user message for a fresh response.
+
+### Inline images & smart file paths
+Image paths in responses (png, jpg, gif…) render as **inline thumbnails** (280×200, rounded corners). Click to open; right-click for "Reveal in Finder". **Paste images** from clipboard with Cmd+V — they're saved to `~/.hermes/cache/images/` and attached to the message.
+
+Non-image file paths render as color-coded cards (purple=code, pink=audio, blue=video, green=image, red=PDF…). Click to open in default app.
+
+### Expanded bar
+When the notch is open, a slim bar below the input shows:
+- **Model name** and provider
+- **Reasoning effort** selector (none → xhigh)
+- **Context window gauge** — token usage from the last request
+- **Incognito mode** toggle (`store: false` — messages aren't saved server-side)
 
 ### Streaming indicator
 - **Closed**: notch extends slightly with a braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`)
@@ -130,6 +162,9 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |       MessageBubble: thinking/tool toggles, code blocks, file cards
     |       Input bar: [+file] [mic] [...more] [send/spinner]
     |     -- OR --
+    |     RoutinesView: job cards + template browser
+    |     BrainView: memory cards, skills, wiki
+    |     ConversationHistoryView: session browser
     |     SettingsView: agent config + session status
     |
     +-- Overlays
@@ -167,6 +202,7 @@ BoaNotch/
     +-- Models/
     |   +-- ChatMessage.swift            # role, content, thinking, toolCalls
     |   +-- Attachment.swift             # fileName, fileType, textContent, fileURL
+    |   +-- RoutineTemplates.swift       # 25 templates, 7 categories, {{placeholder}} substitution
     |
     +-- ViewModels/
     |   +-- NotchViewModel.swift         # State machine (closed/open/toast)
@@ -178,6 +214,10 @@ BoaNotch/
     |   +-- ChatView.swift               # Scroll + welcome screen + input bar
     |   +-- MessageBubble.swift          # Thinking/tool toggles, code, file cards, copy/retry
     |   +-- SearchBarView.swift          # Search input + match counter
+    |   +-- RoutinesView.swift            # Job cards + template browser toggle
+    |   +-- TemplateBrowserView.swift    # 3-screen drill-down: categories → templates → form
+    |   +-- ConversationHistoryView.swift # Session browser from state.db
+    |   +-- BrainView.swift              # Memory/Skills/Wiki tabs
     |   +-- SettingsView.swift           # Agent config + session status
     |   +-- ExpandedBarView.swift        # Profile, model, reasoning (Menu), incognito
     |   +-- NotchShape.swift, ToastView.swift, DropOverlay.swift
@@ -202,7 +242,9 @@ BoaNotch/
         +-- HermesClient.swift           # /v1/responses API client
         +-- SSEParser.swift              # Legacy SSE parser (unused)
         +-- SessionStore.swift           # Auto-detect Telegram session from state.db
+        +-- CronStore.swift               # jobs.json watcher, CronJob model
         +-- HermesConfig.swift           # config.yaml watcher, provider-aware model list
+        +-- ClipperListener.swift        # HTTP listener for NotchNotch Clipper extension
         +-- SpeechTranscriber.swift      # SFSpeechRecognizer, French locale
         +-- DocumentExtractor.swift      # 40+ file types, 50K char limit
         +-- AudioRecorder.swift          # AVAudioRecorder, M4A
@@ -393,7 +435,7 @@ Timeouts: 300s request, 600s resource.
 - **No local message history on restart** — the UI starts blank after relaunch, but Hermes preserves full conversation context server-side via the Responses API. Your agent remembers everything from previous turns.
 - **Fixed notch size** — 580x340pt. Dynamic height and drag-to-resize are planned.
 - **Hardcoded localhost:8642** — no UI to change the Hermes URL.
-- **No conversation history UI** — notchnotch can't browse past sessions or reload old conversations yet. Hermes stores full session history in `state.db`.
+- **Read-only cron management** — routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
 - **Tool detection is heuristic** — some tool output may leak into the response or vice versa. Post-processing fallback catches most cases.
 - **Unsigned** — triggers Gatekeeper. Use `xattr -cr` or `brew install --no-quarantine`.
 
@@ -416,7 +458,7 @@ Timeouts: 300s request, 600s resource.
 
 - [x] Flanking search/settings buttons beside physical notch
 - [ ] Dynamic notch height (auto-grow with content, drag handle)
-- [ ] Conversation history UI (browse and reload sessions from Hermes `state.db`)
+- [x] Conversation history UI (browse and reload sessions from Hermes `state.db`)
 - [ ] Memory provider selection UI (choose among Hermes's 6 external memory providers)
 - [ ] Auto-update via Sparkle
 - [ ] Universal binary (requires Xcode)
