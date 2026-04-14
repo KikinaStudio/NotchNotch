@@ -159,9 +159,16 @@ struct TemplateBrowserView: View {
                     .frame(width: 20)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(template.title)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                    HStack(spacing: 4) {
+                        Text(template.title)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.7))
+                        if template.deliver == "local" {
+                            Image(systemName: "bell.badge")
+                                .font(.system(size: 9))
+                                .foregroundStyle(AppColors.accent)
+                        }
+                    }
 
                     Text(template.subtitle)
                         .font(.system(size: 10))

@@ -105,27 +105,29 @@ extension RoutineCategory {
             """
         ),
         RoutineTemplate(
-            id: "stock-alert",
-            icon: "bag",
-            title: "Stock / Restock Alert",
-            subtitle: "Get notified when a product is back in stock",
-            schedule: "every day at 10am and 4pm",
-            deliver: "telegram",
+            id: "package-tracker",
+            icon: "shippingbox",
+            title: "Package Tracker",
+            subtitle: "Get notified in the notch when a package status changes",
+            schedule: "every 2h",
+            deliver: "local",
             inputs: [
-                TemplateInput(id: "product_name", label: "Product name", type: .freeText(placeholder: "PS5 Pro"), required: true),
-                TemplateInput(id: "product_url", label: "Product URL", type: .freeText(placeholder: "https://..."), required: true),
+                TemplateInput(id: "tracking_number", label: "Tracking number", type: .freeText(placeholder: "3SKABA1234567"), required: true),
+                TemplateInput(id: "carrier", label: "Carrier", type: .picker(options: ["PostNL", "DHL", "UPS", "FedEx", "Colissimo", "other"]), required: true),
             ],
             promptTemplate: """
-            Check if "{{product_name}}" is currently in stock at: {{product_url}}
+            Check the current status of tracking number {{tracking_number}} with carrier {{carrier}}.
 
-            Use the browser to visit the page. Look for availability indicators (add to cart button, "in stock" text, or similar).
+            Use the browser to visit the carrier's tracking page and read the latest status.
 
-            If the product appears available, report:
-            - "{{product_name}} is back in stock"
-            - The URL
-            - The current price if visible
+            Compare the status to what you reported last time (check memory or your previous runs for this job).
 
-            If out of stock or unavailable, respond with [SILENT].
+            If the status has NOT changed since last check, respond with exactly: [SILENT]
+
+            If the status HAS changed, respond with a concise 2-3 line update:
+            - New status (in transit / out for delivery / delivered / exception)
+            - Location and timestamp if available
+            - Next expected step
             """
         ),
         RoutineTemplate(
@@ -154,33 +156,30 @@ extension RoutineCategory {
 
     static let professional = RoutineCategory(id: "professional", icon: "briefcase", title: "Professional", templates: [
         RoutineTemplate(
-            id: "competitor-watch",
-            icon: "binoculars",
-            title: "Competitor Watch",
-            subtitle: "Weekly roundup of competitor activity",
-            schedule: "every Monday at 9am",
-            deliver: "telegram",
+            id: "competitor-alert",
+            icon: "exclamationmark.triangle",
+            title: "Competitor Alert",
+            subtitle: "Get notified the moment a competitor ships or announces something",
+            schedule: "every 4h",
+            deliver: "local",
             inputs: [
                 TemplateInput(id: "competitors", label: "Competitors", type: .freeText(placeholder: "Notion, Linear, Coda..."), required: true),
-                TemplateInput(id: "industry", label: "Industry", type: .freeText(placeholder: "productivity software"), required: true),
+                TemplateInput(id: "keywords", label: "Keywords to watch", type: .freeText(placeholder: "launch, pricing, funding, acquires..."), required: true),
             ],
             promptTemplate: """
-            Search the web for news and updates from the past 7 days about these companies: {{competitors}}.
+            Search the web for any news from the past 4 hours about these companies: {{competitors}}.
 
-            For each company, look for:
-            - New product launches or feature announcements
-            - Blog posts or press releases
-            - Notable social media activity
-            - Hiring trends or leadership changes
+            Focus on these keywords: {{keywords}}. These indicate the kind of move that matters to me.
 
-            Organize by company. For each item found:
-            - One-line summary
+            If nothing matching those keywords was announced in the last 4 hours, respond with exactly: [SILENT]
+
+            If something worth flagging was announced, respond with a punchy alert:
+            - Which company
+            - One-line summary of what they did
             - Source URL
-            - Date if available
+            - Why it matters (one sentence)
 
-            If nothing notable was found for a company, say "No significant updates this week."
-
-            Industry context: {{industry}}. Prioritize items that could affect competitive positioning.
+            Do NOT summarize routine blog posts or social activity — only ship events, pricing changes, funding, acquisitions, or competitive moves.
             """
         ),
         RoutineTemplate(
@@ -293,28 +292,30 @@ extension RoutineCategory {
 
     static let research = RoutineCategory(id: "research", icon: "magnifyingglass", title: "Research", templates: [
         RoutineTemplate(
-            id: "arxiv-paper-watch",
-            icon: "doc.text",
-            title: "Arxiv / Paper Watch",
-            subtitle: "Daily digest of new papers in your field",
-            schedule: "every weekday at 8am",
-            deliver: "telegram",
+            id: "arxiv-alert",
+            icon: "bell.badge",
+            title: "Arxiv Alert",
+            subtitle: "Get pinged only when a paper you'd actually read appears",
+            schedule: "every 6h",
+            deliver: "local",
             inputs: [
-                TemplateInput(id: "research_topics", label: "Research topics", type: .freeText(placeholder: "RLHF, tool-using agents..."), required: true),
-                TemplateInput(id: "max_papers", label: "Max papers", type: .number(placeholder: "5", defaultValue: 5), required: false),
+                TemplateInput(id: "research_topics", label: "Research topics", type: .freeText(placeholder: "RLHF, tool-using agents, mech interp..."), required: true),
+                TemplateInput(id: "must_read_authors", label: "Must-read authors (optional)", type: .freeText(placeholder: "Karpathy, Schulman, Olah..."), required: false),
             ],
             promptTemplate: """
-            Search the web for new academic papers published in the last 24 hours on: {{research_topics}}.
+            Search arxiv.org, Semantic Scholar, and Google Scholar for papers posted in the last 6 hours on: {{research_topics}}.
 
-            Check arxiv.org, Google Scholar, and Semantic Scholar.
+            Also flag anything by these authors, regardless of topic: {{must_read_authors}}.
 
-            Select the top {{max_papers}} most relevant papers. For each:
+            Apply a strict bar: only papers that look genuinely novel (new method, surprising result, or a must-read author) make the cut. Ignore incremental benchmarks, survey papers, and rehashes.
+
+            If nothing passes the bar in the last 6 hours, respond with exactly: [SILENT]
+
+            If something does, respond with a single alert:
             - Title
-            - Authors (first author + et al. if many)
-            - One-paragraph summary of the contribution (what they did, what they found, why it matters)
-            - Link
-
-            If no new relevant papers were found today, respond with [SILENT].
+            - First author et al.
+            - Two-sentence summary of the key contribution
+            - arxiv link
             """
         ),
         RoutineTemplate(
@@ -371,33 +372,31 @@ extension RoutineCategory {
 
     static let travel = RoutineCategory(id: "travel", icon: "airplane", title: "Travel", templates: [
         RoutineTemplate(
-            id: "flight-price-watch",
-            icon: "airplane.departure",
-            title: "Flight Price Watch",
-            subtitle: "Daily check on flight prices for your trip",
-            schedule: "every day at 8am",
-            deliver: "telegram",
+            id: "flight-price-drop-alert",
+            icon: "arrow.down.circle",
+            title: "Flight Price Drop Alert",
+            subtitle: "Only pings you when a flight hits your target price",
+            schedule: "every 3h",
+            deliver: "local",
             inputs: [
                 TemplateInput(id: "origin", label: "From", type: .freeText(placeholder: "Paris CDG"), required: true),
                 TemplateInput(id: "destination", label: "To", type: .freeText(placeholder: "Tokyo NRT"), required: true),
                 TemplateInput(id: "travel_dates", label: "Travel dates", type: .freeText(placeholder: "July 15-22"), required: true),
-                TemplateInput(id: "max_price", label: "Max price", type: .freeText(placeholder: "800\u{20AC}"), required: true),
+                TemplateInput(id: "target_price", label: "Target price", type: .freeText(placeholder: "800\u{20AC}"), required: true),
             ],
             promptTemplate: """
-            Search the web for current flight prices from {{origin}} to {{destination}} around {{travel_dates}}.
+            Search Google Flights, Skyscanner, or Kayak for current economy fares from {{origin}} to {{destination}} around {{travel_dates}}.
 
-            Check Google Flights, Skyscanner, or Kayak for the best available prices in economy class.
+            Compare the cheapest fare found to my target of {{target_price}}.
 
-            Report:
-            - Cheapest price found and airline
-            - Whether this is a good price or not (compare to typical range if visible)
-            - URL to book or continue searching
+            If the cheapest fare is ABOVE {{target_price}}, respond with exactly: [SILENT]
 
-            If all prices are above {{max_price}}, respond with:
-            "Still above {{max_price}}. Cheapest today: [price]."
+            If the cheapest fare is AT OR BELOW {{target_price}}, respond with a short alert:
+            - 🎉 Price drop: [price] on [airline]
+            - Departure and return dates
+            - Booking URL
 
-            If a price is at or below {{max_price}}, respond with:
-            "🎉 Price alert! [price] on [airline]. Book now: [url]"
+            Only fire when the threshold is actually crossed — do not send status updates or "still above" messages.
             """
         ),
         RoutineTemplate(
@@ -463,28 +462,31 @@ extension RoutineCategory {
 
     static let health = RoutineCategory(id: "health", icon: "heart", title: "Health", templates: [
         RoutineTemplate(
-            id: "smart-break-reminder",
-            icon: "figure.stand",
-            title: "Smart Break Reminder",
-            subtitle: "Varied break reminders every 2 hours",
-            schedule: "every 2 hours on weekdays (10am-4pm)",
-            deliver: "telegram",
+            id: "screen-time-alert",
+            icon: "eye.trianglebadge.exclamationmark",
+            title: "Screen Time Alert",
+            subtitle: "A friendly nudge in the notch to look away and reset",
+            schedule: "every 90m on weekdays (9am-7pm)",
+            deliver: "local",
             inputs: [
                 TemplateInput(id: "style", label: "Style", type: .picker(options: ["gentle", "coach", "fun"]), required: true),
+                TemplateInput(id: "focus_today", label: "What are you focused on today? (optional)", type: .freeText(placeholder: "Ship the new feature, deep research day..."), required: false),
             ],
             promptTemplate: """
-            Generate a unique break reminder. Never repeat the same message.
+            Generate a unique 90-minute screen-break nudge. Never repeat the same message.
 
-            Style: {{style}}.
+            Style: {{style}}. Today's focus: {{focus_today}}.
 
-            Include ONE of these (rotate, never the same two days in a row):
-            - A 1-minute stretching suggestion (describe the stretch)
-            - A hydration reminder with a fun fact about water
-            - A breathing exercise (box breathing, 4-7-8, etc. — describe the steps)
-            - An eye rest suggestion (20-20-20 rule or similar)
-            - A posture check with a quick correction tip
+            Pick ONE of these (rotate, never the same back-to-back):
+            - A 60-second stretch (describe it)
+            - An eye-rest suggestion (20-20-20 rule or a short distant-gaze)
+            - A hydration nudge with a small fun fact
+            - A 4-7-8 or box-breathing micro-session (1 round, describe it)
+            - A posture reset with one specific correction
 
-            Keep it to 3-4 lines. Warm and human. Not corporate wellness spam.
+            Keep it 2-3 lines. Warm. If today's focus is set, reference it naturally in one line. No corporate wellness tone.
+
+            Always deliver — never respond with [SILENT].
             """
         ),
         RoutineTemplate(
@@ -518,28 +520,32 @@ extension RoutineCategory {
 
     static let finance = RoutineCategory(id: "finance", icon: "chart.line.uptrend.xyaxis", title: "Finance", templates: [
         RoutineTemplate(
-            id: "exchange-rate-alert",
-            icon: "dollarsign.arrow.circlepath",
-            title: "Exchange Rate Alert",
-            subtitle: "Daily currency rate with threshold alerts",
-            schedule: "every weekday at 8am",
-            deliver: "telegram",
+            id: "price-alert",
+            icon: "chart.line.uptrend.xyaxis",
+            title: "Price Alert",
+            subtitle: "Get pinged when a stock, crypto, or currency crosses a threshold",
+            schedule: "every 30m on weekdays (8am-10pm)",
+            deliver: "local",
             inputs: [
-                TemplateInput(id: "from_currency", label: "From", type: .freeText(placeholder: "EUR"), required: true),
-                TemplateInput(id: "to_currency", label: "To", type: .freeText(placeholder: "USD"), required: true),
-                TemplateInput(id: "alert_threshold", label: "Alert threshold (optional)", type: .freeText(placeholder: "1.15"), required: false),
+                TemplateInput(id: "asset", label: "Asset", type: .freeText(placeholder: "BTC, AAPL, EUR/USD..."), required: true),
+                TemplateInput(id: "direction", label: "Direction", type: .picker(options: ["above", "below"]), required: true),
+                TemplateInput(id: "threshold", label: "Threshold", type: .freeText(placeholder: "10000"), required: true),
+                TemplateInput(id: "unit", label: "Unit", type: .freeText(placeholder: "$, \u{20AC}, USD..."), required: true),
             ],
             promptTemplate: """
-            Search the web for the current exchange rate from {{from_currency}} to {{to_currency}}.
+            Search the web for the current price of {{asset}}.
 
-            Report:
-            - Current rate
-            - Direction of change vs yesterday (up/down/stable)
-            - Percentage change over the past week
+            Check if the current price is {{direction}} {{threshold}}{{unit}}.
 
-            If the rate crosses {{alert_threshold}}, mark as "🎯 ALERT: threshold reached."
+            If the threshold has NOT been crossed, respond with exactly: [SILENT]
 
-            Keep it to 3 lines. Just the numbers and direction.
+            If the threshold HAS been crossed, respond with a short alert:
+            - 🎯 {{asset}} is {{direction}} {{threshold}}{{unit}}
+            - Current price
+            - Change over the last 24h (% and direction)
+            - One sentence on what might be driving the move, if there's obvious news
+
+            Keep it 3-4 lines max.
             """
         ),
         RoutineTemplate(
@@ -597,29 +603,29 @@ extension RoutineCategory {
 
     static let creator = RoutineCategory(id: "creator", icon: "paintbrush", title: "Creator", templates: [
         RoutineTemplate(
-            id: "trend-watch",
-            icon: "flame",
-            title: "Trend Watch",
-            subtitle: "Twice-weekly trends in your creative domain",
-            schedule: "every Monday and Thursday at 9am",
-            deliver: "telegram",
+            id: "mention-alert",
+            icon: "at.badge.plus",
+            title: "Mention Alert",
+            subtitle: "Get pinged the moment someone mentions your brand, work, or handle",
+            schedule: "every 2h",
+            deliver: "local",
             inputs: [
-                TemplateInput(id: "domain", label: "Domain", type: .freeText(placeholder: "UI design, photography..."), required: true),
-                TemplateInput(id: "platforms", label: "Platforms", type: .freeText(placeholder: "Dribbble, Behance, Twitter..."), required: true),
+                TemplateInput(id: "search_terms", label: "Search terms", type: .freeText(placeholder: "your name, brand, project, @handle..."), required: true),
+                TemplateInput(id: "platforms", label: "Platforms", type: .freeText(placeholder: "Twitter/X, Reddit, Hacker News, blogs..."), required: true),
             ],
             promptTemplate: """
-            Search the web for trending topics, styles, and conversations in {{domain}} from the past 3-4 days.
+            Search the web for new mentions of {{search_terms}} posted in the last 2 hours.
 
-            Check {{platforms}} and any relevant blogs, forums, or aggregators.
+            Check {{platforms}} and any relevant public feeds, forums, or aggregators.
 
-            Provide:
-            1. Top 3 trends or hot topics (one-line each with context)
-            2. One piece of inspiration (a notable project, post, or work that stood out)
-            3. One emerging tool, technique, or resource worth knowing about
+            If no fresh mention appeared in the last 2 hours, respond with exactly: [SILENT]
 
-            Keep it to 10 lines. Be specific — names, links, examples. Not generic advice.
+            If there are new mentions, respond with a short alert per mention (max 3):
+            - Source (platform + URL)
+            - One-line excerpt or paraphrase
+            - Sentiment (positive / neutral / critical)
 
-            If nothing notable happened, respond with [SILENT].
+            Be specific — do not include stale or off-topic hits.
             """
         ),
         RoutineTemplate(

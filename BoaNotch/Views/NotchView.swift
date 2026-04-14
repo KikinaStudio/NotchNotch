@@ -58,7 +58,16 @@ struct NotchView: View {
                             insertion: .move(edge: .top).combined(with: .opacity),
                             removal: .opacity
                         ))
-                        .onTapGesture { notchVM.open() }
+                        .onTapGesture {
+                            if let pending = notchVM.pendingCronOutput {
+                                notchVM.pendingCronOutput = nil
+                                chatVM.messages.append(ChatMessage(
+                                    role: .assistant,
+                                    content: "**\(pending.jobName)**\n\n\(pending.fullContent)"
+                                ))
+                            }
+                            notchVM.open()
+                        }
                 }
 
             }

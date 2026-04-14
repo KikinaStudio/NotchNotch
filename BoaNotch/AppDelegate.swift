@@ -47,6 +47,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerTripleTapMonitor()
         setupMenuBarItem()
         startClipperListener()
+        wireCronOutputToasts()
+    }
+
+    private func wireCronOutputToasts() {
+        cronStore.onNewOutput = { [weak self] jobName, content in
+            DispatchQueue.main.async {
+                self?.notchVM.showCronToast(jobName: jobName, fullContent: content)
+            }
+        }
     }
 
     private func startClipperListener() {

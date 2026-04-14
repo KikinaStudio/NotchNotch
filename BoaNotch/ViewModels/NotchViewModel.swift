@@ -77,6 +77,10 @@ class NotchViewModel: ObservableObject {
 
     @Published var isStreaming = false
 
+    /// When set, a tap on the current toast expands the output into chat.
+    /// Cleared whenever a new toast replaces it or the chat consumes it.
+    var pendingCronOutput: (jobName: String, fullContent: String)?
+
     var currentWidth: CGFloat {
         if isOpen { return openSize.width }
         return isThinkingClosed ? closedSize.width + 36 : closedSize.width
@@ -137,6 +141,7 @@ class NotchViewModel: ObservableObject {
 
     func showToast(_ message: String) {
         toastTask?.cancel()
+        pendingCronOutput = nil
         let truncated = String(message.prefix(100))
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             state = .toast(truncated)
@@ -145,6 +150,31 @@ class NotchViewModel: ObservableObject {
 
         toastTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                self.state = .closed
+            }
+            self.onStateChange?(.closed)
+        }
+    }
+
+    /// Present a cron-job completion toast. Stores the full content so a tap
+    /// can expand it into chat before the auto-dismiss fires.
+    func showCronToast(jobName: String, fullContent: String) {
+        toastTask?.cancel()
+        pendingCronOutput = (jobName, fullContent)
+        let firstLine = fullContent
+            .split(separator: "\n", maxSplits: 1)
+            .first.map(String.init) ?? ""
+        let preview = "⚙️ \(jobName): \(firstLine)"
+        let truncated = String(preview.prefix(100))
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            state = .toast(truncated)
+        }
+        onStateChange?(.toast(truncated))
+
+        toastTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 self.state = .closed
@@ -200,6 +230,7 @@ class NotchViewModel: ObservableObject {
 
     func showClipperToast(_ title: String) {
         toastTask?.cancel()
+        pendingCronOutput = nil
         let truncated = String(title.prefix(80))
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             state = .clipperToast(truncated)
