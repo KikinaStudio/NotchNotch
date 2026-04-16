@@ -26,10 +26,7 @@ class ChatViewModel: ObservableObject {
 
     var sessionId: String? {
         get { client.sessionId }
-        set {
-            client.lastResponseId = nil
-            client.sessionId = newValue
-        }
+        set { client.sessionId = newValue }
     }
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?

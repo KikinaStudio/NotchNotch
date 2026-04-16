@@ -3,7 +3,6 @@ import Foundation
 class HermesClient {
     private let baseURL = "http://localhost:8642"
     var sessionId: String?
-    var lastResponseId: String?
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -30,7 +29,6 @@ class HermesClient {
 
     func resetConversation() {
         conversationId = UUID().uuidString
-        lastResponseId = nil
     }
 
     // MARK: - Non-streaming conversation via /v1/responses
@@ -65,15 +63,12 @@ class HermesClient {
             inputValue = input
         }
 
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "model": "hermes-agent",
             "input": inputValue,
             "conversation": conversationId,
             "store": true,
         ]
-        if let prev = lastResponseId {
-            body["previous_response_id"] = prev
-        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await session.data(for: request)
@@ -94,10 +89,6 @@ class HermesClient {
         }
 
         let parsed = parseOutput(output)
-
-        if let newId = json["id"] as? String {
-            lastResponseId = newId
-        }
 
         var promptTokens: Int? = nil
         var completionTokens: Int? = nil
