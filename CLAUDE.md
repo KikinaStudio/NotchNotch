@@ -15,6 +15,53 @@ A native macOS SwiftUI app that lives in the MacBook notch, providing instant ac
 
 Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes/memories/`), skills (`~/.hermes/skills/`), cron jobs, multi-platform messaging (Telegram, Discord, Slack, WhatsApp, Signal, Email), tool execution, checkpoints, context compression, SOUL.md personas, hindsight, and 6 pluggable external memory providers. Do NOT underestimate its capabilities.
 
+## Session hygiene
+
+### Before starting
+- `git status` clean (no leftover staged changes from a previous session)
+- `git pull` if working with a remote
+- Start a fresh Claude Code session, not a continuation — stale context 
+  causes hallucinated inconsistencies between file versions
+
+### During
+- "Read first, report back" before writing code on any multi-file change. 
+  Surface assumptions, confirm signatures, list impacted files, THEN code.
+- Match the signature style of existing callbacks in the same file 
+  (e.g. `{ _, newValue in }` in `.onChange` if that's the local pattern)
+- Honor the "everything through chat" principle: NotchNotch sends natural-
+  language messages to Hermes via `sendCompletion`, never calls Hermes's 
+  skill/cron/config APIs directly. This keeps coupling thin as Hermes evolves.
+
+### After
+- `git log --oneline -N` to verify commits match the stated scope
+- `git diff HEAD~N` to scan for unexpected file modifications
+- Build and manual-test the feature before closing the session
+- If new `@AppStorage` keys were introduced, document them below under 
+  "UserDefaults keys"
+
+### Audit protocol
+When asked to audit your own work, don't modify anything — read, verify, 
+report. Format: ✅ OK / ⚠️ + explanation / ❓ + question per check item.
+
+## Two CLAUDE.md in this ecosystem — do not confuse
+
+**This file** (`<repo-root>/CLAUDE.md`) guides Claude Code when developing 
+the NotchNotch app. Swift/SwiftUI conventions, architecture, patterns, 
+session rules.
+
+**A second CLAUDE.md** lives at `~/.hermes/brain/wiki/CLAUDE.md` once the 
+llm-wiki Hermes skill is set up. That one is Hermes's operating manual for 
+maintaining the user's personal knowledge wiki (Karpathy's LLM Wiki 
+pattern): schema, frontmatter conventions, ingest/query/lint workflows.
+
+Rules:
+- Never edit the wiki CLAUDE.md from NotchNotch Swift code. It's Hermes 
+  territory, co-evolved with the user.
+- NotchNotch may READ the wiki CLAUDE.md if needed (e.g., to surface 
+  schema info in a future settings pane), but never writes it.
+- If a user asks to "change how the wiki works", the answer is to send a 
+  chat message to Hermes, not to modify NotchNotch code.
+
 ## Build & Run
 
 ```bash
@@ -247,6 +294,33 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - Purple/violet accent color throughout
 - Pacman icon for clipper toasts (animated purple circle, 
 Canvas + TimelineView)
+
+### Brain pipeline invariants
+- Wiki path: NotchNotch reads `~/.hermes/brain/wiki/`. The llm-wiki Hermes 
+  skill defaults to `~/wiki` — setup MUST force the path via 
+  `skills.config.wiki.path` (sent as a chat message to Hermes).
+- Raw sources path: `~/.hermes/brain/raw/`. Clipper and drop-to-brain write 
+  here. Hermes's ingest cron compiles raw/ into wiki/.
+- `.lint-report.json`: produced by the llm-wiki lint workflow. If present, 
+  BrainViewModel reads it for health status. If absent, health is silently 
+  `.unknown` — never an error.
+- Memory blocks use `§` as thematic separator in MEMORY.md and USER.md. 
+  This is Hermes's convention, not a NotchNotch invention. Do not change.
+
+### UserDefaults keys (maintained list)
+- `onboardingCompleted` — main onboarding flow (OnboardingViewModel)
+- `hasCompletedBrainOnboarding` — brain setup sheet (NotchView)
+- `hermesConversationId` — server-side conversation UUID (HermesClient)
+
+Add new keys here when introducing them.
+
+### What NotchNotch never does
+- Write to `~/.hermes/config.yaml` directly (only reads; config changes go 
+  through chat messages to Hermes)
+- Call Hermes's skill manager, cron API, or memory tool directly (all 
+  goes through `sendCompletion` as natural language)
+- Edit any file under `~/.hermes/brain/wiki/` (Hermes owns it)
+- Edit any file under `~/.hermes/memories/` (Hermes owns it)
 
 ## 1. Think Before Coding
 
