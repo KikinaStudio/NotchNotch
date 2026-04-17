@@ -26,6 +26,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         Self.shared = self
 
+        ensureBrainDirectories()
+
         chatVM.notchVM = notchVM
         chatVM.audioRecorder = audioRecorder
         chatVM.sessionId = sessionStore.selectedSessionId
@@ -51,6 +53,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startClipperListener()
         wireCronOutputToasts()
         probeCompressionEndpointOnce()
+    }
+
+    private func ensureBrainDirectories() {
+        let fm = FileManager.default
+        for sub in ["raw", "wiki"] {
+            let path = NSString(string: "~/.hermes/brain/\(sub)").expandingTildeInPath
+            try? fm.createDirectory(atPath: path, withIntermediateDirectories: true)
+        }
     }
 
     private func probeCompressionEndpointOnce() {

@@ -11,6 +11,10 @@ struct NotchView: View {
     @ObservedObject var cronStore: CronStore
     @ObservedObject var brainVM: BrainViewModel
 
+    @AppStorage("hasCompletedBrainOnboarding") private var hasCompletedBrainOnboarding = false
+    @State private var didEvaluateBrainOnboarding = false
+    @State private var showBrainOnboarding = false
+
     var body: some View {
         ZStack(alignment: .top) {
             Color.clear
@@ -77,6 +81,38 @@ struct NotchView: View {
             height: NotchWindowController.panelHeight,
             alignment: .top
         )
+        .onAppear {
+            if !onboardingVM.needsOnboarding
+                && !hasCompletedBrainOnboarding
+                && Self.wikiHasNoMarkdown
+                && !didEvaluateBrainOnboarding {
+                didEvaluateBrainOnboarding = true
+                showBrainOnboarding = true
+            }
+        }
+        .onChange(of: onboardingVM.needsOnboarding) { _, needsIt in
+            if !needsIt
+                && !hasCompletedBrainOnboarding
+                && Self.wikiHasNoMarkdown
+                && !didEvaluateBrainOnboarding {
+                didEvaluateBrainOnboarding = true
+                showBrainOnboarding = true
+            }
+        }
+        .sheet(isPresented: $showBrainOnboarding) {
+            BrainOnboardingView(chatVM: chatVM)
+        }
+    }
+
+    private static var wikiHasNoMarkdown: Bool {
+        let path = NSString(string: "~/.hermes/brain/wiki").expandingTildeInPath
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else {
+            return true
+        }
+        let contents = (try? fm.contentsOfDirectory(atPath: path)) ?? []
+        return !contents.contains { $0.hasSuffix(".md") }
     }
 
     private var notchBody: some View {

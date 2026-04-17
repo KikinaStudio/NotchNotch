@@ -45,7 +45,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
 - `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` separator into `[MemoryBlock]` (title extracted from first bold label, dash-prefix, or heading). Scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`. Checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each) and computes `wikiLastUpdated` from file modification dates. `SkillInfo`, `MemoryBlock`, and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a refresh. All FileManager reads, no network calls.
 - `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses capsule buttons (same style as SettingsView). Memory tab renders `§`-separated blocks as individual `MemoryCard` views (title + markdown content, subtle card background). Skills tab lists all installed skills with category badges, descriptions, and drill-down detail view. Wiki tab (hidden when no wiki directory exists) shows a compact dashboard with article count, last-updated timestamp, and "Ask" buttons — tapping sends a question to Hermes via `onSendToChat` callback (no article content preview). Refresh button reloads all sections.
-- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons.
+- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons. Also hosts the first-run brain onboarding sheet — see "Brain onboarding" section below.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -85,6 +85,22 @@ The drop zone "Save to brain", voice notes, and the Clipper extension all use th
 3. Toast shown via `notchVM.showToast()`
 
 The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
+
+### Brain onboarding (first-run sheet)
+
+`BrainOnboardingView.swift` — One-time sheet presented after the main onboarding finishes, wiring up the Hermes `llm-wiki` skill and two cron routines. Gated by `@AppStorage("hasCompletedBrainOnboarding")` and the state of `~/.hermes/brain/wiki/` (skipped if any `.md` file exists).
+
+**Setup directories** — `AppDelegate.ensureBrainDirectories()` runs at every launch (idempotent, silent `try?`). Creates `~/.hermes/brain/raw/` (raw clipped content, fed to the ingest routine) and `~/.hermes/brain/wiki/` (LLM-compiled knowledge base).
+
+**Presentation gate** (NotchView.swift) — two triggers, both guarded by a `didEvaluateBrainOnboarding` `@State` once-flag so the sheet presents at most once per app launch:
+1. `.onAppear` — covers the "existing user" path where `onboardingVM.needsOnboarding == false` at boot.
+2. `.onChange(of: onboardingVM.needsOnboarding)` — covers the "fresh install" path: the main onboarding renders first (brain sheet suppressed), and when `completeOnboarding()` flips `needsOnboarding → false`, the sheet appears.
+
+Full condition: `!onboardingVM.needsOnboarding && !hasCompletedBrainOnboarding && wikiHasNoMarkdown && !didEvaluateBrainOnboarding`. The `wikiHasNoMarkdown` helper returns `true` when the wiki dir is missing OR contains zero `.md` files.
+
+**Everything-through-chat principle** — NotchNotch does NOT call Hermes's skill manager or cron API directly. `ChatViewModel.setupBrainPipeline(options:onStep:)` sends 1–4 natural-language messages via `sendCompletion` (fire-and-forget, `store: false`), sequentially, stopping on the first HTTP failure. Hermes interprets them with its own tools (`skills_install`, `cronjob`, `config_set`). This keeps the coupling thin — if Hermes's internal APIs change, setup still works.
+
+**`BrainSetupOptions`** — three bools from the toggles: `enableWiki` (sends install + verify), `enableAutoIngest` (sends cron ingest every 2h, job name `brain-ingest`), `enableWeeklyLint` (sends cron lint Sunday 9h, job name `brain-lint`). Toggles default to ON. The sheet's "Pas maintenant" button sets the flag and dismisses without sending anything; "Activer" runs the pipeline with a progress indicator (`1/N : label…`) and flips to "Réessayer" on error without setting the flag.
 
 ### Brain panel
 

@@ -8,6 +8,12 @@ enum VoiceState {
     case transcribing
 }
 
+struct BrainSetupOptions {
+    var enableWiki: Bool
+    var enableAutoIngest: Bool
+    var enableWeeklyLint: Bool
+}
+
 class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var draft: String = ""
@@ -181,6 +187,41 @@ class ChatViewModel: ObservableObject {
             messages[lastIndex].isStreaming = false
         }
         isStreaming = false
+    }
+
+    func setupBrainPipeline(
+        options: BrainSetupOptions,
+        onStep: ((Int, Int, String) -> Void)? = nil
+    ) async throws {
+        struct Step { let label: String; let message: String }
+        var steps: [Step] = []
+        if options.enableWiki {
+            steps.append(Step(
+                label: "Installation du skill llm-wiki…",
+                message: "Installe le skill llm-wiki depuis le hub officiel, puis configure son chemin de wiki sur ~/.hermes/brain/wiki. Les sources brutes sont dans ~/.hermes/brain/raw. Confirme quand c'est fait."
+            ))
+            steps.append(Step(
+                label: "Vérification du skill…",
+                message: "Vérifie que le skill llm-wiki est bien installé et configuré avec skills.config.wiki.path = ~/.hermes/brain/wiki."
+            ))
+        }
+        if options.enableAutoIngest {
+            steps.append(Step(
+                label: "Création de la routine d'ingestion…",
+                message: "Crée une routine cron qui exécute le skill llm-wiki en mode ingest sur le contenu de ~/.hermes/brain/raw toutes les 2 heures. Nomme-la 'brain-ingest'."
+            ))
+        }
+        if options.enableWeeklyLint {
+            steps.append(Step(
+                label: "Création de la routine de maintenance…",
+                message: "Crée une routine cron qui exécute le skill llm-wiki en mode lint tous les dimanches à 9h. Nomme-la 'brain-lint'."
+            ))
+        }
+        let total = steps.count
+        for (idx, step) in steps.enumerated() {
+            await MainActor.run { onStep?(idx + 1, total, step.label) }
+            try await client.sendCompletion(messages: [["role": "user", "content": step.message]])
+        }
     }
 
     func saveToBrain(content: String, fileName: String) {
