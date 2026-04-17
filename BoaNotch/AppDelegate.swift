@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+import os.log
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var panelController: NotchWindowController?
@@ -18,6 +19,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var flagsMonitor: Any?
     private var controlTapTimestamps: [Date] = []
     private var controlWasDown = false
+    private var didProbeCompression = false
     private static weak var shared: AppDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -48,6 +50,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBarItem()
         startClipperListener()
         wireCronOutputToasts()
+        probeCompressionEndpointOnce()
+    }
+
+    private func probeCompressionEndpointOnce() {
+        guard !didProbeCompression else { return }
+        didProbeCompression = true
+        let config = hermesConfig
+        let vm = notchVM
+        Task.detached {
+            let health = await config.probeCompressionEndpoint()
+            guard case .unreachable(let reason) = health else { return }
+            os_log("Compression endpoint unreachable: %{public}@", type: .info, reason)
+            await MainActor.run {
+                vm.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.")
+            }
+        }
     }
 
     private func wireCronOutputToasts() {
