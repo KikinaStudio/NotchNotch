@@ -29,6 +29,8 @@ class BrainViewModel: ObservableObject {
     @Published var wikiArticles: [WikiArticle] = []
     @Published var hasWiki = false
     @Published var wikiLastUpdated: Date?
+    @Published var pendingRawCount: Int = 0
+    @Published var isIngesting: Bool = false
     @Published var hasLoaded = false
 
     private var hermesHome: String {
@@ -46,6 +48,12 @@ class BrainViewModel: ObservableObject {
         loadMemory()
         loadSkills()
         loadWiki()
+        refreshLightMetrics()
+    }
+
+    func refreshLightMetrics() {
+        pendingRawCount = countPendingRawFiles()
+        wikiLastUpdated = computeWikiLastUpdated()
     }
 
     // MARK: - Memory
@@ -130,6 +138,9 @@ class BrainViewModel: ObservableObject {
 
     // MARK: - Wiki
 
+    // TODO: lint-report integration — once .lint-report.json format is
+    // stable, read it here for wiki health status and surface via BrainView.
+
     private func loadWiki() {
         let fm = FileManager.default
         let paths = [
@@ -164,15 +175,62 @@ class BrainViewModel: ObservableObject {
             articles.append(WikiArticle(id: baseName, title: title, content: content, isIndex: isIndex, path: path))
         }
 
-        wikiLastUpdated = articles.compactMap { article -> Date? in
-            let attrs = try? FileManager.default.attributesOfItem(atPath: article.path)
-            return attrs?[.modificationDate] as? Date
-        }.max()
+        wikiLastUpdated = computeWikiLastUpdated()
 
         wikiArticles = articles.sorted {
             if $0.isIndex != $1.isIndex { return $0.isIndex }
             return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
+    }
+
+    private func computeWikiLastUpdated() -> Date? {
+        let fm = FileManager.default
+        let paths = [
+            (hermesHome as NSString).appendingPathComponent("brain/wiki"),
+            (hermesHome as NSString).appendingPathComponent("wiki")
+        ]
+        guard let wikiDir = paths.first(where: { fm.fileExists(atPath: $0) }) else { return nil }
+        guard let files = try? fm.contentsOfDirectory(atPath: wikiDir) else { return nil }
+        return files.filter { $0.hasSuffix(".md") }.compactMap { file -> Date? in
+            let path = (wikiDir as NSString).appendingPathComponent(file)
+            return (try? fm.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+        }.max()
+    }
+
+    // MARK: - Pending raw count
+
+    private func countPendingRawFiles() -> Int {
+        let fm = FileManager.default
+        let rawDir = (hermesHome as NSString).appendingPathComponent("brain/raw")
+        let logPath = (hermesHome as NSString).appendingPathComponent("brain/wiki/log.md")
+
+        let logMtime = (try? fm.attributesOfItem(atPath: logPath))?[.modificationDate] as? Date
+        let subdirs = ["articles", "papers", "transcripts"]
+        var count = 0
+
+        for subdir in subdirs {
+            let subdirPath = (rawDir as NSString).appendingPathComponent(subdir)
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: subdirPath, isDirectory: &isDir), isDir.boolValue else { continue }
+            guard let enumerator = fm.enumerator(atPath: subdirPath) else { continue }
+
+            for case let relPath as String in enumerator {
+                let baseName = (relPath as NSString).lastPathComponent
+                guard baseName.hasSuffix(".md"), !baseName.hasPrefix(".") else { continue }
+                let fullPath = (subdirPath as NSString).appendingPathComponent(relPath)
+
+                if let logTime = logMtime {
+                    if let fileMtime = (try? fm.attributesOfItem(atPath: fullPath))?[.modificationDate] as? Date,
+                       fileMtime > logTime {
+                        count += 1
+                    }
+                } else {
+                    count += 1
+                }
+            }
+        }
+
+        return count
     }
 
     // MARK: - Helpers

@@ -11,6 +11,9 @@ struct BrainView: View {
     var onSendToChat: ((String) -> Void)?
     @State private var activeTab: BrainTab = .memory
     @State private var selectedSkill: SkillInfo?
+    @State private var syncPulseScale: CGFloat = 1.0
+
+    private let lightMetricsTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +53,8 @@ struct BrainView: View {
                 }
             }
         }
+        .onAppear { brainVM.refreshLightMetrics() }
+        .onReceive(lightMetricsTimer) { _ in brainVM.refreshLightMetrics() }
     }
 
     // MARK: - Tab button
@@ -198,22 +203,21 @@ struct BrainView: View {
     private var wikiTab: some View {
         Group {
             if brainVM.wikiArticles.isEmpty {
-                emptyState("No wiki articles found.")
+                wikiEmptyState
             } else {
                 VStack(alignment: .leading, spacing: 0) {
                     // Dashboard header
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Brain Wiki")
+                        Text("Wiki")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.7))
 
-                        HStack(spacing: 4) {
-                            Text("\(brainVM.wikiArticles.count) articles")
+                        HStack(spacing: 6) {
+                            Text(topicsCopy(brainVM.wikiArticles.count))
                             if let lastUpdate = brainVM.wikiLastUpdated {
-                                Text("—")
-                                Text(lastUpdate, style: .relative)
-                                Text("ago")
+                                Text("· Dernière intégration il y a \(shortFrenchRelative(from: lastUpdate))")
                             }
+                            syncButton
                         }
                         .font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.3))
@@ -253,6 +257,97 @@ struct BrainView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var wikiEmptyState: some View {
+        Text(
+            (try? AttributedString(
+                markdown: "Ton cerveau est vide. Installe [l'extension NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) et clippe ton premier article."
+            )) ?? AttributedString("Ton cerveau est vide.")
+        )
+        .font(.system(size: 12))
+        .foregroundStyle(.white.opacity(0.3))
+        .multilineTextAlignment(.center)
+        .tint(AppColors.accent.opacity(0.7))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Sync button
+
+    private var syncButton: some View {
+        Button {
+            triggerIngestion()
+        } label: {
+            Group {
+                if brainVM.isIngesting {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.6)
+                        .frame(width: 11, height: 11)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(brainVM.pendingRawCount > 0 ? 1.0 : 0.3))
+                        .scaleEffect(brainVM.pendingRawCount > 0 ? syncPulseScale : 1.0)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(brainVM.pendingRawCount == 0 || brainVM.isIngesting)
+        .pointingHandCursor()
+        .help(syncTooltip)
+        .onAppear {
+            if brainVM.pendingRawCount > 0 { startSyncPulse() }
+        }
+        .onChange(of: brainVM.pendingRawCount) { _, newValue in
+            if newValue > 0 {
+                startSyncPulse()
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) { syncPulseScale = 1.0 }
+            }
+        }
+    }
+
+    private var syncTooltip: String {
+        if brainVM.pendingRawCount > 0 {
+            return "Intégrer maintenant (\(brainVM.pendingRawCount) en attente)"
+        }
+        return "Cerveau à jour"
+    }
+
+    private func startSyncPulse() {
+        syncPulseScale = 1.0
+        withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+            syncPulseScale = 0.95
+        }
+    }
+
+    private func triggerIngestion() {
+        guard brainVM.pendingRawCount > 0, !brainVM.isIngesting else { return }
+        brainVM.isIngesting = true
+        onSendToChat?("Utilise le skill llm-wiki pour ingérer le contenu en attente dans ~/.hermes/brain/raw/")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak brainVM] in
+            brainVM?.isIngesting = false
+        }
+    }
+
+    // MARK: - French copy helpers
+
+    private func topicsCopy(_ count: Int) -> String {
+        count == 1 ? "Ton cerveau connaît 1 sujet" : "Ton cerveau connaît \(count) sujets"
+    }
+
+    private func shortFrenchRelative(from date: Date) -> String {
+        let seconds = max(0, Date().timeIntervalSince(date))
+        if seconds < 3600 {
+            let minutes = max(1, Int(seconds / 60))
+            return "\(minutes) min"
+        } else if seconds < 86400 {
+            return "\(Int(seconds / 3600))h"
+        } else {
+            return "\(Int(seconds / 86400))j"
         }
     }
 
