@@ -6,26 +6,37 @@ struct SessionSummary: Identifiable {
     let source: String
     let title: String?
     let model: String?
-    let updatedAt: Date?
+    let startedAt: Date?
+    let messageCount: Int
+    let firstUserMessage: String?
     let inputTokens: Int
     let outputTokens: Int
-
-    var displayTitle: String { title ?? "Untitled" }
 
     var sourceIcon: String {
         switch source {
         case "telegram": return "paperplane.fill"
         case "cli": return "terminal.fill"
         case "discord": return "bubble.left.fill"
-        default: return "bubble.left.and.bubble.right.fill"
+        case "api_server": return "bubble.left.and.bubble.right.fill"
+        default: return "ellipsis.bubble.fill"
         }
+    }
+
+    /// Truncated preview of the first user message, used as a title fallback.
+    func messagePreview(maxChars: Int = 45) -> String? {
+        guard let raw = firstUserMessage?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let oneLine = raw.replacingOccurrences(of: "\n", with: " ")
+        if oneLine.count <= maxChars { return oneLine }
+        return String(oneLine.prefix(maxChars)).trimmingCharacters(in: .whitespaces) + "…"
     }
 }
 
 struct SessionMessage {
     let role: String
     let content: String
-    let createdAt: Date?
+    let timestamp: Date?
 }
 
 class SessionStore: ObservableObject {
@@ -41,11 +52,6 @@ class SessionStore: ObservableObject {
     @Published var recentSessions: [SessionSummary] = []
 
     private let dbPath: String
-    private let dateFormatter: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
 
     init() {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -84,7 +90,10 @@ class SessionStore: ObservableObject {
         }
     }
 
-    /// Load recent sessions from Hermes state.db (max 30, newest first)
+    /// Load recent sessions from Hermes state.db (max 30, newest first).
+    /// Excludes one-shot stubs (`message_count < 2`) and stale sessions older than 60 days.
+    /// Pulls the first user message in the same query so the history view can
+    /// fall back to a message preview when no title exists.
     func loadRecentSessions() {
         guard let db = openDB() else {
             recentSessions = []
@@ -92,12 +101,21 @@ class SessionStore: ObservableObject {
         }
         defer { sqlite3_close(db) }
 
+        // started_at is REAL (Unix epoch). Sixty days ago = now - 60*86400.
+        let cutoff = Date().timeIntervalSince1970 - (60 * 86_400)
+
         var stmt: OpaquePointer?
         let sql = """
-            SELECT id, source, title, model, updated_at, input_tokens, output_tokens
-            FROM sessions
-            WHERE ended_at IS NULL OR ended_at > datetime('now', '-30 days')
-            ORDER BY updated_at DESC
+            SELECT s.id, s.source, s.title, s.model, s.started_at,
+                   s.message_count, s.input_tokens, s.output_tokens,
+                   (SELECT m.content FROM messages m
+                    WHERE m.session_id = s.id AND m.role = 'user'
+                    ORDER BY m.timestamp ASC LIMIT 1) AS first_user_msg
+            FROM sessions s
+            WHERE s.message_count >= 2
+              AND s.started_at >= ?
+              AND s.source != 'cron'
+            ORDER BY s.started_at DESC
             LIMIT 30
             """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
@@ -105,6 +123,8 @@ class SessionStore: ObservableObject {
             return
         }
         defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_double(stmt, 1, cutoff)
 
         var results: [SessionSummary] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -114,14 +134,19 @@ class SessionStore: ObservableObject {
                 ? String(cString: sqlite3_column_text(stmt, 2)) : nil
             let model: String? = sqlite3_column_type(stmt, 3) != SQLITE_NULL
                 ? String(cString: sqlite3_column_text(stmt, 3)) : nil
-            let updatedAt: Date? = sqlite3_column_type(stmt, 4) != SQLITE_NULL
-                ? parseDate(String(cString: sqlite3_column_text(stmt, 4))) : nil
-            let inputTokens = Int(sqlite3_column_int64(stmt, 5))
-            let outputTokens = Int(sqlite3_column_int64(stmt, 6))
+            let startedAt: Date? = sqlite3_column_type(stmt, 4) != SQLITE_NULL
+                ? Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)) : nil
+            let messageCount = Int(sqlite3_column_int64(stmt, 5))
+            let inputTokens = Int(sqlite3_column_int64(stmt, 6))
+            let outputTokens = Int(sqlite3_column_int64(stmt, 7))
+            let firstUserMessage: String? = sqlite3_column_type(stmt, 8) != SQLITE_NULL
+                ? String(cString: sqlite3_column_text(stmt, 8)) : nil
 
             results.append(SessionSummary(
                 id: id, source: source, title: title, model: model,
-                updatedAt: updatedAt, inputTokens: inputTokens, outputTokens: outputTokens
+                startedAt: startedAt, messageCount: messageCount,
+                firstUserMessage: firstUserMessage,
+                inputTokens: inputTokens, outputTokens: outputTokens
             ))
         }
         recentSessions = results
@@ -134,9 +159,9 @@ class SessionStore: ObservableObject {
 
         var stmt: OpaquePointer?
         let sql = """
-            SELECT role, content, created_at FROM messages
+            SELECT role, content, timestamp FROM messages
             WHERE session_id = ? AND role IN ('user', 'assistant')
-            ORDER BY created_at ASC
+            ORDER BY timestamp ASC
             """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
@@ -148,15 +173,11 @@ class SessionStore: ObservableObject {
             let role = String(cString: sqlite3_column_text(stmt, 0))
             let content = sqlite3_column_type(stmt, 1) != SQLITE_NULL
                 ? String(cString: sqlite3_column_text(stmt, 1)) : ""
-            let createdAt: Date? = sqlite3_column_type(stmt, 2) != SQLITE_NULL
-                ? parseDate(String(cString: sqlite3_column_text(stmt, 2))) : nil
-            results.append(SessionMessage(role: role, content: content, createdAt: createdAt))
+            let timestamp: Date? = sqlite3_column_type(stmt, 2) != SQLITE_NULL
+                ? Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2)) : nil
+            results.append(SessionMessage(role: role, content: content, timestamp: timestamp))
         }
         return results
-    }
-
-    private func parseDate(_ string: String) -> Date? {
-        dateFormatter.date(from: string)
     }
 
     private func openDB() -> OpaquePointer? {

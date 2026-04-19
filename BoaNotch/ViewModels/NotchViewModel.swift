@@ -26,8 +26,12 @@ class NotchViewModel: ObservableObject {
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
 
-    /// The fully open size for chat — wide and compact
-    let openSize: CGSize = CGSize(width: 640, height: 340)
+    /// The fully open size for chat. Owned by NotchWindowController, which keeps
+    /// `openSize == panelSize - 2 * shadowPadding` so the NotchShape always fits
+    /// inside the NSPanel. Default value matches the `.standard` panel (680×380)
+    /// minus 20pt shadow padding on each side — used only until the controller
+    /// runs showPanel() or applyPanelSize().
+    @Published var openSize: CGSize = CGSize(width: 640, height: 340)
 
     var onStateChange: ((NotchState) -> Void)?
 

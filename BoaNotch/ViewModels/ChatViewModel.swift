@@ -30,9 +30,15 @@ class ChatViewModel: ObservableObject {
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
 
+    /// Title cache for conversation history. Wired by AppDelegate.
+    weak var titleStore: TitleStore?
+
     var sessionId: String? {
         get { client.sessionId }
-        set { client.sessionId = newValue }
+        set {
+            objectWillChange.send()
+            client.sessionId = newValue
+        }
     }
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?
@@ -136,6 +142,10 @@ class ChatViewModel: ObservableObject {
                    let lastMsg = messages.last, lastMsg.role == .assistant {
                     notchVM.showToast(lastMsg.content)
                 }
+
+                // After the first exchange of a fresh conversation, ask
+                // Hermes for a 3-7 word title (ChatGPT-style auto-name).
+                maybeGenerateTitle(userMessage: input, assistantResponse: result.content)
             } catch {
                 if !Task.isCancelled {
                     let desc = error.localizedDescription
@@ -167,6 +177,27 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Fire-and-forget LLM title generation, gated to the first exchange and
+    /// to sessions that don't already have a cached title.
+    private func maybeGenerateTitle(userMessage: String, assistantResponse: String) {
+        guard let store = titleStore,
+              let sid = client.sessionId,
+              store.title(for: sid) == nil,
+              !assistantResponse.isEmpty else { return }
+        // First exchange = exactly one user message after the response lands.
+        let userCount = messages.filter { $0.role == .user }.count
+        guard userCount == 1 else { return }
+
+        let client = self.client
+        Task.detached(priority: .background) {
+            guard let title = await client.generateTitle(
+                userMessage: userMessage,
+                assistantResponse: assistantResponse
+            ) else { return }
+            await MainActor.run { store.setTitle(title, for: sid) }
+        }
+    }
+
     func confirmNewConversation() {
         showNewConversationConfirm = false
         startNewConversation()
@@ -176,7 +207,10 @@ class ChatViewModel: ObservableObject {
         cancelStream()
         messages.removeAll()
         lastInputTokens = 0
-        client.sessionId = nil
+        // Generate a fresh notchnotch-{uuid} session so this conversation
+        // gets its own row in Hermes state.db.
+        objectWillChange.send()
+        client.sessionId = "notchnotch-\(UUID().uuidString.lowercased())"
         client.resetConversation()
     }
 

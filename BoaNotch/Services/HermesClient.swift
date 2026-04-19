@@ -2,7 +2,31 @@ import Foundation
 
 class HermesClient {
     private let baseURL = "http://localhost:8642"
-    var sessionId: String?
+
+    /// The current NotchNotch session ID. Persisted across launches so each
+    /// conversation maps to a single session row in Hermes's state.db.
+    var sessionId: String? {
+        didSet {
+            if let id = sessionId, !id.isEmpty {
+                UserDefaults.standard.set(id, forKey: "notchnotchSessionId")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "notchnotchSessionId")
+            }
+        }
+    }
+
+    init() {
+        self.sessionId = UserDefaults.standard.string(forKey: "notchnotchSessionId")
+    }
+
+    /// Ensure a session ID exists before sending a request. Generates a fresh
+    /// `notchnotch-<uuid>` if none is set so every chat lands in a single row.
+    func ensureSessionId() -> String {
+        if let id = sessionId, !id.isEmpty { return id }
+        let fresh = "notchnotch-\(UUID().uuidString.lowercased())"
+        sessionId = fresh
+        return fresh
+    }
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -49,9 +73,9 @@ class HermesClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let sessionId = sessionId, !sessionId.isEmpty {
-            request.setValue(sessionId, forHTTPHeaderField: "X-Hermes-Session-Id")
-        }
+        // Always send a session header so all turns of one NotchNotch
+        // conversation accumulate in a single state.db row.
+        request.setValue(ensureSessionId(), forHTTPHeaderField: "X-Hermes-Session-Id")
 
         let inputValue: Any
         if let systemContext {
@@ -172,6 +196,66 @@ class HermesClient {
             }
             throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
         }
+    }
+
+    // MARK: - Title generation (ChatGPT-style auto-name)
+
+    /// Ask Hermes to summarize the first exchange into a 3-7 word title.
+    /// Bypasses session/conversation chaining (`store: false`, no headers) so
+    /// the call is purely transactional and never pollutes chat history.
+    /// Returns nil on any failure — title generation is best-effort.
+    func generateTitle(userMessage: String, assistantResponse: String) async -> String? {
+        guard let url = URL(string: "\(baseURL)/v1/responses") else { return nil }
+
+        let userSnippet = String(userMessage.prefix(500))
+        let assistantSnippet = String(assistantResponse.prefix(500))
+        let prompt = """
+        Generate a short, descriptive title (3-7 words) for a conversation that starts with the following exchange. \
+        The title should capture the main topic or intent. \
+        Return ONLY the title text, nothing else. No quotes, no punctuation at the end, no prefixes.
+
+        User: \(userSnippet)
+
+        Assistant: \(assistantSnippet)
+        """
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        let body: [String: Any] = [
+            "model": "hermes-agent",
+            "input": prompt,
+            "store": false,
+        ]
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        request.httpBody = httpBody
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let output = json["output"] as? [[String: Any]] else { return nil }
+            let parsed = parseOutput(output)
+            return cleanTitle(parsed.content)
+        } catch {
+            return nil
+        }
+    }
+
+    /// Strip quotes/trailing punctuation/whitespace and clamp length.
+    private func cleanTitle(_ raw: String) -> String? {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Drop wrapping quotes if present.
+        let quoteSet = CharacterSet(charactersIn: "\"'`“”‘’«»")
+        t = t.trimmingCharacters(in: quoteSet)
+        // Drop trailing punctuation.
+        while let last = t.last, ".!?;,".contains(last) { t.removeLast() }
+        t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        if t.count > 80 { t = String(t.prefix(80)) }
+        return t
     }
 
     // MARK: - Health check

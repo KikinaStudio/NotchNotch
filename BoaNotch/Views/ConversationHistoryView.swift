@@ -4,6 +4,7 @@ struct ConversationHistoryView: View {
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var notchVM: NotchViewModel
+    @ObservedObject var titleStore: TitleStore
 
     private let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
@@ -66,14 +67,14 @@ struct ConversationHistoryView: View {
                     .foregroundStyle(iconColor(for: session.source))
                     .frame(width: 16)
 
-                Text(session.displayTitle)
+                Text(displayTitle(for: session))
                     .font(.body)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Spacer()
 
-                if let date = session.updatedAt {
+                if let date = session.startedAt {
                     Text(relativeFormatter.localizedString(for: date, relativeTo: Date()))
                         .font(.footnote)
                         .foregroundStyle(.tertiary)
@@ -95,8 +96,24 @@ struct ConversationHistoryView: View {
         case "cli": return .orange
         case "telegram": return .blue
         case "discord": return .purple
+        case "api_server": return AppColors.accent
         default: return .secondary.opacity(0.6)
         }
+    }
+
+    /// Title fallback chain: cached LLM title → DB title → first user message
+    /// preview → "Untitled".
+    private func displayTitle(for session: SessionSummary) -> String {
+        if let cached = titleStore.title(for: session.id), !cached.isEmpty {
+            return cached
+        }
+        if let stored = session.title, !stored.isEmpty {
+            return stored
+        }
+        if let preview = session.messagePreview() {
+            return preview
+        }
+        return "Untitled"
     }
 
     private func loadSession(_ session: SessionSummary) {

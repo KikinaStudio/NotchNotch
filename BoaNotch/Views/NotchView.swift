@@ -12,6 +12,8 @@ struct NotchView: View {
     @ObservedObject var brainVM: BrainViewModel
     @ObservedObject var loginItemService: LoginItemService
     @ObservedObject var appearanceSettings: AppearanceSettings
+    @ObservedObject var panelSizeStore: PanelSizeStore
+    @ObservedObject var titleStore: TitleStore
 
     @AppStorage("hasCompletedBrainOnboarding") private var hasCompletedBrainOnboarding = false
     @State private var didEvaluateBrainOnboarding = false
@@ -79,8 +81,8 @@ struct NotchView: View {
             }
         }
         .frame(
-            width: NotchWindowController.panelWidth,
-            height: NotchWindowController.panelHeight,
+            maxWidth: .infinity,
+            maxHeight: .infinity,
             alignment: .top
         )
         .onAppear {
@@ -209,7 +211,7 @@ struct NotchView: View {
                                 })
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
-                                ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM)
+                                ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
@@ -292,43 +294,57 @@ struct NotchView: View {
                         .buttonStyle(.plain)
                         .pointingHandCursor()
                     } else {
-                        ZStack(alignment: .trailing) {
-                            Image(systemName: "line.3.horizontal")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                                .opacity(notchVM.isMenuExpanded ? 0 : 1)
+                        HStack(spacing: 12) {
+                            ZStack(alignment: .trailing) {
+                                Image(systemName: "line.3.horizontal")
+                                    .font(.callout.weight(.medium))
+                                    .foregroundStyle(.secondary)
+                                    .opacity(notchVM.isMenuExpanded ? 0 : 1)
 
-                            HStack(spacing: 12) {
-                                menuButton("clock.arrow.circlepath") {
-                                    notchVM.openHistory()
-                                    notchVM.collapseMenu()
+                                HStack(spacing: 12) {
+                                    menuButton("clock.arrow.circlepath") {
+                                        notchVM.openHistory()
+                                        notchVM.collapseMenu()
+                                    }
+                                    menuButton("magnifyingglass") {
+                                        notchVM.isSearchOpen = true
+                                        notchVM.collapseMenu()
+                                    }
+                                    menuButton("bolt") {
+                                        notchVM.openRoutines()
+                                        notchVM.collapseMenu()
+                                    }
+                                    menuButton("brain") {
+                                        notchVM.openBrain()
+                                        notchVM.collapseMenu()
+                                    }
+                                    menuButton("gearshape") {
+                                        notchVM.isSettingsOpen = true
+                                        notchVM.collapseMenu()
+                                    }
                                 }
-                                menuButton("magnifyingglass") {
-                                    notchVM.isSearchOpen = true
-                                    notchVM.collapseMenu()
-                                }
-                                menuButton("arrow.triangle.2.circlepath") {
-                                    notchVM.openRoutines()
-                                    notchVM.collapseMenu()
-                                }
-                                menuButton("brain") {
-                                    notchVM.openBrain()
-                                    notchVM.collapseMenu()
-                                }
-                                menuButton("gearshape") {
-                                    notchVM.isSettingsOpen = true
-                                    notchVM.collapseMenu()
+                                .opacity(notchVM.isMenuExpanded ? 1 : 0)
+                                .offset(x: notchVM.isMenuExpanded ? 0 : 8)
+                                .allowsHitTesting(notchVM.isMenuExpanded)
+                            }
+                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: notchVM.isMenuExpanded)
+                            .onHover { hovering in
+                                if hovering && !notchVM.isMenuExpanded {
+                                    notchVM.expandMenu()
                                 }
                             }
-                            .opacity(notchVM.isMenuExpanded ? 1 : 0)
-                            .offset(x: notchVM.isMenuExpanded ? 0 : 8)
-                            .allowsHitTesting(notchVM.isMenuExpanded)
-                        }
-                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: notchVM.isMenuExpanded)
-                        .onHover { hovering in
-                            if hovering && !notchVM.isMenuExpanded {
-                                notchVM.expandMenu()
+
+                            Button {
+                                panelSizeStore.size = (panelSizeStore.size == .standard) ? .large : .standard
+                            } label: {
+                                Image(systemName: panelSizeStore.size == .standard
+                                      ? "arrow.up.left.and.arrow.down.right"
+                                      : "arrow.down.right.and.arrow.up.left")
+                                    .font(.callout.weight(.medium))
+                                    .foregroundStyle(.tertiary)
                             }
+                            .buttonStyle(.plain)
+                            .pointingHandCursor()
                         }
                     }
                 }

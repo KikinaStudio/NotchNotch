@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 class NotchWindowController {
@@ -7,11 +8,35 @@ class NotchWindowController {
     private let notchVM: NotchViewModel
     private var dragMonitor: Any?
     private var dragEndMonitor: Any?
+    private var sizeCancellable: AnyCancellable?
 
-    // Fixed panel size — never changes, like BoringNotch
-    static let panelWidth: CGFloat = 680
-    static let panelHeight: CGFloat = 380
     static let shadowPadding: CGFloat = 20
+
+    /// Panel dimensions per size variant. Uses visibleFrame to stay inside the
+    /// menu-bar / Dock reserved area on small screens.
+    static func dimensions(for size: PanelSize, on screen: NSScreen) -> CGSize {
+        switch size {
+        case .standard:
+            return CGSize(width: 680, height: 380)
+        case .large:
+            let visible = screen.visibleFrame
+            return CGSize(
+                width: min(900, visible.width * 0.9),
+                height: min(600, visible.height * 0.8)
+            )
+        }
+    }
+
+    /// The visible black notch size is the panel size minus the invisible
+    /// shadow padding on each side. Keep this invariant: `openSize` tracks the
+    /// panel size, never diverges.
+    static func openSize(for size: PanelSize, on screen: NSScreen) -> CGSize {
+        let panel = dimensions(for: size, on: screen)
+        return CGSize(
+            width: panel.width - 2 * shadowPadding,
+            height: panel.height - 2 * shadowPadding
+        )
+    }
 
     private let sessionStore: SessionStore
     private let searchVM: SearchViewModel
@@ -21,8 +46,10 @@ class NotchWindowController {
     private let brainVM: BrainViewModel
     private let loginItemService: LoginItemService
     private let appearanceSettings: AppearanceSettings
+    private let panelSizeStore: PanelSizeStore
+    private let titleStore: TitleStore
 
-    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore, brainVM: BrainViewModel, loginItemService: LoginItemService, appearanceSettings: AppearanceSettings) {
+    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore, brainVM: BrainViewModel, loginItemService: LoginItemService, appearanceSettings: AppearanceSettings, panelSizeStore: PanelSizeStore, titleStore: TitleStore) {
         self.chatVM = chatVM
         self.notchVM = notchVM
         self.sessionStore = sessionStore
@@ -33,6 +60,8 @@ class NotchWindowController {
         self.brainVM = brainVM
         self.loginItemService = loginItemService
         self.appearanceSettings = appearanceSettings
+        self.panelSizeStore = panelSizeStore
+        self.titleStore = titleStore
 
         NotificationCenter.default.addObserver(
             self,
@@ -40,6 +69,12 @@ class NotchWindowController {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+
+        sizeCancellable = panelSizeStore.$size
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.applyPanelSize(animated: true)
+            }
     }
 
     func showPanel() {
@@ -48,14 +83,13 @@ class NotchWindowController {
         let closedSize = Self.closedNotchSize(for: screen)
         notchVM.closedSize = closedSize
 
-        let panelRect = NSRect(
-            origin: .zero,
-            size: CGSize(width: Self.panelWidth, height: Self.panelHeight)
-        )
+        let initialPanelSize = Self.dimensions(for: panelSizeStore.size, on: screen)
+        notchVM.openSize = Self.openSize(for: panelSizeStore.size, on: screen)
 
+        let panelRect = NSRect(origin: .zero, size: initialPanelSize)
         let panel = NotchPanel(contentRect: panelRect)
 
-        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
+        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings, panelSizeStore: panelSizeStore, titleStore: titleStore)
             .environmentObject(appearanceSettings)
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.frame = panel.contentView!.bounds
@@ -63,7 +97,7 @@ class NotchWindowController {
         panel.contentView?.addSubview(hostingView)
 
         self.panel = panel
-        positionPanel(on: screen)
+        applyPanelSize(animated: false)
 
         notchVM.onStateChange = { [weak self] state in
             guard let panel = self?.panel else { return }
@@ -115,23 +149,47 @@ class NotchWindowController {
         }
     }
 
-    private func positionPanel(on screen: NSScreen) {
-        guard let panel else { return }
+    /// Sizes and positions the panel for the current stored PanelSize.
+    /// Called on showPanel(), screenDidChange(), and whenever the user toggles size.
+    func applyPanelSize(animated: Bool = true) {
+        guard let panel, let screen = Self.notchScreen() else { return }
+        let newPanelSize = Self.dimensions(for: panelSizeStore.size, on: screen)
+        let newOpenSize = Self.openSize(for: panelSizeStore.size, on: screen)
         let screenFrame = screen.frame
-        let w = Self.panelWidth
-        let h = Self.panelHeight
+        let x = screenFrame.origin.x + (screenFrame.width / 2) - (newPanelSize.width / 2)
+        let y = screenFrame.origin.y + screenFrame.height - newPanelSize.height
+        let newFrame = NSRect(x: x, y: y, width: newPanelSize.width, height: newPanelSize.height)
 
-        let x = screenFrame.origin.x + (screenFrame.width / 2) - (w / 2)
-        let y = screenFrame.origin.y + screenFrame.height - h
+        if !animated {
+            notchVM.openSize = newOpenSize
+            panel.setFrame(newFrame, display: true, animate: false)
+            return
+        }
 
-        panel.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+        // Grow panel first (so SwiftUI content doesn't clip), then animate the shape;
+        // Shrink the shape first, then tighten the panel once the spring settles.
+        let isGrowing = newPanelSize.width > panel.frame.size.width
+
+        if isGrowing {
+            panel.setFrame(newFrame, display: true, animate: false)
+            withAnimation(.interactiveSpring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)) {
+                self.notchVM.openSize = newOpenSize
+            }
+        } else {
+            withAnimation(.interactiveSpring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)) {
+                self.notchVM.openSize = newOpenSize
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak panel] in
+                panel?.setFrame(newFrame, display: true, animate: false)
+            }
+        }
     }
 
     @objc private func screenDidChange() {
         guard let screen = Self.notchScreen() else { return }
         let closedSize = Self.closedNotchSize(for: screen)
         notchVM.closedSize = closedSize
-        positionPanel(on: screen)
+        applyPanelSize(animated: false)
     }
 
     static func notchScreen() -> NSScreen? {

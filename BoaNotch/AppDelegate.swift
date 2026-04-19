@@ -16,6 +16,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let brainVM = BrainViewModel()
     let loginItemService = LoginItemService()
     let appearanceSettings = AppearanceSettings()
+    let panelSizeStore = PanelSizeStore()
+    let titleStore = TitleStore()
     private let clipperListener = ClipperListener()
     private var statusItem: NSStatusItem?
     private var flagsMonitor: Any?
@@ -32,13 +34,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         chatVM.notchVM = notchVM
         chatVM.audioRecorder = audioRecorder
-        chatVM.sessionId = sessionStore.selectedSessionId
+        chatVM.titleStore = titleStore
+        // Note: do NOT hijack chatVM.sessionId from sessionStore.selectedSessionId.
+        // That used to merge every NotchNotch chat into the Telegram session,
+        // producing one giant 268-message blob. The HermesClient now owns its
+        // own persistent notchnotch-{uuid} session ID per conversation.
         searchVM.chatVM = chatVM
 
         onboardingVM.notchVM = notchVM
         onboardingVM.hermesConfig = hermesConfig
 
-        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
+        panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings, panelSizeStore: panelSizeStore, titleStore: titleStore)
         panelController?.showPanel()
 
         // If onboarding is needed, open notch immediately and suppress auto-close
