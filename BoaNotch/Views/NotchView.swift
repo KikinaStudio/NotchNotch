@@ -329,8 +329,16 @@ struct NotchView: View {
                             }
                             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: notchVM.isMenuExpanded)
                             .onHover { hovering in
-                                if hovering && !notchVM.isMenuExpanded {
-                                    notchVM.expandMenu()
+                                if hovering {
+                                    if notchVM.isMenuExpanded {
+                                        notchVM.cancelMenuCollapse()
+                                    } else {
+                                        notchVM.expandMenu()
+                                    }
+                                } else {
+                                    // Short grace window after cursor leaves so a
+                                    // brief excursion doesn't slam the menu shut.
+                                    notchVM.scheduleMenuCollapse(after: 0.6)
                                 }
                             }
 

@@ -120,7 +120,10 @@ class NotchViewModel: ObservableObject {
 
     func handleClick() {
         hoverTask?.cancel()
-        isOpen ? close() : open()
+        // Only open on tap. Missed clicks inside the open panel must NOT close
+        // it — that was a frequent frustration. The user can still dismiss via
+        // hover-out (handleHover) or the explicit X button.
+        if !isOpen { open() }
     }
 
     // MARK: - State transitions
@@ -217,19 +220,31 @@ class NotchViewModel: ObservableObject {
 
     func expandMenu() {
         isMenuExpanded = true
-        menuCollapseTask?.cancel()
-        menuCollapseTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                isMenuExpanded = false
-            }
-        }
+        scheduleMenuCollapse(after: 3.0)
     }
 
     func collapseMenu() {
         menuCollapseTask?.cancel()
         isMenuExpanded = false
+    }
+
+    /// Cancel any pending auto-collapse — call while the cursor is inside the
+    /// menu area so it doesn't disappear while the user is still deciding.
+    func cancelMenuCollapse() {
+        menuCollapseTask?.cancel()
+    }
+
+    /// Schedule (or reschedule) auto-collapse. Default uses the long initial
+    /// timeout; pass a shorter delay for the post-hover-out grace window.
+    func scheduleMenuCollapse(after seconds: Double = 3.0) {
+        menuCollapseTask?.cancel()
+        menuCollapseTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                isMenuExpanded = false
+            }
+        }
     }
 
     func showClipperToast(_ title: String) {

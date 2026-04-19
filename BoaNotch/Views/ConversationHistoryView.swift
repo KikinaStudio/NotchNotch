@@ -6,20 +6,36 @@ struct ConversationHistoryView: View {
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var titleStore: TitleStore
 
+    @State private var query: String = ""
+
     private let relativeFormatter: RelativeDateTimeFormatter = {
         let f = RelativeDateTimeFormatter()
         f.unitsStyle = .abbreviated
         return f
     }()
 
+    /// Sessions filtered by the current search query (matches resolved title
+    /// or first user message, case-insensitive).
+    private var filteredSessions: [SessionSummary] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return sessionStore.recentSessions }
+        return sessionStore.recentSessions.filter { session in
+            if displayTitle(for: session).lowercased().contains(q) { return true }
+            if let msg = session.firstUserMessage?.lowercased(), msg.contains(q) { return true }
+            return false
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 12) {
                 Text("Conversations")
                     .font(.headline)
                     .foregroundStyle(.primary)
-                Spacer()
+
+                searchField
+
                 Button {
                     chatVM.startNewConversation()
                     notchVM.isHistoryOpen = false
@@ -43,16 +59,52 @@ struct ConversationHistoryView: View {
                     .font(.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
+            } else if filteredSessions.isEmpty {
+                Spacer()
+                Text("No matches")
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
+                Spacer()
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(sessionStore.recentSessions) { session in
+                        ForEach(filteredSessions) { session in
                             sessionRow(session)
                         }
                     }
                 }
             }
         }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+            TextField("Search conversations", text: $query)
+                .textFieldStyle(.plain)
+                .font(.callout)
+                .foregroundStyle(.primary)
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.quaternary.opacity(0.6))
+        )
+        .frame(maxWidth: .infinity)
     }
 
     private func sessionRow(_ session: SessionSummary) -> some View {
