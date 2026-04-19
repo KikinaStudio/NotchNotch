@@ -30,8 +30,9 @@ struct RoutinesView: View {
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 8) {
-                        ForEach(cronStore.sortedJobs) { job in
+                    VStack(spacing: 0) {
+                        ForEach(Array(cronStore.sortedJobs.enumerated()), id: \.element.id) { index, job in
+                            if index > 0 { rowDivider }
                             jobCard(job)
                         }
 
@@ -49,15 +50,14 @@ struct RoutinesView: View {
                             .foregroundStyle(AppColors.accent.opacity(0.7))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(AppColors.accent.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(AppColors.accent.opacity(0.3), lineWidth: 0.5)
+                                    .strokeBorder(AppColors.accent.opacity(0.25), lineWidth: 0.5)
                             )
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
+                        .padding(.top, 14)
                     }
                 }
             }
@@ -68,6 +68,13 @@ struct RoutinesView: View {
     }
 
     @State private var hoveredJobId: String?
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(.white.opacity(0.06))
+            .frame(height: 1)
+            .padding(.leading, 13)
+    }
 
     private func jobCard(_ job: CronJob) -> some View {
         Button {
@@ -90,12 +97,9 @@ struct RoutinesView: View {
                     Spacer()
 
                     Text(humanSchedule(job.schedule_display))
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.white.opacity(0.08))
-                        .clipShape(Capsule())
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .tracking(0.3)
                         .lineLimit(1)
                 }
 
@@ -125,11 +129,12 @@ struct RoutinesView: View {
                 .foregroundStyle(.white.opacity(0.25))
                 .padding(.leading, 13)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(hoveredJobId == job.id ? 0.12 : 0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(Color.white.opacity(hoveredJobId == job.id ? 0.05 : 0))
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
             .opacity(job.state == "paused" ? 0.5 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
         }

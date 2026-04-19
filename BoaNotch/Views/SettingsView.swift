@@ -21,21 +21,12 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.5))
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 2) {
                             ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic")], id: \.0) { value, label in
-                                Button {
+                                segmentedButton(label: label, isSelected: hermesConfig.modelProvider == value) {
                                     hermesConfig.modelProvider = value
                                     hermesConfig.setImmediate("model.provider", value: value)
-                                } label: {
-                                    Text(label)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(hermesConfig.modelProvider == value ? .white : .white.opacity(0.5))
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(hermesConfig.modelProvider == value ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                                        .clipShape(Capsule())
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
 
@@ -59,21 +50,12 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.5))
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 2) {
                             ForEach([("Quick", 15), ("Normal", 50), ("Deep", 90)], id: \.1) { label, val in
-                                Button {
+                                segmentedButton(label: label, isSelected: hermesConfig.maxIterations == val) {
                                     hermesConfig.maxIterations = val
                                     hermesConfig.setImmediate("agent.max_iterations", value: val)
-                                } label: {
-                                    Text(label)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(hermesConfig.maxIterations == val ? .white : .white.opacity(0.5))
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(hermesConfig.maxIterations == val ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                                        .clipShape(Capsule())
                                 }
-                                .buttonStyle(.plain)
                             }
 
                             Spacer()
@@ -109,7 +91,7 @@ struct SettingsView: View {
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(.white.opacity(0.06))
+                            .background(.white.opacity(0.04))
                             .clipShape(Capsule())
                         }
                     }
@@ -140,21 +122,12 @@ struct SettingsView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.5))
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 2) {
                             ForEach(["local", "docker", "ssh"], id: \.self) { backend in
-                                Button {
+                                segmentedButton(label: backend, isSelected: hermesConfig.terminalBackend == backend) {
                                     hermesConfig.terminalBackend = backend
                                     hermesConfig.setImmediate("terminal.backend", value: backend)
-                                } label: {
-                                    Text(backend)
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(hermesConfig.terminalBackend == backend ? .white : .white.opacity(0.5))
-                                        .padding(.horizontal, 10)
-                                        .padding(.vertical, 4)
-                                        .background(hermesConfig.terminalBackend == backend ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                                        .clipShape(Capsule())
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
 
@@ -227,7 +200,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.25))
+                .foregroundStyle(.white.opacity(0.28))
                 .tracking(1.5)
             content()
         }
@@ -258,16 +231,30 @@ struct SettingsView: View {
                 apiKey = ""
             } label: {
                 Text("Save")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(apiKey.isEmpty ? .white.opacity(0.3) : .white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(apiKey.isEmpty ? .white.opacity(0.06) : AppColors.accent.opacity(0.3))
+                    .background(apiKey.isEmpty ? .clear : .white.opacity(0.12))
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
             .disabled(apiKey.isEmpty)
         }
+    }
+
+    private func segmentedButton(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? .white : .white.opacity(0.35))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(isSelected ? Color.white.opacity(0.1) : .clear)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     private func configTextField(_ label: String, text: Binding<String>) -> some View {

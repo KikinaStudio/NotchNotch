@@ -95,7 +95,7 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `TemplateBrowserView.swift` — Three-screen drill-down for browsing routine templates within the 640×340px notch panel. Screen 1: category picker (7 rows + "Create your own"). Screen 2: template list for selected category — templates with `deliver == "local"` get a small `bell.badge` icon next to the title, signalling "this one notifies you in the notch". Screen 3: form with input fields (TextField, capsule picker buttons, number field, NSOpenPanel file picker) and a "Create routine" button. Navigation uses `@State` with spring-animated `.move` transitions. Output: calls `onSelectTemplate(draft)` with the composed prompt string — same callback contract as the old starter templates.
 - `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
 - `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` separator into `[MemoryBlock]` (title extracted from first bold label, dash-prefix, or heading). Scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`. Checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each) and computes `wikiLastUpdated` from file modification dates via `computeWikiLastUpdated()`. `SkillInfo`, `MemoryBlock`, and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a full refresh and ends with `refreshLightMetrics()`. **Light metrics (cheap to recompute)**: `refreshLightMetrics()` updates `pendingRawCount` (via `countPendingRawFiles()`) and `wikiLastUpdated` without touching memory/skills/wiki article arrays — safe to call on a 60s timer. `countPendingRawFiles()` recurses `~/.hermes/brain/raw/{articles,papers,transcripts}` (skips `assets/` and any subdir not in that allow-list), filters by `mtime > ~/.hermes/brain/wiki/log.md.mtime` (if `log.md` is absent, every raw file counts as pending). `isIngesting: Bool` is toggled by the Wiki tab's sync button. Lint-report integration is stubbed with a `TODO:` before `loadWiki()` — deferred until `.lint-report.json` format is stable. All FileManager reads, no network calls.
-- `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses capsule buttons (same style as SettingsView). Memory tab renders `§`-separated blocks as individual `MemoryCard` views (title + markdown content, subtle card background). Skills tab lists all installed skills with category badges, descriptions, and drill-down detail view. Wiki tab (hidden when no wiki directory exists) shows a French-localised dashboard with topic count, last-ingestion timestamp, a sync button, and "Ask" buttons — tapping an Ask sends a question to Hermes via `onSendToChat` (no article content preview). Refresh button reloads all sections. Calls `brainVM.refreshLightMetrics()` on appear and every 60 seconds via `Timer.publish(every: 60, on: .main, in: .common).autoconnect()` through `.onReceive`.
+- `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses text-only buttons (no background): bold white for the active tab, `.white.opacity(0.32)` medium for others — spacing 16 between tabs. Each tab opens with a short French italic `tabIntro(_:)` one-liner (10.5pt, `.white.opacity(0.45)`) explaining the section for non-technical users. Memory tab renders `§`-separated blocks as `MemoryCard` views (title rendered through markdown with a serif `§` prefix glyph in `AppColors.accent.opacity(0.55)`, body in `.white.opacity(0.55)`, no card background — blocks separated by 1pt `blockDivider` hairlines `.white.opacity(0.06)`). Skills tab lists installed skills with uppercase tracked-mono category prefix in accent, title+description, dividered rows (no card background), chevron affordance. Wiki tab (hidden when no wiki directory exists) shows a French-localised dashboard with topic count, last-ingestion timestamp, a sync button, and "Ask" buttons — tapping an Ask sends a question to Hermes via `onSendToChat` (no article content preview). The redundant "Wiki" title was removed since the tab bar already labels it. Refresh button reloads all sections. Calls `brainVM.refreshLightMetrics()` on appear and every 60 seconds via `Timer.publish(every: 60, on: .main, in: .common).autoconnect()` through `.onReceive`.
 - `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. `menuButton()` helper renders each action icon. When a panel is open, the overlay shows an xmark close button instead. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons. Also hosts the first-run brain onboarding sheet — see "Brain onboarding" section below.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
@@ -304,9 +304,41 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - UI: SwiftUI with AppKit (NSPanel, NSStatusItem, NSEvent global monitors)
 - Dependencies: Yams (SPM) for YAML parsing; otherwise standard frameworks (Network.framework for ClipperListener)
 - French locale for speech transcription
-- Purple/violet accent color throughout
+- Accent color: `AppColors.accent` = light blue `Color(red: 0.6, green: 0.87, blue: 1.0)`. (Historical: the CLAUDE.md used to call it "purple" but the actual value is blue. The pacman toast is separately tinted purple.)
 - Pacman icon for clipper toasts (animated purple circle, 
 Canvas + TimelineView)
+
+### Design language — NOT Material Design
+NotchNotch deliberately avoids MD3-ish patterns. When adding or changing 
+UI, follow these rules:
+
+- **Tab/segmented selection**: no filled pills. Use text weight + opacity 
+  for the active state (bold white vs medium `.white.opacity(~0.32)`). 
+  Segmented pickers may use a subtle neutral `.white.opacity(0.1)` 
+  capsule on the selected segment only — never accent tint, never 
+  per-segment backgrounds on unselected. See `BrainView.tabButton` and 
+  `SettingsView.segmentedButton`.
+- **List rows (Memory blocks, skills, routines)**: no filled card 
+  backgrounds. Use 1pt hairline dividers `.white.opacity(0.06)` between 
+  items. Hover may add a very subtle `.white.opacity(0.05)` tint for 
+  interactive rows. Vertical padding ~10pt. See `blockDivider` / 
+  `rowDivider`.
+- **Section headers**: uppercase monospaced, 9pt bold, 
+  `.white.opacity(0.28)`, tracking 1.5. Never accent-tinted.
+- **Tab intros for non-technical users**: one-line French italic at 
+  10.5pt, `.white.opacity(0.45)`. See `BrainView.tabIntro`.
+- **Accent usage**: reserved for signature moments (the serif `§` mark 
+  in MemoryCards, uppercase-mono category prefix in skill rows, active 
+  state dots, pacman toast). Never on heading/title text, never as a 
+  pill fill.
+- **MemoryCard title** is rendered via markdown so stray `**` wrappers 
+  resolve to bold instead of showing as literal asterisks.
+
+Why: the notch panel is solid near-black to camouflage with the hardware 
+notch. Liquid Glass (iOS 26) doesn't apply (iOS-only API + needs 
+translucent content to blur). Native macOS editorial feel wins: 
+confident typography, dividers, accent sparingly. User explicitly 
+rejected the MD3 pill+card look (2026-04-18).
 
 ### Brain pipeline invariants
 - Wiki path: NotchNotch reads `~/.hermes/brain/wiki/`. The llm-wiki Hermes 
