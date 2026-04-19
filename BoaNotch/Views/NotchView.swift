@@ -181,7 +181,7 @@ struct NotchView: View {
                                 .padding(.bottom, 18)
                                 .transition(.opacity)
                             } else if notchVM.isRoutinesOpen {
-                                RoutinesView(cronStore: cronStore, onSelectJob: { job in
+                                RoutinesView(cronStore: cronStore, panelSize: panelSizeStore.size, onSelectJob: { job in
                                     chatVM.setRoutineContext(job)
                                     notchVM.isRoutinesOpen = false
                                 }, onSelectTemplate: { draft in

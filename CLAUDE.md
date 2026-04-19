@@ -232,7 +232,7 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 
 **Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the job list with a "Browse templates" link at the bottom (toggles `@State showingBrowser`).
 
-**Job list** — when jobs exist, full-width cards (spacing 8) sorted by enabled status then `next_run_at`. Each card shows: status dot (7pt, green=scheduled, orange=paused, pulsing accent=running), job name (size 12), human-readable schedule in a monospace pill/chip (`white.opacity(0.08)` bg, capsule shape) via `humanSchedule()`, run count from `repeat.completed`, and formatted next run time. Card background is `white.opacity(0.08)` with hover state pushing to `0.12` (150ms ease). Paused cards are dimmed. Count badge shows next to "Routines" title. Tapping a card sets `chatVM.activeRoutineContext` and switches to chat. Right-click context menu offers: "Change schedule" (prefills draft), "Pause"/"Resume" (auto-sends), "Remove" (prefills draft, user confirms). All actions go through chat — Hermes executes via its `cronjob` tool. Wired via `onDraftAction: ((String, Bool) -> Void)?` where the Bool triggers auto-send.
+**Job list** — when jobs exist, glass cards laid out in a **responsive `LazyVGrid`**: 2 columns when `panelSize == .standard` (680px), 3 columns when `.large` (900px). 8pt spacing both axes. Sorted by enabled status then `next_run_at`. Cards use `nnGlass(in: RoundedRectangle(cornerRadius: 12, style: .continuous))` — `.glassEffect(.regular)` on macOS 26+, `.ultraThinMaterial` + stroke fallback on 14-25 via the shared helper in `BoaNotch/Views/LiquidGlass.swift`. `NotchView` passes `panelSize: panelSizeStore.size` into `RoutinesView` — the grid re-lays out automatically when the user toggles panel size. Each card has three rows: (1) title (`job.name` or `prompt.prefix(40)` fallback) + `bell.badge.fill` glyph top-right when `deliver == "local"` (Alert routines), tinted `AppColors.accent`; (2) description — 2-line truncated `job.prompt`, only rendered when `job.name` is non-empty (avoids redundancy with the title fallback); (3) footer — status dot (7pt, green=scheduled, orange=paused, pulsing accent=running, gray=disabled) + `humanSchedule(schedule_display)` + a single telemetry field: `completed > 0` shows "N runs", otherwise `formatNextRun(next_run_at)` shows "next: …" (never both). Dot pulsation honors `@Environment(\.accessibilityReduceMotion)`. Hover adds a `.white.opacity(0.04)` overlay (150ms ease). Paused cards at opacity 0.5. Count badge next to "Routines" title. Tapping a card sets `chatVM.activeRoutineContext` and switches to chat. Right-click context menu: "Change schedule" (prefills draft), "Pause"/"Resume" (auto-sends), "Remove" (prefills draft, user confirms) — all via `onDraftAction: ((String, Bool) -> Void)?` where the Bool triggers auto-send. All actions go through chat — Hermes executes via its `cronjob` tool. See also: the "Routines are the exception" rule under "Design language — NOT Material Design" — routines are the only panel content allowed to use filled glass cards.
 
 **`humanSchedule()` cron parser** — converts common 5-field cron expressions to readable text: `0 9 * * *` → "Daily at 9 AM", `0 9 * * 1-5` → "Weekdays at 9 AM", `0 9 * * 0` → "Suns at 9 AM", `0 9 * * 1,4` → "Mon & Thu at 9 AM", `*/30 * * * *` → "Every 30 min", `0 */6 * * *` → "Every 6h", `0 9 15 * *` → "Day 15, 9 AM". Falls back to raw string for unrecognized patterns. Also passes through `every Xh/Xm` interval syntax unchanged.
 
@@ -293,6 +293,7 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - **`cronjob action=run` does NOT execute immediately**: it advances `next_run_at` to just after "now" but the actual execution still waits for the scheduler's tick. `last_run_at` and `last_status` stay null until the scheduler picks it up. To force-test a cron job's prompt, send that prompt directly via `/v1/responses` — don't rely on `action=run` for E2E verification.
 - **Free-tier models skip skill invocation**: the default Nemotron free-tier model routes ambiguous "ingest this" prompts to the `memory` tool instead of the `llm-wiki` skill. The `brain-ingest` cron prompt must explicitly name the skill (`[SILENT] Utilise le skill llm-wiki pour ...`) to force the right path.
 - **Memory edit/delete is fire-and-forget**: `ChatViewModel.updateMemory` / `deleteMemory` POST to `/v1/responses` with `store: false` — HTTP 200 just means "request received", NOT "memory rewritten". Hermes still has to invoke its `memory` tool, which depends on the model. Weak models may route the edit prompt to generic chat instead of the tool, silently no-op'ing. The 5s `scheduleBrainReload()` is a heuristic — if the edit hasn't landed, the user must hit the refresh button. Never claim "memory updated" to the user beyond the optimistic toast.
+- **`@Published` fires in willSet, not didSet**: a Combine sink on `$someProperty` runs *before* the stored value is updated, so reading `store.someProperty` inside the sink returns the OLD value. Bit us on `panelSizeStore.$size` — the resize sink was reading stale size and resizing to the previous dimensions. Fix: `.receive(on: DispatchQueue.main)` on the publisher chain defers the sink to the next runloop tick, by which point `didSet` has written the new value. See `NotchWindowController.sizeCancellable`. Apply this anywhere a sink needs to observe a *post-change* state, not just that "a change happened".
 
 ## Companion projects
 
@@ -340,11 +341,22 @@ UI, follow these rules:
   capsule on the selected segment only — never accent tint, never 
   per-segment backgrounds on unselected. See `BrainView.tabButton` and 
   `SettingsView.segmentedButton`.
-- **List rows (Memory blocks, skills, routines)**: no filled card 
+- **List rows (Memory blocks, skills, history)**: no filled card 
   backgrounds. Use 1pt hairline dividers `.white.opacity(0.06)` between 
   items. Hover may add a very subtle `.white.opacity(0.05)` tint for 
   interactive rows. Vertical padding ~10pt. See `blockDivider` / 
   `rowDivider`.
+- **Routines are the exception**: a cron job is an *object* (state, 
+  periodicity, next run, deliver target), not a list item. Routines 
+  render as true cards with glass backgrounds (see `RoutinesView.jobCard`) 
+  — `nnGlass(in: RoundedRectangle(cornerRadius: 12, style: .continuous))`, 
+  8pt vertical gap between cards, 14×12 inner padding. Alert routines 
+  (`deliver == "local"`) get a `bell.badge.fill` glyph top-right tinted 
+  `AppColors.accent` — distinction is via glyph, never tint (orange is 
+  already owned by the paused state). Footer shows counter OR next run 
+  (binary: `completed > 0 ? counter : next`), not both. This exception 
+  does NOT generalize — Brain / Memory / Skills / History / Settings keep 
+  the dividers-only doctrine.
 - **Section headers**: uppercase monospaced, 9pt bold, 
   `.white.opacity(0.28)`, tracking 1.5. Never accent-tinted.
 - **Tab intros for non-technical users**: one-line French italic at 
@@ -370,7 +382,12 @@ macOS 26+ and fall back to `.ultraThinMaterial` elsewhere.
 Where glass is allowed:
 - Floating UI OVER the desktop / outside the black panel — the 
   recording toast capsule, the clipper/cron `ToastView`.
-- Never on content rows (memory cards, skill rows, routines, history 
+- **Routines cards** inside the panel (`RoutinesView.jobCard`) — 
+  justified because cron jobs are stateful objects, not list items. 
+  Always via `nnGlass(in:)` with a 12pt continuous rounded rectangle. 
+  This is a deliberate exception, not a precedent; see the "Routines 
+  are the exception" rule above.
+- Never on other content rows (memory cards, skill rows, history 
   rows) — that's the "glass on content" anti-pattern.
 - Never as the background of the notch panel itself (it's camouflaged 
   black by design).

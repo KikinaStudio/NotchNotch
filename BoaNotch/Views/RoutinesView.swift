@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RoutinesView: View {
     let cronStore: CronStore
+    let panelSize: PanelSize
     var onSelectJob: (CronJob) -> Void
     var onSelectTemplate: (String) -> Void
     var onCreateOwn: () -> Void
@@ -9,6 +10,14 @@ struct RoutinesView: View {
     var onDraftAction: ((String, Bool) -> Void)? = nil
 
     @State private var showingBrowser = false
+    @State private var hoveredJobId: String?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var gridColumns: [GridItem] {
+        // .large panel (900pt wide) → 3 columns, .standard (680pt) → 2 columns
+        let count = panelSize == .large ? 3 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: count)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,10 +39,11 @@ struct RoutinesView: View {
                 )
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(cronStore.sortedJobs.enumerated()), id: \.element.id) { index, job in
-                            if index > 0 { rowDivider }
-                            jobCard(job)
+                    VStack(spacing: 14) {
+                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
+                            ForEach(cronStore.sortedJobs) { job in
+                                jobCard(job)
+                            }
                         }
 
                         Button {
@@ -56,7 +66,6 @@ struct RoutinesView: View {
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
-                        .padding(.top, 14)
                     }
                 }
             }
@@ -66,74 +75,97 @@ struct RoutinesView: View {
         .padding(.bottom, 18)
     }
 
-    @State private var hoveredJobId: String?
-
-    private var rowDivider: some View {
-        Divider().padding(.leading, 13)
-    }
-
     private func jobCard(_ job: CronJob) -> some View {
-        Button {
+        let hasName = !job.name.isEmpty
+        let title = hasName ? job.name : String(job.prompt.prefix(40))
+        let runCount = job.repeat?.completed ?? 0
+        let nextRun = formatNextRun(job.next_run_at)
+        let isAlert = job.deliver == "local"
+        let isPaused = job.state == "paused"
+        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return Button {
             onSelectJob(job)
         } label: {
-            VStack(alignment: .leading, spacing: 3) {
-                // Line 1: dot + name + schedule pill
+            VStack(alignment: .leading, spacing: 6) {
+                // Row 1: title + alert glyph
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Spacer(minLength: 0)
+
+                    if isAlert {
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 11))
+                            .foregroundStyle(AppColors.accent)
+                            .accessibilityLabel("Alert routine — notifies in the notch")
+                    }
+                }
+
+                // Row 2: description (only when title is distinct from prompt)
+                if hasName {
+                    Text(job.prompt)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                // Row 3: dot + schedule + (counter OR next)
                 HStack(spacing: 6) {
                     Circle()
                         .fill(dotColor(for: job))
                         .frame(width: 7, height: 7)
                         .opacity(job.state == "running" ? 0.6 : 1.0)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: job.state == "running")
-
-                    Text(job.name.isEmpty ? String(job.prompt.prefix(40)) : job.name)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Spacer()
+                        .animation(
+                            reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                            value: job.state == "running"
+                        )
 
                     Text(humanSchedule(job.schedule_display))
                         .font(.caption2.weight(.medium).monospaced())
                         .foregroundStyle(.secondary)
                         .tracking(0.3)
                         .lineLimit(1)
-                }
 
-                // Line 2: telemetry
-                HStack(spacing: 0) {
-                    let runCount = job.repeat?.completed ?? 0
-                    let nextRun = formatNextRun(job.next_run_at)
-                    let hasRuns = runCount > 0
-                    let hasNext = job.state == "scheduled" && nextRun != nil
+                    Text("·")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
 
-                    if hasRuns || hasNext {
-                        if hasRuns {
-                            Text("\(runCount) runs")
+                    Group {
+                        if runCount > 0 {
+                            Text("\(runCount) run\(runCount == 1 ? "" : "s")")
+                                .foregroundStyle(.tertiary)
+                        } else if let nextRun {
+                            Text("next: \(nextRun)")
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("not yet run")
+                                .foregroundStyle(.quaternary)
                         }
-                        if hasRuns && hasNext {
-                            Text(" · ")
-                        }
-                        if hasNext {
-                            Text("next: \(nextRun!)")
-                        }
-                    } else {
-                        Text("not yet run")
-                            .foregroundStyle(.quaternary)
                     }
+                    .font(.caption2)
+                    .lineLimit(1)
+
+                    Spacer(minLength: 0)
                 }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 13)
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(hoveredJobId == job.id ? AnyShapeStyle(.quinary) : AnyShapeStyle(Color.clear))
+            .nnGlass(in: cardShape)
+            .overlay(
+                cardShape
+                    .fill(hoveredJobId == job.id ? Color.white.opacity(0.04) : .clear)
+                    .allowsHitTesting(false)
             )
             .contentShape(Rectangle())
-            .opacity(job.state == "paused" ? 0.5 : 1.0)
+            .opacity(isPaused ? 0.5 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
         }
         .buttonStyle(.plain)

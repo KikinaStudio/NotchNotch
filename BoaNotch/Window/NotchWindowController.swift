@@ -70,8 +70,14 @@ class NotchWindowController {
             object: nil
         )
 
+        // `@Published` emits in willSet — the stored property is still the old
+        // value at sink time. `receive(on: .main)` defers to the next runloop
+        // tick so `applyPanelSize` reads the up-to-date `panelSizeStore.size`.
+        // Without this, the first toggle resizes to the OLD size (a no-op) and
+        // the icon/panel state drift out of sync.
         sizeCancellable = panelSizeStore.$size
             .dropFirst()
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.applyPanelSize(animated: true)
             }
