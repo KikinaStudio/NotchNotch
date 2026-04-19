@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 struct SkillInfo: Identifiable {
     let id: String
@@ -8,10 +9,24 @@ struct SkillInfo: Identifiable {
     let content: String
 }
 
+enum MemorySource: String {
+    case user
+    case learned
+}
+
 struct MemoryBlock: Identifiable {
-    let id = UUID()
+    let id: String
     let title: String
     let content: String
+    let category: String
+    let source: MemorySource
+}
+
+struct MemoryCategoryGroup: Identifiable {
+    let name: String
+    let blocks: [MemoryBlock]
+    var id: String { name }
+    var count: Int { blocks.count }
 }
 
 struct WikiArticle: Identifiable {
@@ -23,8 +38,11 @@ struct WikiArticle: Identifiable {
 }
 
 class BrainViewModel: ObservableObject {
+    static let fallbackMemoryCategory = "Généralités"
+
     @Published var memoryBlocks: [MemoryBlock] = []
     @Published var userBlocks: [MemoryBlock] = []
+    @Published var allMemoryBlocks: [MemoryBlock] = []
     @Published var skills: [SkillInfo] = []
     @Published var wikiArticles: [WikiArticle] = []
     @Published var hasWiki = false
@@ -32,6 +50,17 @@ class BrainViewModel: ObservableObject {
     @Published var pendingRawCount: Int = 0
     @Published var isIngesting: Bool = false
     @Published var hasLoaded = false
+
+    var memoryCategories: [MemoryCategoryGroup] {
+        let grouped = Dictionary(grouping: allMemoryBlocks, by: \.category)
+        return grouped
+            .map { MemoryCategoryGroup(name: $0.key, blocks: $0.value) }
+            .sorted { a, b in
+                if a.name == Self.fallbackMemoryCategory { return false }
+                if b.name == Self.fallbackMemoryCategory { return true }
+                return a.name.localizedStandardCompare(b.name) == .orderedAscending
+            }
+    }
 
     private var hermesHome: String {
         ProcessInfo.processInfo.environment["HERMES_HOME"]
@@ -63,11 +92,12 @@ class BrainViewModel: ObservableObject {
         let memoryPath = (memoriesDir as NSString).appendingPathComponent("MEMORY.md")
         let userPath = (memoriesDir as NSString).appendingPathComponent("USER.md")
 
-        memoryBlocks = readFileIfExists(memoryPath).map { parseMemoryBlocks($0) } ?? []
-        userBlocks = readFileIfExists(userPath).map { parseMemoryBlocks($0) } ?? []
+        memoryBlocks = readFileIfExists(memoryPath).map { parseMemoryBlocks($0, source: .learned) } ?? []
+        userBlocks = readFileIfExists(userPath).map { parseMemoryBlocks($0, source: .user) } ?? []
+        allMemoryBlocks = userBlocks + memoryBlocks
     }
 
-    private func parseMemoryBlocks(_ raw: String) -> [MemoryBlock] {
+    private func parseMemoryBlocks(_ raw: String, source: MemorySource) -> [MemoryBlock] {
         raw.components(separatedBy: "§")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -76,24 +106,51 @@ class BrainViewModel: ObservableObject {
                     .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
                 let firstLine = lines.first ?? ""
                 let title: String
+                let category: String
 
                 if firstLine.hasPrefix("**") && firstLine.contains("**") {
-                    let label = firstLine
-                        .replacingOccurrences(of: "**", with: "")
-                        .components(separatedBy: ":").first ?? "Note"
-                    title = label.trimmingCharacters(in: .whitespaces)
+                    let stripped = firstLine.replacingOccurrences(of: "**", with: "")
+                    let label = stripped.components(separatedBy: ":").first ?? "Note"
+                    let clean = label.trimmingCharacters(in: .whitespaces)
+                    title = clean
+                    category = clean
                 } else if firstLine.hasPrefix("- ") && firstLine.contains(":") {
                     let after = String(firstLine.dropFirst(2))
-                    let label = after.components(separatedBy: ":").first ?? "Note"
-                    title = label.trimmingCharacters(in: .whitespaces)
+                    let rawLabel = after.components(separatedBy: ":").first ?? "Note"
+                    title = rawLabel.trimmingCharacters(in: .whitespaces)
+                    category = rawLabel
+                        .replacingOccurrences(of: "**", with: "")
+                        .trimmingCharacters(in: .whitespaces)
                 } else if firstLine.hasPrefix("## ") {
-                    title = String(firstLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    let heading = String(firstLine.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                    title = heading
+                    category = heading
                 } else {
                     title = String(firstLine.prefix(40))
+                    category = Self.fallbackMemoryCategory
                 }
 
-                return MemoryBlock(title: title, content: block)
+                return MemoryBlock(
+                    id: Self.contentHashId(for: block),
+                    title: title,
+                    content: block,
+                    category: category,
+                    source: source
+                )
             }
+    }
+
+    /// SHA-256 hash of normalized content (trimmed, whitespace runs collapsed to
+    /// single space), truncated to 16 hex chars. Case-preserving. Stable across
+    /// reloads so pin state survives small formatting edits.
+    private static func contentHashId(for content: String) -> String {
+        let normalized = content
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let digest = SHA256.hash(data: Data(normalized.utf8))
+        let hex = digest.map { String(format: "%02x", $0) }.joined()
+        return String(hex.prefix(16))
     }
 
     // MARK: - Skills

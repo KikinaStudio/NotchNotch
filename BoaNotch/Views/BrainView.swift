@@ -8,9 +8,12 @@ enum BrainTab: String, CaseIterable {
 
 struct BrainView: View {
     @ObservedObject var brainVM: BrainViewModel
+    @ObservedObject var chatVM: ChatViewModel
+    @ObservedObject var notchVM: NotchViewModel
     var onSendToChat: ((String) -> Void)?
     @State private var activeTab: BrainTab = .memory
     @State private var selectedSkill: SkillInfo?
+    @State private var selectedMemoryCategory: String?
     @State private var syncPulseScale: CGFloat = 1.0
 
     private let lightMetricsTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -38,7 +41,7 @@ struct BrainView: View {
             // Content
             ZStack {
                 contentForTab
-                    .opacity(selectedSkill == nil ? 1 : 0)
+                    .opacity((selectedSkill == nil && selectedMemoryCategory == nil) ? 1 : 0)
 
                 if let skill = selectedSkill {
                     detailView(title: skill.name, content: skill.content) {
@@ -51,10 +54,27 @@ struct BrainView: View {
                         removal: .move(edge: .trailing)
                     ))
                 }
+
+                if let category = selectedMemoryCategory,
+                   let group = brainVM.memoryCategories.first(where: { $0.name == category }) {
+                    memoryCategoryDetail(group: group)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        ))
+                }
             }
         }
         .onAppear { brainVM.refreshLightMetrics() }
         .onReceive(lightMetricsTimer) { _ in brainVM.refreshLightMetrics() }
+        .onChange(of: brainVM.allMemoryBlocks.map(\.id)) { _, _ in
+            if let sel = selectedMemoryCategory,
+               !brainVM.memoryCategories.contains(where: { $0.name == sel }) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    selectedMemoryCategory = nil
+                }
+            }
+        }
     }
 
     // MARK: - Tab button
@@ -63,6 +83,7 @@ struct BrainView: View {
         Button {
             activeTab = tab
             selectedSkill = nil
+            selectedMemoryCategory = nil
         } label: {
             Text(tab.rawValue)
                 .font(.callout.weight(activeTab == tab ? .semibold : .medium))
@@ -88,33 +109,103 @@ struct BrainView: View {
 
     private var memoryTab: some View {
         Group {
-            if brainVM.userBlocks.isEmpty && brainVM.memoryBlocks.isEmpty {
+            if brainVM.allMemoryBlocks.isEmpty {
                 emptyState("Hermes hasn't learned anything yet.\nStart chatting and it will remember what matters.")
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
-                        tabIntro("Ce qu'Hermes retient de toi et de tes conversations.")
+                        tabIntro("Ce qu'Hermes retient de toi, rangé par sujet.")
 
-                        if !brainVM.userBlocks.isEmpty {
-                            memorySectionHeader("ABOUT YOU")
-                            ForEach(Array(brainVM.userBlocks.enumerated()), id: \.element.id) { index, block in
-                                if index > 0 { blockDivider }
-                                MemoryCard(block: block)
-                            }
-                        }
+                        Text(categoryCountCaption(brainVM.memoryCategories.count))
+                            .font(.caption2.weight(.bold).monospaced())
+                            .foregroundStyle(.tertiary)
+                            .tracking(1.5)
+                            .padding(.bottom, 6)
 
-                        if !brainVM.memoryBlocks.isEmpty {
-                            memorySectionHeader("LEARNED FACTS")
-                                .padding(.top, !brainVM.userBlocks.isEmpty ? 14 : 0)
-                            ForEach(Array(brainVM.memoryBlocks.enumerated()), id: \.element.id) { index, block in
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(brainVM.memoryCategories.enumerated()), id: \.element.id) { index, group in
                                 if index > 0 { blockDivider }
-                                MemoryCard(block: block)
+                                categoryRow(group)
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    private func categoryRow(_ group: MemoryCategoryGroup) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                selectedMemoryCategory = group.name
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(group.name)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text("\(group.count)")
+                    .font(.caption2.weight(.medium).monospaced())
+                    .foregroundStyle(.tertiary)
+
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private func memoryCategoryDetail(group: MemoryCategoryGroup) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    selectedMemoryCategory = nil
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                        .font(.caption.weight(.semibold))
+                    Text(group.name)
+                        .font(.footnote.weight(.medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(AppColors.accent)
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+            .padding(.bottom, 10)
+
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(group.blocks.enumerated()), id: \.element.id) { index, block in
+                        if index > 0 { blockDivider }
+                        MemoryCard(
+                            block: block,
+                            onUpdate: { newContent in
+                                chatVM.updateMemory(oldContent: block.content, newContent: newContent)
+                                scheduleBrainReload()
+                            },
+                            onDelete: {
+                                chatVM.deleteMemory(content: block.content)
+                                scheduleBrainReload()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func categoryCountCaption(_ count: Int) -> String {
+        count == 1 ? "1 CATÉGORIE" : "\(count) CATÉGORIES"
     }
 
     private func tabIntro(_ text: String) -> some View {
@@ -124,15 +215,6 @@ struct BrainView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 12)
-    }
-
-    private func memorySectionHeader(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.bold).monospaced())
-            .foregroundStyle(.tertiary)
-            .tracking(1.5)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 6)
     }
 
     private var blockDivider: some View {
@@ -363,6 +445,16 @@ struct BrainView: View {
         }
     }
 
+    /// Reload the brain panel a few seconds after a memory edit/delete so the
+    /// fresh MEMORY.md / USER.md state (rewritten by Hermes) flows back into
+    /// the UI. Hermes may take longer than 5s for complex edits; users can hit
+    /// the refresh button if the change hasn't landed yet.
+    private func scheduleBrainReload() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak brainVM] in
+            brainVM?.reload()
+        }
+    }
+
     private func askAboutArticle(_ article: WikiArticle) {
         if article.isIndex {
             onSendToChat?("Résume-moi ton wiki")
@@ -420,8 +512,15 @@ struct BrainView: View {
 
 struct MemoryCard: View {
     let block: MemoryBlock
+    var onUpdate: ((String) -> Void)?
+    var onDelete: (() -> Void)?
 
     @EnvironmentObject var appearanceSettings: AppearanceSettings
+    @State private var isEditing = false
+    @State private var isHovering = false
+    @State private var confirmingDelete = false
+    @State private var draft: String = ""
+    @FocusState private var editorFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -433,16 +532,129 @@ struct MemoryCard: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+
+                Spacer(minLength: 6)
+
+                if !isEditing {
+                    actionButtons
+                        .opacity(isHovering || confirmingDelete ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.12), value: isHovering)
+                        .animation(.easeInOut(duration: 0.12), value: confirmingDelete)
+                }
             }
 
-            Text(markdownContent)
-                .font(.system(size: 11 * appearanceSettings.textSize.scale))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .padding(.leading, 14)
+            if isEditing {
+                editor
+                    .padding(.leading, 14)
+            } else {
+                Text(markdownContent)
+                    .font(.system(size: 11 * appearanceSettings.textSize.scale))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.leading, 14)
+            }
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+    }
+
+    // MARK: - Action buttons (hover reveal)
+
+    private var actionButtons: some View {
+        HStack(spacing: 10) {
+            if confirmingDelete {
+                Text("Supprimer ?")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Button("Oui") {
+                    confirmingDelete = false
+                    onDelete?()
+                }
+                .buttonStyle(.plain)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.red.opacity(0.85))
+                .pointingHandCursor()
+                Button("Annuler") {
+                    confirmingDelete = false
+                }
+                .buttonStyle(.plain)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .pointingHandCursor()
+            } else {
+                Button {
+                    draft = block.content
+                    isEditing = true
+                    DispatchQueue.main.async { editorFocused = true }
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .help("Modifier")
+
+                Button {
+                    confirmingDelete = true
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .help("Supprimer")
+            }
+        }
+    }
+
+    // MARK: - Inline editor
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextEditor(text: $draft)
+                .font(.system(size: 11 * appearanceSettings.textSize.scale))
+                .scrollContentBackground(.hidden)
+                .background(Color.white.opacity(0.05))
+                .foregroundStyle(.primary)
+                .frame(minHeight: 80, maxHeight: 220)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+                .cornerRadius(6)
+                .focused($editorFocused)
+
+            HStack(spacing: 10) {
+                Spacer()
+                Button("Annuler") {
+                    isEditing = false
+                    draft = ""
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.tertiary)
+                .pointingHandCursor()
+
+                Button("Enregistrer") {
+                    let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty, trimmed != block.content.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                        isEditing = false
+                        return
+                    }
+                    onUpdate?(trimmed)
+                    isEditing = false
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppColors.accent)
+                .pointingHandCursor()
+                .keyboardShortcut(.return, modifiers: .command)
+            }
+        }
     }
 
     private var titleAttributed: AttributedString {

@@ -220,7 +220,7 @@ struct NotchView: View {
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
                             } else if notchVM.isBrainOpen {
-                                BrainView(brainVM: brainVM, onSendToChat: { message in
+                                BrainView(brainVM: brainVM, chatVM: chatVM, notchVM: notchVM, onSendToChat: { message in
                                     chatVM.draft = message
                                     notchVM.isBrainOpen = false
                                     chatVM.send()

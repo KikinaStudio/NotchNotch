@@ -273,6 +273,58 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Fire-and-forget request to Hermes to rewrite a memory block. NotchNotch
+    /// never writes `~/.hermes/memories/` directly — Hermes owns those files
+    /// and applies the change through its `memory` tool. UI shows an optimistic
+    /// toast; callers should schedule a BrainViewModel reload a few seconds
+    /// later to pick up the rewritten MEMORY.md / USER.md.
+    func updateMemory(oldContent: String, newContent: String) {
+        let trimmedOld = oldContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedNew = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedOld != trimmedNew, !trimmedNew.isEmpty else { return }
+        let prompt = """
+        Please update my memory. Find the existing block that matches the text below and replace it with the new version. Keep the `§` separators and your usual formatting conventions intact.
+
+        === OLD BLOCK ===
+        \(trimmedOld)
+
+        === NEW VERSION ===
+        \(trimmedNew)
+        """
+        let messages: [[String: String]] = [["role": "user", "content": prompt]]
+        Task { @MainActor in
+            do {
+                try await client.sendCompletion(messages: messages)
+                notchVM?.showToast("Mémoire mise à jour")
+            } catch {
+                print("[notchnotch] Memory update error: \(error)")
+                notchVM?.showToast("Mise à jour échouée")
+            }
+        }
+    }
+
+    /// Fire-and-forget request to Hermes to delete a memory block.
+    func deleteMemory(content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let prompt = """
+        Please delete this exact memory block from my memory. Remove the entire block and the surrounding `§` separator so nothing dangling remains.
+
+        === BLOCK TO DELETE ===
+        \(trimmed)
+        """
+        let messages: [[String: String]] = [["role": "user", "content": prompt]]
+        Task { @MainActor in
+            do {
+                try await client.sendCompletion(messages: messages)
+                notchVM?.showToast("Mémoire supprimée")
+            } catch {
+                print("[notchnotch] Memory delete error: \(error)")
+                notchVM?.showToast("Suppression échouée")
+            }
+        }
+    }
+
     func setRoutineContext(_ job: CronJob) {
         activeRoutineContext = job
     }
