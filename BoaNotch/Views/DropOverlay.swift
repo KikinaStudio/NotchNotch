@@ -15,9 +15,8 @@ struct DropOverlay: View {
                     isActive: activeZone == .left
                 )
 
-                // Vertical divider
                 Rectangle()
-                    .fill(.white.opacity(0.15))
+                    .fill(.separator)
                     .frame(width: 1)
                     .padding(.vertical, 24)
 
@@ -34,14 +33,14 @@ struct DropOverlay: View {
     private func zoneView(icon: String, title: String, subtitle: String, isActive: Bool) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 22, weight: .medium))
+                .font(.title3.weight(.medium))
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.callout.weight(.semibold))
             Text(subtitle)
-                .font(.system(size: 10))
-                .opacity(0.6)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
-        .foregroundStyle(.white.opacity(isActive ? 0.9 : 0.25))
+        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.15), value: isActive)
     }

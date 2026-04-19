@@ -27,8 +27,8 @@ struct BrainView: View {
                 Spacer()
                 Button { brainVM.reload() } label: {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
@@ -65,8 +65,8 @@ struct BrainView: View {
             selectedSkill = nil
         } label: {
             Text(tab.rawValue)
-                .font(.system(size: 12, weight: activeTab == tab ? .semibold : .medium))
-                .foregroundStyle(activeTab == tab ? .white : .white.opacity(0.32))
+                .font(.callout.weight(activeTab == tab ? .semibold : .medium))
+                .foregroundStyle(activeTab == tab ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                 .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
@@ -119,9 +119,8 @@ struct BrainView: View {
 
     private func tabIntro(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10.5))
-            .italic()
-            .foregroundStyle(.white.opacity(0.45))
+            .font(.footnote.italic())
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 12)
@@ -129,18 +128,15 @@ struct BrainView: View {
 
     private func memorySectionHeader(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.28))
+            .font(.caption2.weight(.bold).monospaced())
+            .foregroundStyle(.tertiary)
             .tracking(1.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.bottom, 6)
     }
 
     private var blockDivider: some View {
-        Rectangle()
-            .fill(.white.opacity(0.06))
-            .frame(height: 1)
-            .padding(.leading, 14)
+        Divider().padding(.leading, 14)
     }
 
     // MARK: - Skills tab
@@ -155,8 +151,8 @@ struct BrainView: View {
                         tabIntro("Les savoir-faire qu'Hermes peut mobiliser. Chacun lui apprend à faire quelque chose de précis.")
 
                         Text("\(brainVM.skills.count) SKILLS AVAILABLE")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.28))
+                            .font(.caption2.weight(.bold).monospaced())
+                            .foregroundStyle(.tertiary)
                             .tracking(1.5)
                             .padding(.bottom, 6)
 
@@ -168,8 +164,8 @@ struct BrainView: View {
                         }
 
                         Text("Type /skill-name in chat to use a skill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.25))
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 14)
                     }
@@ -188,17 +184,17 @@ struct BrainView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(skill.category.uppercased())
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundStyle(AppColors.accent.opacity(0.55))
+                            .font(.caption2.weight(.bold).monospaced())
+                            .foregroundStyle(AppColors.accent.opacity(0.6))
                             .tracking(1.2)
                         Text(skill.name)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.primary)
                     }
                     if !skill.description.isEmpty {
                         Text(skill.description)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                 }
@@ -206,8 +202,8 @@ struct BrainView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 10)
             .contentShape(Rectangle())
@@ -235,8 +231,8 @@ struct BrainView: View {
                             }
                             syncButton
                         }
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8)
@@ -251,17 +247,17 @@ struct BrainView: View {
                                     HStack {
                                         if article.isIndex {
                                             Image(systemName: "pin.fill")
-                                                .font(.system(size: 8))
-                                                .foregroundStyle(AppColors.accent.opacity(0.5))
+                                                .font(.caption2)
+                                                .foregroundStyle(AppColors.accent.opacity(0.55))
                                         }
                                         Text(article.title)
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(.white.opacity(0.7))
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
                                             .lineLimit(1)
                                         Spacer()
                                         Text("Ask")
-                                            .font(.system(size: 9, weight: .medium))
-                                            .foregroundStyle(AppColors.accent.opacity(0.5))
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(AppColors.accent.opacity(0.6))
                                     }
                                     .padding(.vertical, 6)
                                     .padding(.horizontal, 8)
@@ -282,8 +278,8 @@ struct BrainView: View {
                 markdown: "Ton cerveau est vide. Installe [l'extension NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) et clippe ton premier article."
             )) ?? AttributedString("Ton cerveau est vide.")
         )
-        .font(.system(size: 12))
-        .foregroundStyle(.white.opacity(0.3))
+        .font(.callout)
+        .foregroundStyle(.tertiary)
         .multilineTextAlignment(.center)
         .tint(AppColors.accent.opacity(0.7))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -304,8 +300,8 @@ struct BrainView: View {
                         .frame(width: 11, height: 11)
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(brainVM.pendingRawCount > 0 ? 1.0 : 0.3))
+                        .font(.footnote)
+                        .foregroundStyle(brainVM.pendingRawCount > 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .scaleEffect(brainVM.pendingRawCount > 0 ? syncPulseScale : 1.0)
                 }
             }
@@ -382,9 +378,9 @@ struct BrainView: View {
             Button(action: onBack) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                     Text(title)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.footnote.weight(.medium))
                         .lineLimit(1)
                 }
                 .foregroundStyle(AppColors.accent)
@@ -405,16 +401,16 @@ struct BrainView: View {
         let rendered = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             ?? AttributedString(text)
         return Text(rendered)
-            .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.82))
+            .font(.callout)
+            .foregroundStyle(.primary)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func emptyState(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 12))
-            .foregroundStyle(.white.opacity(0.3))
+            .font(.callout)
+            .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -425,21 +421,23 @@ struct BrainView: View {
 struct MemoryCard: View {
     let block: MemoryBlock
 
+    @EnvironmentObject var appearanceSettings: AppearanceSettings
+
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("§")
-                    .font(.system(size: 12, weight: .regular, design: .serif))
-                    .foregroundStyle(AppColors.accent.opacity(0.55))
+                    .font(.system(size: 13, weight: .regular, design: .serif))
+                    .foregroundStyle(AppColors.accent.opacity(0.6))
                 Text(titleAttributed)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
             }
 
             Text(markdownContent)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.55))
+                .font(.system(size: 11 * appearanceSettings.textSize.scale))
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .padding(.leading, 14)
         }

@@ -39,8 +39,8 @@ struct TemplateBrowserView: View {
     private var categoriesScreen: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Pick a category, or describe your own in the chat.")
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
                 .padding(.bottom, 2)
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -55,20 +55,21 @@ struct TemplateBrowserView: View {
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "plus")
-                                .font(.system(size: 14))
-                                .foregroundStyle(AppColors.accent.opacity(0.5))
+                                .font(.body)
+                                .foregroundStyle(AppColors.accent.opacity(0.6))
                                 .frame(width: 20)
 
                             Text("Create your own")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.5))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(.secondary)
 
                             Spacer()
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
-                        .background(.white.opacity(0.02))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .background(
+                            RoundedRectangle(cornerRadius: 8).fill(.quinary)
+                        )
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -85,31 +86,33 @@ struct TemplateBrowserView: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: category.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.accent.opacity(0.6))
+                    .font(.body)
+                    .foregroundStyle(AppColors.accent.opacity(0.7))
                     .frame(width: 20)
 
                 Text(category.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.primary)
 
                 Spacer()
 
                 Text("\(category.templates.count)")
-                    .font(.system(size: 9))
-                    .foregroundStyle(.white.opacity(0.2))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.15))
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(
+                RoundedRectangle(cornerRadius: 8).fill(.quinary)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                    .stroke(.separator.opacity(0.5), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
@@ -154,25 +157,25 @@ struct TemplateBrowserView: View {
         } label: {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: template.icon)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppColors.accent.opacity(0.6))
+                    .font(.body)
+                    .foregroundStyle(AppColors.accent.opacity(0.7))
                     .frame(width: 20)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(template.title)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.primary)
                         if template.deliver == "local" {
                             Image(systemName: "bell.badge")
-                                .font(.system(size: 9))
+                                .font(.caption2)
                                 .foregroundStyle(AppColors.accent)
                         }
                     }
 
                     Text(template.subtitle)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -180,16 +183,17 @@ struct TemplateBrowserView: View {
                 Spacer()
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.15))
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(.white.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .background(
+                RoundedRectangle(cornerRadius: 8).fill(.quinary)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(.white.opacity(0.06), lineWidth: 0.5)
+                    .stroke(.separator.opacity(0.5), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
@@ -209,17 +213,16 @@ struct TemplateBrowserView: View {
             // Schedule info
             HStack(spacing: 4) {
                 Image(systemName: "clock")
-                    .font(.system(size: 9))
                 Text(template.schedule)
-                    .font(.system(size: 10))
             }
-            .foregroundStyle(.white.opacity(0.3))
+            .font(.caption)
+            .foregroundStyle(.tertiary)
 
             if template.inputs.isEmpty {
                 Spacer()
                 Text("No configuration needed — this routine works out of the box.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer()
             } else {
@@ -239,12 +242,17 @@ struct TemplateBrowserView: View {
                 onSelectTemplate(draft)
             } label: {
                 Text("Create routine")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(allRequiredFilled(template) ? .white : .white.opacity(0.3))
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(allRequiredFilled(template) ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 7)
-                    .background(allRequiredFilled(template) ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                    .clipShape(Capsule())
+                    .padding(.vertical, 8)
+                    .background {
+                        if allRequiredFilled(template) {
+                            Capsule().fill(AppColors.accent.opacity(0.35))
+                        } else {
+                            Capsule().fill(.quaternary)
+                        }
+                    }
             }
             .buttonStyle(.plain)
             .disabled(!allRequiredFilled(template))
@@ -259,12 +267,12 @@ struct TemplateBrowserView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 3) {
                 Text(input.label)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if !input.required {
                     Text("(optional)")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.2))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -272,12 +280,11 @@ struct TemplateBrowserView: View {
             case .freeText(let placeholder):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.callout)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
 
             case .picker(let options):
                 HStack(spacing: 6) {
@@ -286,12 +293,17 @@ struct TemplateBrowserView: View {
                             inputValues[input.id] = option
                         } label: {
                             Text(option)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(inputValues[input.id] == option ? .white : .white.opacity(0.5))
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(inputValues[input.id] == option ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
-                                .background(inputValues[input.id] == option ? AppColors.accent.opacity(0.3) : .white.opacity(0.06))
-                                .clipShape(Capsule())
+                                .background {
+                                    if inputValues[input.id] == option {
+                                        Capsule().fill(AppColors.accent.opacity(0.35))
+                                    } else {
+                                        Capsule().fill(.quaternary)
+                                    }
+                                }
                         }
                         .buttonStyle(.plain)
                     }
@@ -300,37 +312,34 @@ struct TemplateBrowserView: View {
             case .number(let placeholder, _):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.callout)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
                     .frame(width: 80)
 
             case .filePath(let placeholder):
                 HStack(spacing: 6) {
                     Text(inputValues[input.id] ?? placeholder)
-                        .font(.system(size: 13))
-                        .foregroundStyle(inputValues[input.id] != nil ? .white.opacity(0.7) : .white.opacity(0.25))
+                        .font(.callout)
+                        .foregroundStyle(inputValues[input.id] != nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
-                        .background(.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
 
                     Button {
                         pickFile(for: input.id)
                     } label: {
                         Image(systemName: "folder")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -345,11 +354,11 @@ struct TemplateBrowserView: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.caption2.weight(.bold))
                 Text(title)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.caption.weight(.medium))
             }
-            .foregroundStyle(.white.opacity(0.4))
+            .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
         .pointingHandCursor()

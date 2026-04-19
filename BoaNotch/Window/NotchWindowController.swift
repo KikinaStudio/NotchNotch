@@ -19,8 +19,10 @@ class NotchWindowController {
     private let onboardingVM: OnboardingViewModel
     private let cronStore: CronStore
     private let brainVM: BrainViewModel
+    private let loginItemService: LoginItemService
+    private let appearanceSettings: AppearanceSettings
 
-    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore, brainVM: BrainViewModel) {
+    init(chatVM: ChatViewModel, notchVM: NotchViewModel, sessionStore: SessionStore, searchVM: SearchViewModel, hermesConfig: HermesConfig, onboardingVM: OnboardingViewModel, cronStore: CronStore, brainVM: BrainViewModel, loginItemService: LoginItemService, appearanceSettings: AppearanceSettings) {
         self.chatVM = chatVM
         self.notchVM = notchVM
         self.sessionStore = sessionStore
@@ -29,6 +31,8 @@ class NotchWindowController {
         self.onboardingVM = onboardingVM
         self.cronStore = cronStore
         self.brainVM = brainVM
+        self.loginItemService = loginItemService
+        self.appearanceSettings = appearanceSettings
 
         NotificationCenter.default.addObserver(
             self,
@@ -51,7 +55,8 @@ class NotchWindowController {
 
         let panel = NotchPanel(contentRect: panelRect)
 
-        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM)
+        let rootView = NotchView(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
+            .environmentObject(appearanceSettings)
         let hostingView = NSHostingView(rootView: rootView)
         hostingView.frame = panel.contentView!.bounds
         hostingView.autoresizingMask = [.width, .height]

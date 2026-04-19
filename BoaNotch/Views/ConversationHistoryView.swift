@@ -16,8 +16,8 @@ struct ConversationHistoryView: View {
             // Header
             HStack {
                 Text("Conversations")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
                 Spacer()
                 Button {
                     chatVM.startNewConversation()
@@ -25,9 +25,9 @@ struct ConversationHistoryView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.footnote.weight(.semibold))
                         Text("New")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.callout.weight(.medium))
                     }
                     .foregroundStyle(AppColors.accent)
                 }
@@ -39,8 +39,8 @@ struct ConversationHistoryView: View {
             if sessionStore.recentSessions.isEmpty {
                 Spacer()
                 Text("No conversations yet")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .font(.body)
+                    .foregroundStyle(.tertiary)
                 Spacer()
             } else {
                 ScrollView {
@@ -62,27 +62,29 @@ struct ConversationHistoryView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: session.sourceIcon)
-                    .font(.system(size: 11))
+                    .font(.footnote)
                     .foregroundStyle(iconColor(for: session.source))
                     .frame(width: 16)
 
                 Text(session.displayTitle)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .font(.body)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Spacer()
 
                 if let date = session.updatedAt {
                     Text(relativeFormatter.localizedString(for: date, relativeTo: Date()))
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(isActive ? AppColors.accent.opacity(0.15) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isActive ? AnyShapeStyle(AppColors.accent.opacity(0.18)) : AnyShapeStyle(Color.clear))
+            )
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -93,7 +95,7 @@ struct ConversationHistoryView: View {
         case "cli": return .orange
         case "telegram": return .blue
         case "discord": return .purple
-        default: return .white.opacity(0.4)
+        default: return .secondary.opacity(0.6)
         }
     }
 

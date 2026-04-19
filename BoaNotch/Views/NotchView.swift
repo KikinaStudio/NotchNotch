@@ -10,6 +10,8 @@ struct NotchView: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
     @ObservedObject var cronStore: CronStore
     @ObservedObject var brainVM: BrainViewModel
+    @ObservedObject var loginItemService: LoginItemService
+    @ObservedObject var appearanceSettings: AppearanceSettings
 
     @AppStorage("hasCompletedBrainOnboarding") private var hasCompletedBrainOnboarding = false
     @State private var didEvaluateBrainOnboarding = false
@@ -168,12 +170,11 @@ struct NotchView: View {
 
                         Group {
                             if notchVM.isSettingsOpen {
-                                SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig)
+                                SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
                                 .padding(.top, 14)
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
-                                .background(Color.white.opacity(0.05))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
                                 .transition(.opacity)
@@ -212,8 +213,7 @@ struct NotchView: View {
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
-                                    .background(Color.white.opacity(0.05))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
@@ -226,8 +226,7 @@ struct NotchView: View {
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
-                                    .background(Color.white.opacity(0.05))
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
@@ -269,8 +268,8 @@ struct NotchView: View {
                             chatVM.startNewConversation()
                         } label: {
                             Image(systemName: "plus.bubble")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
@@ -287,16 +286,16 @@ struct NotchView: View {
                             notchVM.isBrainOpen = false
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.4))
+                                .font(.callout.weight(.medium))
+                                .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
                     } else {
                         ZStack(alignment: .trailing) {
                             Image(systemName: "line.3.horizontal")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.25))
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                                 .opacity(notchVM.isMenuExpanded ? 0 : 1)
 
                             HStack(spacing: 12) {
@@ -345,8 +344,8 @@ struct NotchView: View {
     private func menuButton(_ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.4))
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -408,23 +407,21 @@ struct RecordingToastView: View {
             Button { notchVM.onBrainDumpAction?() } label: {
                 HStack(spacing: 5) {
                     Text("🧠")
-                        .font(.system(size: 10))
+                        .font(.caption2)
                     Text("Dump")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(Color.white.opacity(0.1))
-                .clipShape(Capsule())
+                .background(Capsule().fill(.quaternary))
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
         }
-        .foregroundStyle(.white.opacity(0.9))
+        .foregroundStyle(.primary)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.black)
-        .clipShape(Capsule())
+        .nnGlass(in: Capsule())
     }
 }
 

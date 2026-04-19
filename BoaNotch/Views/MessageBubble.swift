@@ -16,6 +16,8 @@ struct MessageBubble: View {
     @State private var isHoveredRetry = false
     @State private var isHovered = false
 
+    @EnvironmentObject var appearanceSettings: AppearanceSettings
+
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             VStack(alignment: .leading, spacing: 8) {
@@ -279,7 +281,7 @@ struct MessageBubble: View {
                         } else if !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
-                                    .font(.system(size: 14))
+                                    .font(.system(size: 14 * appearanceSettings.textSize.scale))
                                     .lineSpacing(isUser ? 0 : 4)
                                     .foregroundStyle(.white.opacity(0.82))
                                     .textSelection(.enabled)

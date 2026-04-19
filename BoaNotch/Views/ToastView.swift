@@ -12,8 +12,8 @@ struct ToastView: View {
                     .frame(width: 18, height: 18)
             }
             Text(cleanForToast(message))
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.85))
+                .font(.callout)
+                .foregroundStyle(.primary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .multilineTextAlignment(.leading)
@@ -22,8 +22,7 @@ struct ToastView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(width: isClipperToast ? max(notchWidth, 280) : notchWidth)
-        .background(Color.black)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .nnGlass(in: RoundedRectangle(cornerRadius: 12))
     }
 
     /// Strip markdown syntax for clean toast display

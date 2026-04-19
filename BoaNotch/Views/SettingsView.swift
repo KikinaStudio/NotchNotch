@@ -4,6 +4,8 @@ struct SettingsView: View {
     @ObservedObject var sessionStore: SessionStore
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var hermesConfig: HermesConfig
+    @ObservedObject var loginItemService: LoginItemService
+    @ObservedObject var appearanceSettings: AppearanceSettings
     @State private var apiKey = ""
 
     var body: some View {
@@ -11,15 +13,15 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // Header
                 Text("Settings")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
 
                 // ── AI Provider ──
                 settingsSection("AI Provider") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Model provider")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
                         HStack(spacing: 2) {
                             ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic")], id: \.0) { value, label in
@@ -32,8 +34,8 @@ struct SettingsView: View {
 
                         if hermesConfig.modelProvider == "nous" {
                             Text("Free models via Nous Portal. No API key needed.")
-                                .font(.system(size: 9))
-                                .foregroundStyle(AppColors.accent.opacity(0.4))
+                                .font(.caption2)
+                                .foregroundStyle(AppColors.accent.opacity(0.6))
                         }
 
                         if hermesConfig.modelProvider != "nous" {
@@ -47,8 +49,8 @@ struct SettingsView: View {
                     // Max iterations
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Max iterations")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
                         HStack(spacing: 2) {
                             ForEach([("Quick", 15), ("Normal", 50), ("Deep", 90)], id: \.1) { label, val in
@@ -60,47 +62,35 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            // Custom stepper
-                            HStack(spacing: 4) {
-                                Button {
-                                    let val = max(5, hermesConfig.maxIterations - 5)
-                                    hermesConfig.maxIterations = val
-                                    hermesConfig.set("agent.max_iterations", value: val)
-                                } label: {
-                                    Image(systemName: "minus")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.white.opacity(0.4))
-                                }
-                                .buttonStyle(.plain)
-
+                            // Native stepper for fine-grained control
+                            HStack(spacing: 6) {
                                 Text("\(hermesConfig.maxIterations)")
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .frame(width: 28)
-
-                                Button {
-                                    let val = min(200, hermesConfig.maxIterations + 5)
-                                    hermesConfig.maxIterations = val
-                                    hermesConfig.set("agent.max_iterations", value: val)
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(.white.opacity(0.4))
-                                }
-                                .buttonStyle(.plain)
+                                    .font(.footnote.monospacedDigit())
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 24)
+                                Stepper(
+                                    "",
+                                    value: Binding(
+                                        get: { hermesConfig.maxIterations },
+                                        set: { val in
+                                            hermesConfig.maxIterations = val
+                                            hermesConfig.set("agent.max_iterations", value: val)
+                                        }
+                                    ),
+                                    in: 5...200,
+                                    step: 5
+                                )
+                                .labelsHidden()
+                                .controlSize(.mini)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.white.opacity(0.04))
-                            .clipShape(Capsule())
                         }
                     }
 
                     // Streaming toggle
                     HStack {
                         Text("Stream responses")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                         Spacer()
                         Toggle("", isOn: Binding(
                             get: { hermesConfig.streaming },
@@ -110,8 +100,8 @@ struct SettingsView: View {
                             }
                         ))
                         .toggleStyle(.switch)
-                        .scaleEffect(0.7)
-                        .frame(width: 40)
+                        .controlSize(.mini)
+                        .labelsHidden()
                     }
                 }
 
@@ -119,8 +109,8 @@ struct SettingsView: View {
                 settingsSection("Execution") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Terminal backend")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.5))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
                         HStack(spacing: 2) {
                             ForEach(["local", "docker", "ssh"], id: \.self) { backend in
@@ -144,16 +134,16 @@ struct SettingsView: View {
                                 ))
                                 HStack {
                                     Text("Port")
-                                        .font(.system(size: 10))
-                                        .foregroundStyle(.white.opacity(0.35))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                         .frame(width: 35, alignment: .leading)
                                     TextField("", value: Binding(
                                         get: { hermesConfig.sshPort },
                                         set: { hermesConfig.sshPort = $0; hermesConfig.set("terminal.ssh_port", value: $0) }
                                     ), format: .number)
                                     .textFieldStyle(.plain)
-                                    .font(.system(size: 10))
-                                    .foregroundStyle(.white.opacity(0.7))
+                                    .font(.caption)
+                                    .foregroundStyle(.primary)
                                 }
                             }
                             .padding(.leading, 8)
@@ -175,18 +165,54 @@ struct SettingsView: View {
                 settingsSection("Session") {
                     HStack(spacing: 6) {
                         Image(systemName: "paperplane.fill")
-                            .font(.system(size: 10))
-                            .foregroundStyle(sessionStore.isLinked ? AppColors.accent : .white.opacity(0.3))
+                            .font(.footnote)
+                            .foregroundStyle(sessionStore.isLinked ? AppColors.accent : Color.secondary)
                         Text(sessionStore.isLinked ? "Telegram linked" : "No Telegram session")
-                            .font(.system(size: 11))
-                            .foregroundStyle(sessionStore.isLinked ? .white.opacity(0.6) : .white.opacity(0.3))
+                            .font(.footnote)
+                            .foregroundStyle(sessionStore.isLinked ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                         if sessionStore.isLinked {
                             Spacer()
                             Text(sessionStore.selectedSessionId ?? "")
-                                .font(.system(size: 9, design: .monospaced))
-                                .foregroundStyle(.white.opacity(0.2))
+                                .font(.caption2.monospaced())
+                                .foregroundStyle(.tertiary)
                                 .lineLimit(1)
                         }
+                    }
+                }
+
+                // ── Appearance ──
+                settingsSection("Appearance") {
+                    HStack {
+                        Text("Text size")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        HStack(spacing: 0) {
+                            textSizeSegment(.small, display: 10)
+                            segmentDivider
+                            textSizeSegment(.medium, display: 13)
+                            segmentDivider
+                            textSizeSegment(.large, display: 16)
+                        }
+                        .background(Capsule().fill(.quaternary))
+                    }
+                }
+
+                // ── Startup ──
+                settingsSection("Startup") {
+                    HStack {
+                        Text("Launch notchnotch at login")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { loginItemService.isEnabled },
+                            set: { loginItemService.setEnabled($0) }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(AppColors.accent)
+                        .controlSize(.mini)
+                        .labelsHidden()
                     }
                 }
             }
@@ -199,8 +225,8 @@ struct SettingsView: View {
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.28))
+                .font(.caption2.weight(.bold).monospaced())
+                .foregroundStyle(.tertiary)
                 .tracking(1.5)
             content()
         }
@@ -219,39 +245,69 @@ struct SettingsView: View {
         HStack(spacing: 6) {
             SecureField(apiKeyPlaceholder, text: $apiKey)
                 .textFieldStyle(.plain)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.caption)
+                .foregroundStyle(.primary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .background(.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
 
             Button {
                 hermesConfig.writeAPIKey(provider: hermesConfig.modelProvider, key: apiKey)
                 apiKey = ""
             } label: {
                 Text("Save")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(apiKey.isEmpty ? .white.opacity(0.3) : .white)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(apiKey.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(apiKey.isEmpty ? .clear : .white.opacity(0.12))
-                    .clipShape(Capsule())
+                    .background {
+                        if apiKey.isEmpty {
+                            Capsule().fill(.clear)
+                        } else {
+                            Capsule().fill(AppColors.accent.opacity(0.35))
+                        }
+                    }
             }
             .buttonStyle(.plain)
             .disabled(apiKey.isEmpty)
         }
     }
 
+    private func textSizeSegment(_ size: AppearanceSettings.TextSize, display: CGFloat) -> some View {
+        let isSelected = appearanceSettings.textSize == size
+        return Button {
+            appearanceSettings.textSize = size
+        } label: {
+            Text("A")
+                .font(.system(size: display, weight: isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .frame(width: 32, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private var segmentDivider: some View {
+        Rectangle()
+            .fill(.separator)
+            .frame(width: 1, height: 14)
+    }
+
     private func segmentedButton(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 10, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? .white : .white.opacity(0.35))
+                .font(.caption.weight(isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(isSelected ? Color.white.opacity(0.1) : .clear)
-                .clipShape(Capsule())
+                .background {
+                    if isSelected {
+                        Capsule().fill(.quaternary)
+                    } else {
+                        Capsule().fill(.clear)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -260,14 +316,13 @@ struct SettingsView: View {
     private func configTextField(_ label: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.35))
+                .font(.caption)
+                .foregroundStyle(.secondary)
                 .frame(width: 35, alignment: .leading)
             TextField("", text: text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.7))
+                .font(.caption)
+                .foregroundStyle(.primary)
         }
     }
-
 }

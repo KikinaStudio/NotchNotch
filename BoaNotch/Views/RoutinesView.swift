@@ -14,12 +14,12 @@ struct RoutinesView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 4) {
                 Text("Routines")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
                 if !cronStore.jobs.isEmpty {
                     Text("(\(cronStore.jobs.count))")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.25))
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -43,16 +43,15 @@ struct RoutinesView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "plus.circle")
-                                    .font(.system(size: 11))
                                 Text("Browse templates")
-                                    .font(.system(size: 11, weight: .medium))
                             }
-                            .foregroundStyle(AppColors.accent.opacity(0.7))
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(AppColors.accent.opacity(0.8))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(AppColors.accent.opacity(0.25), lineWidth: 0.5)
+                                    .strokeBorder(AppColors.accent.opacity(0.3), lineWidth: 0.5)
                             )
                         }
                         .buttonStyle(.plain)
@@ -70,10 +69,7 @@ struct RoutinesView: View {
     @State private var hoveredJobId: String?
 
     private var rowDivider: some View {
-        Rectangle()
-            .fill(.white.opacity(0.06))
-            .frame(height: 1)
-            .padding(.leading, 13)
+        Divider().padding(.leading, 13)
     }
 
     private func jobCard(_ job: CronJob) -> some View {
@@ -90,15 +86,15 @@ struct RoutinesView: View {
                         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: job.state == "running")
 
                     Text(job.name.isEmpty ? String(job.prompt.prefix(40)) : job.name)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.8))
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     Spacer()
 
                     Text(humanSchedule(job.schedule_display))
-                        .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .font(.caption2.weight(.medium).monospaced())
+                        .foregroundStyle(.secondary)
                         .tracking(0.3)
                         .lineLimit(1)
                 }
@@ -122,18 +118,20 @@ struct RoutinesView: View {
                         }
                     } else {
                         Text("not yet run")
-                            .foregroundStyle(.white.opacity(0.2))
+                            .foregroundStyle(.quaternary)
                     }
                 }
-                .font(.system(size: 9))
-                .foregroundStyle(.white.opacity(0.25))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
                 .padding(.leading, 13)
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(hoveredJobId == job.id ? 0.05 : 0))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(hoveredJobId == job.id ? AnyShapeStyle(.quinary) : AnyShapeStyle(Color.clear))
+            )
             .contentShape(Rectangle())
             .opacity(job.state == "paused" ? 0.5 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
@@ -172,7 +170,7 @@ struct RoutinesView: View {
         switch job.state {
         case "running": return AppColors.accent
         case "paused": return .orange
-        default: return job.enabled ? .green.opacity(0.8) : .white.opacity(0.2)
+        default: return job.enabled ? .green.opacity(0.8) : .gray.opacity(0.3)
         }
     }
 

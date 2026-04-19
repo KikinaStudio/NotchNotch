@@ -15,13 +15,13 @@ struct BrainOnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Active ton cerveau NotchNotch")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.95))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.primary)
                 .padding(.bottom, 4)
 
             Text("Transforme ce que tu lis en une base de connaissance vivante.")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.55))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
                 .padding(.bottom, 16)
 
             VStack(alignment: .leading, spacing: 10) {
@@ -52,13 +52,13 @@ struct BrainOnboardingView: View {
                         .controlSize(.small)
                         .tint(AppColors.accent)
                     Text(stepText)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.65))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 8)
             } else if let errorText {
                 Text(errorText)
-                    .font(.system(size: 11))
+                    .font(.footnote)
                     .foregroundStyle(Color(red: 0.95, green: 0.45, blue: 0.45))
                     .lineLimit(2)
                     .padding(.bottom, 8)
@@ -70,12 +70,11 @@ struct BrainOnboardingView: View {
                     dismiss()
                 } label: {
                     Text("Pas maintenant")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .background(RoundedRectangle(cornerRadius: 7).fill(.quaternary))
                 }
                 .buttonStyle(.plain)
                 .disabled(isRunning)
@@ -85,12 +84,11 @@ struct BrainOnboardingView: View {
                     activate()
                 } label: {
                     Text(errorText == nil ? "Activer" : "Réessayer")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.callout.weight(.semibold))
                         .foregroundStyle(.black.opacity(0.85))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
-                        .background(AppColors.accent)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .background(RoundedRectangle(cornerRadius: 7).fill(AppColors.accent))
                 }
                 .buttonStyle(.plain)
                 .disabled(isRunning || !anyEnabled)
@@ -117,11 +115,11 @@ struct BrainOnboardingView: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
                 Text(subtitle)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)

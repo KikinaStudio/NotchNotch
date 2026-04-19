@@ -8,6 +8,8 @@ struct ChatView: View {
     @FocusState private var isInputFocused: Bool
     @State private var pasteMonitor: Any?
 
+    @EnvironmentObject var appearanceSettings: AppearanceSettings
+
     var body: some View {
         VStack(spacing: 0) {
             // Messages — bottom-anchored, with fade overlay
@@ -212,7 +214,7 @@ struct ChatView: View {
             HStack(alignment: .center, spacing: 10) {
                 TextField("", text: $chatVM.draft, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 13))
+                    .font(.system(size: 13 * appearanceSettings.textSize.scale))
                     .foregroundStyle(.white)
                     .tint(AppColors.accent)
                     .lineLimit(1...4)

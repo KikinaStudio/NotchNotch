@@ -335,10 +335,31 @@ UI, follow these rules:
   resolve to bold instead of showing as literal asterisks.
 
 Why: the notch panel is solid near-black to camouflage with the hardware 
-notch. Liquid Glass (iOS 26) doesn't apply (iOS-only API + needs 
-translucent content to blur). Native macOS editorial feel wins: 
-confident typography, dividers, accent sparingly. User explicitly 
-rejected the MD3 pill+card look (2026-04-18).
+notch. Native macOS editorial feel wins inside the panel: confident 
+typography, dividers, accent sparingly. User explicitly rejected the 
+MD3 pill+card look (2026-04-18).
+
+**Liquid Glass (macOS 26+) policy**: `.glassEffect()` DOES ship on 
+macOS 26 (Tahoe). NotchNotch deployment target is 14, so glass usage 
+MUST go through `nnGlass()` / `nnGlass(in:)` / `NNGlassContainer` 
+(`BoaNotch/Views/LiquidGlass.swift`) — these apply `.glassEffect` on 
+macOS 26+ and fall back to `.ultraThinMaterial` elsewhere.
+
+Where glass is allowed:
+- Floating UI OVER the desktop / outside the black panel — the 
+  recording toast capsule, the clipper/cron `ToastView`.
+- Never on content rows (memory cards, skill rows, routines, history 
+  rows) — that's the "glass on content" anti-pattern.
+- Never as the background of the notch panel itself (it's camouflaged 
+  black by design).
+
+Inside the panel, use semantic ShapeStyles (`.primary`, `.secondary`, 
+`.tertiary`, `.quaternary`, `.quinary`, `.separator`) and system 
+typography (`.headline`, `.callout`, `.footnote`, `.caption`, 
+`.caption2` with `.weight()`/`.monospaced()` modifiers) rather than 
+hardcoded `.white.opacity(x)` or `.system(size: N)`. Conditional 
+ShapeStyle ternaries need `AnyShapeStyle(...)` on both branches to 
+compile.
 
 ### Brain pipeline invariants
 - Wiki path: NotchNotch reads `~/.hermes/brain/wiki/`. The llm-wiki Hermes 
@@ -374,6 +395,7 @@ rejected the MD3 pill+card look (2026-04-18).
 - `onboardingCompleted` — main onboarding flow (OnboardingViewModel)
 - `hasCompletedBrainOnboarding` — brain setup sheet (NotchView)
 - `hermesConversationId` — server-side conversation UUID (HermesClient)
+- `textSize` — chat/brain text size picker: "small" | "medium" | "large" (AppearanceSettings)
 
 Add new keys here when introducing them.
 

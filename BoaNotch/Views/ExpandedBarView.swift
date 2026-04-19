@@ -24,15 +24,14 @@ struct ExpandedBarView: View {
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "person.fill")
-                        .font(.system(size: 9))
+                        .font(.caption2)
                     Text(config.activeProfile)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                 }
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(.white.opacity(0.06))
-                .clipShape(Capsule())
+                .background(Capsule().fill(.quaternary))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -54,15 +53,14 @@ struct ExpandedBarView: View {
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "cpu")
-                        .font(.system(size: 9))
+                        .font(.caption2)
                     Text(config.modelDisplayName)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                 }
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(.white.opacity(0.06))
-                .clipShape(Capsule())
+                .background(Capsule().fill(.quaternary))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -85,15 +83,14 @@ struct ExpandedBarView: View {
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "brain")
-                        .font(.system(size: 9))
+                        .font(.caption2)
                     Text(shortLabel(config.reasoningEffort))
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.caption2.weight(.medium))
                 }
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(.white.opacity(0.06))
-                .clipShape(Capsule())
+                .background(Capsule().fill(.quaternary))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -104,8 +101,8 @@ struct ExpandedBarView: View {
                 config.setImmediate("skip_memory", value: config.skipMemory)
             } label: {
                 Image(systemName: config.skipMemory ? "eye.slash.fill" : "eye.slash")
-                    .font(.system(size: 11))
-                    .foregroundStyle(config.skipMemory ? AppColors.accent : .white.opacity(0.25))
+                    .font(.footnote)
+                    .foregroundStyle(config.skipMemory ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.tertiary))
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
@@ -116,14 +113,13 @@ struct ExpandedBarView: View {
             // Context window usage
             if chatVM.lastInputTokens > 0 {
                 Text(formatTokenCount(chatVM.lastInputTokens))
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
-        .background(.white.opacity(0.04))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .background(RoundedRectangle(cornerRadius: 6).fill(.quinary))
     }
 
     private func formatTokenCount(_ count: Int) -> String {
