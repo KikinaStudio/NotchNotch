@@ -109,13 +109,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            if let url = Bundle.module.url(forResource: "menubar-icon", withExtension: "png", subdirectory: "Resources"),
+            if let url = Bundle.main.resourceURL?.appendingPathComponent("menubar-icon.png"),
                let image = NSImage(contentsOf: url) {
-                image.size = NSSize(width: 16, height: 16)
-                image.isTemplate = true
-                button.image = image
-            } else if let url = Bundle.main.resourceURL?.appendingPathComponent("menubar-icon.png"),
-                      let image = NSImage(contentsOf: url) {
                 image.size = NSSize(width: 16, height: 16)
                 image.isTemplate = true
                 button.image = image

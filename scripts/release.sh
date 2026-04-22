@@ -37,8 +37,9 @@ cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
 cp BoaNotch/Resources/*.png "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.icns "$APP_DIR/Resources/" 2>/dev/null || true
 
-# Copy SPM resource bundle
-cp -R .build/release/${SPM_TARGET}_${SPM_TARGET}.bundle "$APP_DIR/Resources/" 2>/dev/null || true
+# Note: no SPM resource bundle copy. All resources load via Bundle.main
+# from Contents/Resources. Putting the SPM bundle inside the .app breaks
+# either codesign (bundle root) or Bundle.module resolution (Resources/).
 
 # Ad-hoc codesign (avoids runtime crashes on macOS 14+)
 echo "Signing ${APP_NAME}.app (ad-hoc)..."
