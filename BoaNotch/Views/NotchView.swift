@@ -270,7 +270,7 @@ struct NotchView: View {
                             chatVM.startNewConversation()
                         } label: {
                             Image(systemName: "plus.bubble")
-                                .font(.callout.weight(.medium))
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -288,7 +288,7 @@ struct NotchView: View {
                             notchVM.isBrainOpen = false
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.callout.weight(.medium))
+                                .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -297,7 +297,7 @@ struct NotchView: View {
                         HStack(spacing: 12) {
                             ZStack(alignment: .trailing) {
                                 Image(systemName: "line.3.horizontal")
-                                    .font(.callout.weight(.medium))
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(.secondary)
                                     .opacity(notchVM.isMenuExpanded ? 0 : 1)
 
@@ -348,7 +348,7 @@ struct NotchView: View {
                                 Image(systemName: panelSizeStore.size == .standard
                                       ? "arrow.up.left.and.arrow.down.right"
                                       : "arrow.down.right.and.arrow.up.left")
-                                    .font(.callout.weight(.medium))
+                                    .font(.system(size: 14, weight: .medium))
                                     .foregroundStyle(.tertiary)
                             }
                             .buttonStyle(.plain)
@@ -368,7 +368,7 @@ struct NotchView: View {
     private func menuButton(_ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.callout.weight(.medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)

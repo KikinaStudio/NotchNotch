@@ -232,7 +232,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     +-- Services
           HermesClient -> localhost:8642 (/v1/responses, non-streaming)
           SessionStore -> auto-detect Telegram session from state.db
-          SSEParser, SpeechTranscriber, DocumentExtractor, AudioRecorder
+          SpeechTranscriber, DocumentExtractor, AudioRecorder
 ```
 
 ## Project structure
@@ -298,7 +298,6 @@ BoaNotch/
     |
     +-- Services/
         +-- HermesClient.swift           # /v1/responses API client
-        +-- SSEParser.swift              # Legacy SSE parser (unused)
         +-- SessionStore.swift           # Auto-detect Telegram session from state.db
         +-- CronStore.swift               # jobs.json watcher, CronJob model
         +-- HermesConfig.swift           # config.yaml watcher, provider-aware model list

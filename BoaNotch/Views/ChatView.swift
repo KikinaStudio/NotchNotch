@@ -74,16 +74,6 @@ struct ChatView: View {
                 }
             }
 
-            if chatVM.messages.isEmpty && chatVM.connectionError == nil {
-                VStack(spacing: 10) {
-                    Text("notch notch ! Who's there ? Your futchure.")
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.35))
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.bottom, 100)
-            }
-
             // Connection error banner
             if let errorMessage = chatVM.connectionError {
                 HStack(spacing: 6) {
