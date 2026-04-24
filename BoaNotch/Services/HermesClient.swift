@@ -248,7 +248,9 @@ class HermesClient {
         for try await event in SSEStream(bytes: bytes) {
             guard let payloadData = event.data.data(using: .utf8),
                   let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
-            else { continue }
+            else {
+                continue
+            }
 
             switch event.name ?? "" {
             case "response.output_text.delta":
