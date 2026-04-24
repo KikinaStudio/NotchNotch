@@ -67,6 +67,13 @@ class HermesConfig: ObservableObject {
                 ("minimax/minimax-m2.7", "minimax m2.7"),
                 ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
             ]
+        case "minimax":
+            return [
+                ("MiniMax-M2.7", "MiniMax M2.7"),
+                ("MiniMax-M2.5", "MiniMax M2.5"),
+                ("MiniMax-M2.1", "MiniMax M2.1"),
+                ("MiniMax-M2", "MiniMax M2"),
+            ]
         default:
             return [
                 ("xiaomi/mimo-v2-pro", "mimo v2 pro"),
@@ -74,6 +81,17 @@ class HermesConfig: ObservableObject {
                 ("nousresearch/hermes-4-70b", "hermes 4 70b"),
                 ("nousresearch/deephermes-3-8b", "deephermes 3 8b"),
             ]
+        }
+    }
+
+    static func defaultBaseURL(for provider: String) -> String? {
+        switch provider {
+        case "openai": return "https://api.openai.com/v1"
+        case "anthropic": return "https://api.anthropic.com/v1"
+        case "openrouter": return "https://openrouter.ai/api/v1"
+        case "nous": return "https://inference-api.nousresearch.com/v1"
+        case "minimax": return "https://api.minimax.io/v1"
+        default: return nil
         }
     }
 
@@ -94,6 +112,7 @@ class HermesConfig: ObservableObject {
         switch provider {
         case "openai": envKey = "OPENAI_API_KEY"
         case "anthropic": envKey = "ANTHROPIC_API_KEY"
+        case "minimax": envKey = "MINIMAX_API_KEY"
         default: envKey = "OPENROUTER_API_KEY"
         }
 

@@ -24,10 +24,13 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
 
                         HStack(spacing: 2) {
-                            ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic")], id: \.0) { value, label in
+                            ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic"), ("minimax", "MiniMax")], id: \.0) { value, label in
                                 segmentedButton(label: label, isSelected: hermesConfig.modelProvider == value) {
                                     hermesConfig.modelProvider = value
                                     hermesConfig.setImmediate("model.provider", value: value)
+                                    if let baseURL = HermesConfig.defaultBaseURL(for: value) {
+                                        hermesConfig.setImmediate("model.base_url", value: baseURL)
+                                    }
                                 }
                             }
                         }
@@ -237,6 +240,7 @@ struct SettingsView: View {
         case "openrouter": return "sk-or-v1-..."
         case "openai": return "sk-..."
         case "anthropic": return "sk-ant-..."
+        case "minimax": return "sk-..."
         default: return ""
         }
     }
