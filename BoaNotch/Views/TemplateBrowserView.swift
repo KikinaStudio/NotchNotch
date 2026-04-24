@@ -2,12 +2,19 @@ import SwiftUI
 import AppKit
 
 struct TemplateBrowserView: View {
+    var panelSize: PanelSize = .standard
     var onSelectTemplate: (String) -> Void
     var onCreateOwn: () -> Void
 
     @State private var selectedCategory: RoutineCategory?
     @State private var selectedTemplate: RoutineTemplate?
     @State private var inputValues: [String: String] = [:]
+    @State private var hoveredTemplateId: String?
+
+    private var gridColumns: [GridItem] {
+        let count = panelSize == .large ? 3 : 2
+        return Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: count)
+    }
 
     var body: some View {
         ZStack {
@@ -122,7 +129,7 @@ struct TemplateBrowserView: View {
     // MARK: - Screen 2: Template list
 
     private func templateListScreen(_ category: RoutineCategory) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             backButton(category.title) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     selectedCategory = nil
@@ -130,74 +137,102 @@ struct TemplateBrowserView: View {
             }
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 4) {
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
                     ForEach(category.templates) { template in
-                        templateRow(template)
+                        templateCard(template)
                     }
                 }
             }
         }
     }
 
-    private func templateRow(_ template: RoutineTemplate) -> some View {
-        Button {
-            inputValues = [:]
-            // Pre-fill defaults for number inputs
-            for input in template.inputs {
-                if case .number(_, let defaultValue) = input.type, let dv = defaultValue {
-                    inputValues[input.id] = "\(dv)"
-                }
-                if case .picker(let options) = input.type, let first = options.first {
-                    inputValues[input.id] = first
+    private func templateCard(_ template: RoutineTemplate) -> some View {
+        let isAlert = template.deliver == "local"
+        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            // Row 1: title + alert glyph
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(template.title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 0)
+
+                if isAlert {
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.accent)
+                        .accessibilityLabel("Alert routine — notifies in the notch")
                 }
             }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedTemplate = template
+
+            // Row 2: subtitle
+            Text(template.subtitle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Row 3: dot + schedule + toggle (off)
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.gray.opacity(0.35))
+                    .frame(width: 7, height: 7)
+
+                Text(template.schedule)
+                    .font(.caption2.weight(.medium).monospaced())
+                    .foregroundStyle(.secondary)
+                    .tracking(0.3)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 0)
+
+                Toggle("", isOn: Binding(
+                    get: { false },
+                    set: { _ in openTemplate(template) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .tint(AppColors.accent)
+                .accessibilityLabel("Activate \(template.title)")
             }
-        } label: {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: template.icon)
-                    .font(.body)
-                    .foregroundStyle(AppColors.accent.opacity(0.7))
-                    .frame(width: 20)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(template.title)
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(.primary)
-                        if template.deliver == "local" {
-                            Image(systemName: "bell.badge")
-                                .font(.caption2)
-                                .foregroundStyle(AppColors.accent)
-                        }
-                    }
-
-                    Text(template.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 8).fill(.quinary)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(.separator.opacity(0.5), lineWidth: 0.5)
-            )
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nnGlass(in: cardShape)
+        .overlay(
+            cardShape
+                .fill(hoveredTemplateId == template.id ? Color.white.opacity(0.04) : .clear)
+                .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+        .onHover { over in hoveredTemplateId = over ? template.id : nil }
+        .onTapGesture { openTemplate(template) }
         .pointingHandCursor()
+        .animation(.easeInOut(duration: 0.15), value: hoveredTemplateId == template.id)
+    }
+
+    private func openTemplate(_ template: RoutineTemplate) {
+        inputValues = [:]
+        // Pre-fill defaults for number inputs and first option for pickers
+        for input in template.inputs {
+            if case .number(_, let defaultValue) = input.type, let dv = defaultValue {
+                inputValues[input.id] = "\(dv)"
+            }
+            if case .picker(let options) = input.type, let first = options.first {
+                inputValues[input.id] = first
+            }
+        }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            selectedTemplate = template
+        }
     }
 
     // MARK: - Screen 3: Form

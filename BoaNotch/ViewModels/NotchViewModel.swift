@@ -214,6 +214,31 @@ class NotchViewModel: ObservableObject {
         isHistoryOpen = false
     }
 
+    func openSearch() {
+        isSearchOpen = true
+        isSettingsOpen = false
+        isRoutinesOpen = false
+        isHistoryOpen = false
+        isBrainOpen = false
+    }
+
+    func openSettings() {
+        isSettingsOpen = true
+        isSearchOpen = false
+        isRoutinesOpen = false
+        isHistoryOpen = false
+        isBrainOpen = false
+    }
+
+    func closeAllPanels() {
+        isSettingsOpen = false
+        isSearchOpen = false
+        isRoutinesOpen = false
+        isHistoryOpen = false
+        isBrainOpen = false
+        collapseMenu()
+    }
+
     func closeRoutines() {
         isRoutinesOpen = false
     }

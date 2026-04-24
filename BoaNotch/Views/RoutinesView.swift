@@ -8,10 +8,27 @@ struct RoutinesView: View {
     var onCreateOwn: () -> Void
     var onDropFile: ([NSItemProvider]) -> Void
     var onDraftAction: ((String, Bool) -> Void)? = nil
+    var onCreateCustomRoutine: ((String) -> Void)? = nil
 
     @State private var showingBrowser = false
+    @State private var showingCustomForm = false
     @State private var hoveredJobId: String?
+    @State private var hoveredAddCard = false
+
+    @State private var formName: String = ""
+    @State private var formPrompt: String = ""
+    @State private var formSchedule: String = ""
+    @State private var formDeliver: String = "Notch"
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let deliverOptions: [(name: String, icon: String)] = [
+        ("Notch", "bell.badge.fill"),
+        ("Telegram", "paperplane.fill"),
+        ("Discord", "bubble.left.fill"),
+        ("Slack", "number")
+    ]
+    private let selectedDeliverColor = Color(red: 0xA8/255.0, green: 0xDC/255.0, blue: 0xFC/255.0)
 
     private var gridColumns: [GridItem] {
         // .large panel (900pt wide) → 3 columns, .standard (680pt) → 2 columns
@@ -32,8 +49,12 @@ struct RoutinesView: View {
                 }
             }
 
-            if cronStore.sortedJobs.isEmpty || showingBrowser {
+            if showingCustomForm {
+                customForm
+                    .transition(.opacity)
+            } else if cronStore.sortedJobs.isEmpty || showingBrowser {
                 TemplateBrowserView(
+                    panelSize: panelSize,
                     onSelectTemplate: onSelectTemplate,
                     onCreateOwn: onCreateOwn
                 )
@@ -44,6 +65,7 @@ struct RoutinesView: View {
                             ForEach(cronStore.sortedJobs) { job in
                                 jobCard(job)
                             }
+                            addCard
                         }
 
                         Button {
@@ -84,92 +106,104 @@ struct RoutinesView: View {
         let isPaused = job.state == "paused"
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
-        return Button {
-            onSelectJob(job)
-        } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                // Row 1: title + alert glyph
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-
-                    Spacer(minLength: 0)
-
-                    if isAlert {
-                        Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 11))
-                            .foregroundStyle(AppColors.accent)
-                            .accessibilityLabel("Alert routine — notifies in the notch")
-                    }
-                }
-
-                // Row 2: description (only when title is distinct from prompt)
-                if hasName {
-                    Text(job.prompt)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                // Row 3: dot + schedule + (counter OR next)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(dotColor(for: job))
-                        .frame(width: 7, height: 7)
-                        .opacity(job.state == "running" ? 0.6 : 1.0)
-                        .animation(
-                            reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                            value: job.state == "running"
-                        )
-
-                    Text(humanSchedule(job.schedule_display))
-                        .font(.caption2.weight(.medium).monospaced())
-                        .foregroundStyle(.secondary)
-                        .tracking(0.3)
-                        .lineLimit(1)
-
-                    Text("·")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    Group {
-                        if runCount > 0 {
-                            Text("\(runCount) run\(runCount == 1 ? "" : "s")")
-                                .foregroundStyle(.tertiary)
-                        } else if let nextRun {
-                            Text("next: \(nextRun)")
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text("not yet run")
-                                .foregroundStyle(.quaternary)
-                        }
-                    }
-                    .font(.caption2)
+        return VStack(alignment: .leading, spacing: 10) {
+            // Row 1: title + alert glyph
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
-                    Spacer(minLength: 0)
+                Spacer(minLength: 0)
+
+                if isAlert {
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AppColors.accent)
+                        .accessibilityLabel("Alert routine — notifies in the notch")
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .nnGlass(in: cardShape)
-            .overlay(
-                cardShape
-                    .fill(hoveredJobId == job.id ? Color.white.opacity(0.04) : .clear)
-                    .allowsHitTesting(false)
-            )
-            .contentShape(Rectangle())
-            .opacity(isPaused ? 0.5 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
+
+            // Row 2: description (only when title is distinct from prompt)
+            if hasName {
+                Text(job.prompt)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // Row 3: dot + schedule + (counter OR next) + toggle
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(dotColor(for: job))
+                    .frame(width: 7, height: 7)
+                    .opacity(job.state == "running" ? 0.6 : 1.0)
+                    .animation(
+                        reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
+                        value: job.state == "running"
+                    )
+
+                Text(humanSchedule(job.schedule_display))
+                    .font(.caption2.weight(.medium).monospaced())
+                    .foregroundStyle(.secondary)
+                    .tracking(0.3)
+                    .lineLimit(1)
+
+                Text("·")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                Group {
+                    if runCount > 0 {
+                        Text("\(runCount) run\(runCount == 1 ? "" : "s")")
+                            .foregroundStyle(.tertiary)
+                    } else if let nextRun {
+                        Text("next: \(nextRun)")
+                            .foregroundStyle(.tertiary)
+                    } else {
+                        Text("not yet run")
+                            .foregroundStyle(.quaternary)
+                    }
+                }
+                .font(.caption2)
+                .lineLimit(1)
+
+                Spacer(minLength: 0)
+
+                Toggle("", isOn: Binding(
+                    get: { !isPaused && job.enabled },
+                    set: { newValue in
+                        let name = hasName ? job.name : String(job.prompt.prefix(30))
+                        let verb = newValue ? "Resume" : "Pause"
+                        onDraftAction?("\(verb) the routine \"\(name)\"", true)
+                    }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .labelsHidden()
+                .tint(AppColors.accent)
+                .accessibilityLabel(isPaused ? "Resume \(title)" : "Pause \(title)")
+            }
+            .padding(.top, 5)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardShape.fill(.quaternary.opacity(0.6)))
+        .overlay(
+            cardShape
+                .fill(hoveredJobId == job.id ? Color.white.opacity(0.04) : .clear)
+                .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+        .opacity(isPaused ? 0.5 : 1.0)
+        .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
         .onHover { over in hoveredJobId = over ? job.id : nil }
+        .onTapGesture { onSelectJob(job) }
+        .pointingHandCursor()
         .contextMenu {
             Button {
                 let name = job.name.isEmpty ? String(job.prompt.prefix(30)) : job.name
@@ -282,5 +316,212 @@ struct RoutinesView: View {
         }
 
         return raw
+    }
+
+    // MARK: - Add card (last grid cell)
+
+    private var addCard: some View {
+        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return Button {
+            resetForm()
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                showingCustomForm = true
+            }
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(AppColors.accent)
+                Text("Create routine")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(AppColors.accent.opacity(0.85))
+            }
+            .frame(maxWidth: .infinity, minHeight: addCardHeight, alignment: .center)
+            .background(cardShape.fill(.quaternary.opacity(0.35)))
+            .overlay(
+                cardShape.strokeBorder(
+                    AppColors.accent.opacity(hoveredAddCard ? 0.75 : 0.5),
+                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
+                )
+            )
+            .overlay(
+                cardShape
+                    .fill(hoveredAddCard ? AppColors.accent.opacity(0.06) : .clear)
+                    .allowsHitTesting(false)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hoveredAddCard = $0 }
+        .pointingHandCursor()
+        .animation(.easeInOut(duration: 0.15), value: hoveredAddCard)
+    }
+
+    // Matches the approximate height of a populated jobCard so the grid stays aligned.
+    private var addCardHeight: CGFloat { 96 }
+
+    // MARK: - Custom form
+
+    private var customForm: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                // Back button
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        showingCustomForm = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                            .font(.caption2.weight(.bold))
+                        Text("New routine")
+                            .font(.caption.weight(.medium))
+                    }
+                    .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+
+                formField(label: "Name", optional: true) {
+                    TextField("e.g. Morning briefing", text: $formName)
+                        .textFieldStyle(.plain)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
+                }
+
+                formField(label: "What should it do?", optional: false) {
+                    TextEditor(text: $formPrompt)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: 64)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
+                }
+
+                formField(label: "When?", optional: false, hint: "e.g. every day at 9am · every 2h · 0 9 * * 1-5") {
+                    TextField("Schedule", text: $formSchedule)
+                        .textFieldStyle(.plain)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
+                }
+
+                formField(label: "Deliver to", optional: false) {
+                    HStack(spacing: 6) {
+                        ForEach(deliverOptions, id: \.name) { option in
+                            let isSelected = formDeliver == option.name
+                            Button {
+                                formDeliver = option.name
+                            } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: option.icon)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.75)) : AnyShapeStyle(.secondary))
+                                    Text(option.name)
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background {
+                                    if isSelected {
+                                        Capsule().fill(selectedDeliverColor)
+                                    } else {
+                                        Capsule().fill(.quaternary.opacity(0.6))
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .pointingHandCursor()
+                        }
+                    }
+                }
+
+                Button {
+                    submitCustomRoutine()
+                } label: {
+                    Text("Create routine")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(customFormValid ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background {
+                            if customFormValid {
+                                Capsule().fill(AppColors.accent.opacity(0.35))
+                            } else {
+                                Capsule().fill(.quaternary.opacity(0.6))
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .disabled(!customFormValid)
+                .pointingHandCursor()
+                .padding(.top, 4)
+            }
+        }
+    }
+
+    private func formField<Content: View>(
+        label: String,
+        optional: Bool,
+        hint: String? = nil,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if optional {
+                    Text("(optional)")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            content()
+            if let hint {
+                Text(hint)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var customFormValid: Bool {
+        !formPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !formSchedule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func resetForm() {
+        formName = ""
+        formPrompt = ""
+        formSchedule = ""
+        formDeliver = "Notch"
+    }
+
+    private func submitCustomRoutine() {
+        guard customFormValid else { return }
+        let name = formName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let schedule = formSchedule.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deliverKey = formDeliver == "Notch" ? "local" : formDeliver.lowercased()
+
+        var headerParts: [String] = ["Create a new routine"]
+        if !name.isEmpty { headerParts.append("named \"\(name)\"") }
+        headerParts.append("running \(schedule)")
+        headerParts.append("delivered via \(deliverKey)")
+        let draft = headerParts.joined(separator: " ") + ".\n\nThe routine should: \(prompt)"
+
+        onCreateCustomRoutine?(draft)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            showingCustomForm = false
+        }
     }
 }

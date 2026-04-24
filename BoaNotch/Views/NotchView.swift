@@ -208,6 +208,8 @@ struct NotchView: View {
                                     chatVM.draft = draft
                                     notchVM.isRoutinesOpen = false
                                     if autoSend { chatVM.send() }
+                                }, onCreateCustomRoutine: { draft in
+                                    chatVM.createRoutine(draft: draft)
                                 })
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
@@ -262,97 +264,113 @@ struct NotchView: View {
             )
         )
         .overlay(alignment: .top) {
-            // Flanking buttons — burger menu beside the hardware notch
+            // Flanking buttons — persistent top bar beside the hardware notch
             if notchVM.isOpen && !onboardingVM.needsOnboarding {
-                HStack {
-                    if !notchVM.isAnyPanelOpen {
+                let isDeployed = notchVM.isMenuExpanded || notchVM.isAnyPanelOpen
+
+                HStack(spacing: 12) {
+                    // Left: new conversation (always visible)
+                    Button {
+                        chatVM.startNewConversation()
+                    } label: {
+                        Image(systemName: "plus.bubble")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+
+                    Spacer()
+
+                    // Right cluster: action icons (when deployed) + burger/X + resize
+                    HStack(spacing: 12) {
+                        if isDeployed {
+                            menuButton("clock.arrow.circlepath", active: notchVM.isHistoryOpen) {
+                                if notchVM.isHistoryOpen {
+                                    notchVM.closeAllPanels()
+                                } else {
+                                    notchVM.openHistory()
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                            menuButton("magnifyingglass", active: notchVM.isSearchOpen) {
+                                if notchVM.isSearchOpen {
+                                    notchVM.closeAllPanels()
+                                } else {
+                                    notchVM.openSearch()
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                            menuButton("bolt", active: notchVM.isRoutinesOpen) {
+                                if notchVM.isRoutinesOpen {
+                                    notchVM.closeAllPanels()
+                                } else {
+                                    notchVM.openRoutines()
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                            menuButton("brain", active: notchVM.isBrainOpen) {
+                                if notchVM.isBrainOpen {
+                                    notchVM.closeAllPanels()
+                                } else {
+                                    notchVM.openBrain()
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                            menuButton("gearshape", active: notchVM.isSettingsOpen) {
+                                if notchVM.isSettingsOpen {
+                                    notchVM.closeAllPanels()
+                                } else {
+                                    notchVM.openSettings()
+                                    notchVM.collapseMenu()
+                                }
+                            }
+                        }
+
+                        // Burger ↔ X morph (same slot)
                         Button {
-                            chatVM.startNewConversation()
+                            if notchVM.isAnyPanelOpen {
+                                notchVM.closeAllPanels()
+                            } else if notchVM.isMenuExpanded {
+                                notchVM.collapseMenu()
+                            } else {
+                                notchVM.expandMenu()
+                            }
                         } label: {
-                            Image(systemName: "plus.bubble")
+                            Image(systemName: isDeployed ? "xmark" : "line.3.horizontal")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundStyle(.secondary)
+                                .contentTransition(.symbolEffect(.replace))
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+
+                        // Resize panel size (always visible)
+                        Button {
+                            panelSizeStore.size = (panelSizeStore.size == .standard) ? .large : .standard
+                        } label: {
+                            Image(systemName: panelSizeStore.size == .standard
+                                  ? "arrow.up.left.and.arrow.down.right"
+                                  : "arrow.down.right.and.arrow.up.left")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(.tertiary)
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
                     }
-
-                    Spacer()
-
-                    if notchVM.isAnyPanelOpen {
-                        Button {
-                            notchVM.isSettingsOpen = false
-                            notchVM.isRoutinesOpen = false
-                            notchVM.isSearchOpen = false
-                            notchVM.isHistoryOpen = false
-                            notchVM.isBrainOpen = false
-                        } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
-                    } else {
-                        HStack(spacing: 12) {
-                            ZStack(alignment: .trailing) {
-                                Image(systemName: "line.3.horizontal")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .opacity(notchVM.isMenuExpanded ? 0 : 1)
-
-                                HStack(spacing: 12) {
-                                    menuButton("clock.arrow.circlepath") {
-                                        notchVM.openHistory()
-                                        notchVM.collapseMenu()
-                                    }
-                                    menuButton("magnifyingglass") {
-                                        notchVM.isSearchOpen = true
-                                        notchVM.collapseMenu()
-                                    }
-                                    menuButton("bolt") {
-                                        notchVM.openRoutines()
-                                        notchVM.collapseMenu()
-                                    }
-                                    menuButton("brain") {
-                                        notchVM.openBrain()
-                                        notchVM.collapseMenu()
-                                    }
-                                    menuButton("gearshape") {
-                                        notchVM.isSettingsOpen = true
-                                        notchVM.collapseMenu()
-                                    }
-                                }
-                                .opacity(notchVM.isMenuExpanded ? 1 : 0)
-                                .offset(x: notchVM.isMenuExpanded ? 0 : 8)
-                                .allowsHitTesting(notchVM.isMenuExpanded)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isDeployed)
+                    .onHover { hovering in
+                        // Only auto-expand/collapse the menu when no panel is open.
+                        // When a panel is open, icons stay visible regardless of hover.
+                        guard !notchVM.isAnyPanelOpen else { return }
+                        if hovering {
+                            if notchVM.isMenuExpanded {
+                                notchVM.cancelMenuCollapse()
+                            } else {
+                                notchVM.expandMenu()
                             }
-                            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: notchVM.isMenuExpanded)
-                            .onHover { hovering in
-                                if hovering {
-                                    if notchVM.isMenuExpanded {
-                                        notchVM.cancelMenuCollapse()
-                                    } else {
-                                        notchVM.expandMenu()
-                                    }
-                                } else {
-                                    // Short grace window after cursor leaves so a
-                                    // brief excursion doesn't slam the menu shut.
-                                    notchVM.scheduleMenuCollapse(after: 0.6)
-                                }
-                            }
-
-                            Button {
-                                panelSizeStore.size = (panelSizeStore.size == .standard) ? .large : .standard
-                            } label: {
-                                Image(systemName: panelSizeStore.size == .standard
-                                      ? "arrow.up.left.and.arrow.down.right"
-                                      : "arrow.down.right.and.arrow.up.left")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .buttonStyle(.plain)
-                            .pointingHandCursor()
+                        } else {
+                            notchVM.scheduleMenuCollapse(after: 0.6)
                         }
                     }
                 }
@@ -365,11 +383,12 @@ struct NotchView: View {
 
     // MARK: - Burger menu icon button
 
-    private func menuButton(_ icon: String, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.secondary)
+                .symbolVariant(active ? .fill : .none)
+                .font(.system(size: 14, weight: active ? .semibold : .medium))
+                .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()

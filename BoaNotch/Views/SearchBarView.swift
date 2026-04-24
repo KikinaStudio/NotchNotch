@@ -6,14 +6,14 @@ struct SearchBarView: View {
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.footnote)
                 .foregroundStyle(.tertiary)
 
             TextField("Search...", text: $searchVM.query)
                 .textFieldStyle(.plain)
-                .font(.footnote)
+                .font(.callout)
                 .foregroundStyle(.primary)
                 .tint(AppColors.accent)
                 .focused($isFocused)
@@ -54,7 +54,7 @@ struct SearchBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.6)))
         .padding(.horizontal, 42)
         .padding(.top, 36)
         .padding(.bottom, 4)

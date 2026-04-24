@@ -273,6 +273,23 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Fire-and-forget routine creation via chat. Composed prompt instructs
+    /// Hermes to invoke its `cronjob(action="create", ...)` tool. HTTP 200
+    /// means the request was received, not that the job is live — the
+    /// CronStore watcher will pick up the new entry when jobs.json changes.
+    func createRoutine(draft: String) {
+        let messages: [[String: String]] = [["role": "user", "content": draft]]
+        Task { @MainActor in
+            do {
+                try await client.sendCompletion(messages: messages)
+                notchVM?.showToast("Routine created")
+            } catch {
+                print("[notchnotch] Create routine error: \(error)")
+                notchVM?.showToast("Routine creation failed")
+            }
+        }
+    }
+
     /// Fire-and-forget request to Hermes to rewrite a memory block. NotchNotch
     /// never writes `~/.hermes/memories/` directly — Hermes owns those files
     /// and applies the change through its `memory` tool. UI shows an optimistic
