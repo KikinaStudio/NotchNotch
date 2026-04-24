@@ -4,3 +4,6 @@
 DerivedData/
 .swiftpm/
 .DS_Store
+
+# Desktop OAuth client credentials — never commit real values
+BoaNotch/Resources/google_oauth_config.json

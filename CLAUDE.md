@@ -83,6 +83,17 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - The API server is started via `hermes gateway run`, NOT `hermes serve` (which doesn't exist).
 - Health check: `curl http://localhost:8642/health`
 
+### Google OAuth client credentials (required for Connect Google)
+
+`BoaNotch/Resources/google_oauth_config.json` is **gitignored** — the repo only ships a `.example` template. Before building, copy the template and fill in real values from a Google Cloud Desktop OAuth client (type: "Desktop app"):
+
+```bash
+cp BoaNotch/Resources/google_oauth_config.json.example BoaNotch/Resources/google_oauth_config.json
+# then edit client_id / client_secret / project_id with real values
+```
+
+Per Google's Desktop OAuth docs the client secret isn't cryptographically secret (it ships inside every distributed binary), but we still keep it out of the public repo so GitHub secret scanning doesn't flag it and so forks don't inherit our quota. `run.sh` / `release.sh` copy the file into `Contents/Resources/` automatically — no further wiring needed.
+
 ## Key architecture
 
 - `HermesClient.swift` — `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). **Two paths**: `streamResponse(input:systemContext:onEvent:)` drives the chat flow with SSE (`stream: true`, `store: true`) — yields `StreamEvent.textDelta`/`.thinkingDelta`/`.thinkingStarted`/`.thinkingEnded`/`.toolCallStarted`/`.toolCallCompleted`/`.completed`/`.failed` via `onEvent` and returns the final `ResponseResult` reconciled from `response.completed.response.output`. Requires Hermes v0.11.0+; older servers silently return JSON on `stream: true`, so the method sniffs `Content-Type` and falls back to a single-shot JSON parse (emits a synthetic `.completed`). `sendResponse(input:systemContext:)` is the non-streaming sibling still used for one-shot call sites. Both return a `ResponseResult` with `content`, `thinkingContent`, `toolCalls`, `promptTokens`, `completionTokens`. Token counts come from the top-level `usage` field (`input_tokens`, `output_tokens` — note: Hermes uses these key names, not `prompt_tokens`/`completion_tokens`). When `systemContext` is provided, `input` is sent as `[system_msg, user_msg]` array instead of a plain string. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context. `HermesError.httpErrorWithBody(Int, String)` captures the server response body on HTTP errors for actionable messages in the UI. **Stable session ID**: `sessionId` is persisted to UserDefaults (`notchnotchSessionId`) and `ensureSessionId()` lazily generates a `notchnotch-<uuid>` if none exists — the `X-Hermes-Session-Id` header is sent on every request so all turns of a conversation accumulate in a single state.db row. **Title generation**: `generateTitle(userMessage:assistantResponse:)` POSTs to `/v1/responses` with `store: false` and no headers, asks for a 3-7 word title, returns it cleaned (quotes/trailing punctuation stripped, clamped to 80 chars).
@@ -101,6 +112,8 @@ cd ~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
 - `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads config via Yams (`Yams.load(yaml:)` → `[String: Any]` dict navigation); writes via line-level regex replacement to preserve comments. `availableModels` returns `[(value: String, label: String)]` hardcoded per provider (switch on `modelProvider`: openai, anthropic, openrouter, default) — add new models to the relevant case. `switchModel()` writes `model.default`, `model.provider`, and `model.base_url` atomically in a single file write via `Data.write(options: .atomic)`. The old `writeToConfig` method also uses this pattern (NOT tmp+moveItem which fails on macOS). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`. The expanded bar shows context window tokens via `ChatViewModel.lastInputTokens`. **Compression endpoint probe**: `compressionBaseURL: URL?` exposes `compression.summary_base_url` from config; `probeCompressionEndpoint() async -> EndpointHealth` GETs `{baseURL}/models` with a 2s timeout. `EndpointHealth` is `.notConfigured` / `.reachable` / `.unreachable(reason)`. `AppDelegate.probeCompressionEndpointOnce()` runs the probe once at launch (guarded by `didProbeCompression` flag) and fires `notchVM.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.")` on `.unreachable`. Read-only — NotchNotch never writes the compression section. **`yamlString` NSNull handling**: the helper returns `nil` for YAML `null` values (e.g., `summary_base_url: null`) instead of stringifying them as `"<null>"` — this gates the probe correctly when the key is present but unset.
 - `PanelSizeStore.swift` — `PanelSize` enum (`.standard` / `.large`) persisted to UserDefaults under `panelSize`. `@Published var size` — observed by `NotchWindowController` via Combine to resize the NSPanel when the user toggles the arrows button in the overlay. See the `@Published` willSet gotcha below.
+- `GoogleOAuthService.swift` — Desktop OAuth 2.0 flow with PKCE + loopback HTTP redirect. `connect()` generates a 64-char PKCE verifier, spins up a single-shot `LoopbackServer` (NWListener with OS-assigned port via `NWListener(using: .tcp)` and no explicit port), opens `https://accounts.google.com/o/oauth2/v2/auth` in the default browser via `NSWorkspace.shared.open`, waits up to 120s for the callback (CSRF-protected with a random `state` param), exchanges the code for tokens at `oauth2.googleapis.com/token`, GETs `/oauth2/v2/userinfo` for the email, then writes a 9-key JSON to `~/.hermes/google_token.json` (mode 0600) whose schema byte-matches `google.oauth2.credentials.Credentials.to_json()` — `expiry` formatted as `YYYY-MM-DDTHH:MM:SS.000000Z` so `strptime("%Y-%m-%dT%H:%M:%S.%f")` in the google-auth library parses it after stripping Z. Client credentials loaded from `Bundle.main.resourceURL?.appendingPathComponent("google_oauth_config.json")` (NEVER `Bundle.module` — see gotchas). The 8 scopes live in `GoogleOAuthService.scopes` and must match the Google Cloud OAuth consent screen exactly; `gmail.modify` alone covers read+send+modify (it's a superset of `gmail.readonly`/`gmail.send`). `prompt=consent` + `access_type=offline` are required to guarantee a `refresh_token` every time. `LoopbackServer` is marked `@unchecked Sendable` because all mutable state is serialized via its private `DispatchQueue`. The success HTML page is inline and styled near-black to match NotchNotch's aesthetic; the error page escapes Google's error string. `disconnect()` deletes the token file and clears UserDefaults. Typed errors: `.userCancelled`, `.exchangeFailed(body)`, `.invalidResponse`, `.fileWriteFailed`, `.stateMismatch`, `.timeout`, `.listenerFailed`. See also `GoogleConnectionState.swift`.
+- `GoogleConnectionState.swift` — `@MainActor` `ObservableObject` wrapping `GoogleOAuthService` for the Settings UI. `@Published isConnected/connectedEmail/isConnecting/errorMessage`. `refresh()` checks both `tokenFileExists()` AND `UserDefaults["googleConnectedEmail"]` (both must be truthy) so a stale token file without a remembered email shows as disconnected. `connect()` flips `isConnecting` for the spinner, awaits `GoogleOAuthService.shared.connect()`, silently swallows `.userCancelled` (no error banner on user backout), and routes everything else into `errorMessage`. `disconnect()` is synchronous — just calls the service and clears local state.
 - `NotchWindowController.swift` — Owns the `NotchPanel` (NSPanel subclass) and all sizing math. `dimensions(for:on:)` → panel-frame size per `PanelSize` (`.standard` = 680×380; `.large` = min(900, visibleFrame.width × 0.9) × min(600, visibleFrame.height × 0.8) so it stays inside the menu-bar/Dock reserved area on small displays). `openSize(for:on:)` = `dimensions - 2 × shadowPadding` (shadowPadding = 20pt) — this invariant MUST hold so the visible NotchShape always fits inside the NSPanel with room for the drop shadow. `NotchViewModel.openSize` is `@Published` and driven exclusively by the controller. **`applyPanelSize(animated:)`**: recenters horizontally on `notchScreen()` and pins to `screenFrame.height` top edge. Animation is asymmetric: **growing** → set NSPanel frame first (so SwiftUI content doesn't clip), then spring-animate `openSize`; **shrinking** → spring-animate `openSize` first, then tighten NSPanel frame after 0.5s (once the spring has settled). Driven by a Combine sink on `panelSizeStore.$size` with `.receive(on: DispatchQueue.main)` — required because `@Published` fires in willSet (see gotcha). Also called from `screenDidChange` (NSApplication.didChangeScreenParametersNotification) to reclamp on display swaps.
 
 ### Conversation flow
@@ -474,6 +487,7 @@ compile.
 - `hermesSessionId` — legacy Telegram-derived session ID (SessionStore, informational only)
 - `textSize` — chat/brain text size picker: "small" | "medium" | "large" (AppearanceSettings)
 - `panelSize` — open panel size variant: "standard" (680×380) | "large" (≤900×600, clamped to 0.9×visibleFrame) (PanelSizeStore)
+- `googleConnectedEmail` — connected Gmail address after OAuth; absence = not connected (GoogleOAuthService / GoogleConnectionState)
 
 Add new keys here when introducing them.
 
@@ -484,6 +498,19 @@ Add new keys here when introducing them.
   goes through `sendCompletion` as natural language)
 - Edit any file under `~/.hermes/brain/wiki/` (Hermes owns it)
 - Edit any file under `~/.hermes/memories/` (Hermes owns it)
+
+**Documented exception — `~/.hermes/google_token.json`**: the `GoogleOAuthService` 
+writes this file directly after a successful OAuth consent, because the 
+Desktop OAuth flow (loopback HTTP on an OS-assigned port + PKCE) must happen 
+in-process to receive the callback. Everything-through-chat doesn't apply 
+because chat can't intercept a browser redirect. The file format matches 
+`google.oauth2.credentials.Credentials.to_json()` exactly (9 keys: `token`, 
+`refresh_token`, `token_uri`, `client_id`, `client_secret`, `scopes`, 
+`expiry` as `YYYY-MM-DDTHH:MM:SS.000000Z`, `universe_domain`, `account`) 
+so the `google-workspace` skill reads it with `Credentials.from_authorized_user_file`. 
+See `GoogleOAuthService.swift` for the 8-scope set and `setup.py` in 
+`~/.hermes/skills/productivity/google-workspace/scripts/` for the downstream 
+consumer.
 
 ## 1. Think Before Coding
 

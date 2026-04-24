@@ -23,9 +23,10 @@ cp .build/release/BoaNotch "$APP_DIR/MacOS/notchnotch"
 # Copy Info.plist — critical for ATS localhost exception
 cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
 
-# Copy resources (icons, logo)
+# Copy resources (icons, logo, bundled configs)
 cp BoaNotch/Resources/*.png "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.icns "$APP_DIR/Resources/" 2>/dev/null || true
+cp BoaNotch/Resources/*.json "$APP_DIR/Resources/" 2>/dev/null || true
 
 # Note: no SPM resource bundle copy — all loads go through Bundle.main
 # from Contents/Resources.

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject var hermesConfig: HermesConfig
     @ObservedObject var loginItemService: LoginItemService
     @ObservedObject var appearanceSettings: AppearanceSettings
+    @StateObject private var googleConnection = GoogleConnectionState()
     @State private var apiKey = ""
 
     var body: some View {
@@ -45,6 +46,11 @@ struct SettingsView: View {
                             apiKeyField
                         }
                     }
+                }
+
+                // ── Google Workspace ──
+                settingsSection("Google Workspace") {
+                    googleWorkspaceSection
                 }
 
                 // ── Agent ──
@@ -242,6 +248,89 @@ struct SettingsView: View {
         case "anthropic": return "sk-ant-..."
         case "minimax": return "sk-..."
         default: return ""
+        }
+    }
+
+    @ViewBuilder
+    private var googleWorkspaceSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if googleConnection.isConnected, let email = googleConnection.connectedEmail {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.footnote)
+                        .foregroundStyle(AppColors.accent)
+                    Text("Connected as ")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    + Text(email)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Button {
+                        googleConnection.disconnect()
+                    } label: {
+                        Text("Disconnect")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(.quaternary))
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await googleConnection.connect() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if googleConnection.isConnecting {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .scaleEffect(0.7)
+                                    .frame(width: 10, height: 10)
+                            }
+                            Text(googleConnection.isConnecting ? "Connecting…" : "Connect Google")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(googleConnection.isConnecting ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(AppColors.accent.opacity(0.35)))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(googleConnection.isConnecting)
+                    .pointingHandCursor()
+
+                    Text("Gmail, Calendar, Drive, and more")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let err = googleConnection.errorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                    Text(err)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(3)
+                    Spacer()
+                    Button {
+                        googleConnection.dismissError()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                }
+                .padding(.top, 2)
+            }
         }
     }
 
