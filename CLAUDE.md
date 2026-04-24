@@ -12,6 +12,7 @@ A native macOS SwiftUI app that lives in the MacBook notch, providing instant ac
 2. Check latest releases for new API features: `https://github.com/NousResearch/hermes-agent/releases`
 3. Check local Hermes config for current state: `~/.hermes/config.yaml`
 4. Check Hermes DB schema for data model: `sqlite3 ~/.hermes/state.db ".schema"`
+5. **Before trusting any field, tool, or API name cited in a task prompt, grep the local install:** `grep -r "<name>" ~/.hermes/hermes-agent --include="*.py"`. Prompts can hallucinate fields even when they cite real PR numbers (observed 2026-04-24: a task cited a `wake_agent` cron field sourced to PRs #14767/#14798; the PRs were real and merged, but only added `enabled_toolsets` — `wake_agent` was fictional). Verify existence before writing a single line of code or schema against it.
 
 Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes/memories/`), skills (`~/.hermes/skills/`), cron jobs, multi-platform messaging (Telegram, Discord, Slack, WhatsApp, Signal, Email), tool execution, checkpoints, context compression, SOUL.md personas, hindsight, and 6 pluggable external memory providers. Do NOT underestimate its capabilities.
 
