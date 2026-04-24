@@ -116,11 +116,52 @@ class ChatViewModel: ObservableObject {
                     systemContext = "The user dropped a file from the Routines screen. They want to create a new scheduled routine (cron job). Analyze the attached file and, based on its content and what you know about the user, suggest 1-2 routine ideas that would be useful. Explain each suggestion briefly. Ask the user to confirm or adjust before creating the cron job. Do not create any job until the user explicitly agrees."
                     routineCreationMode = false
                 }
-                let result = try await client.sendResponse(input: input, systemContext: systemContext)
+
+                // streamResponse fires onEvent from the URLSession iterator's
+                // context (not the main actor). Hop back to MainActor for
+                // each UI mutation. Final reconciliation after the call
+                // uses ResponseResult as source-of-truth against any
+                // out-of-order or dropped deltas.
+                let result = try await client.streamResponse(
+                    input: input,
+                    systemContext: systemContext
+                ) { [weak self] event in
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        guard let lastIndex = self.messages.indices.last else { return }
+                        switch event {
+                        case .textDelta(let d):
+                            self.messages[lastIndex].content.append(d)
+                        case .thinkingDelta(let d):
+                            self.messages[lastIndex].thinkingContent.append(d)
+                        case .toolCallStarted(_, let name, let preview):
+                            let line = "→ \(name) \(preview)\n"
+                            if name == "delegate_task" || line.contains("🤖") {
+                                self.messages[lastIndex].subagentActivity.append(line)
+                            } else {
+                                self.messages[lastIndex].toolCallContent.append(line)
+                            }
+                        case .toolCallCompleted(_, let name, _):
+                            let line = "✓ \(name)\n"
+                            if name == "delegate_task" {
+                                self.messages[lastIndex].subagentActivity.append(line)
+                            } else {
+                                self.messages[lastIndex].toolCallContent.append(line)
+                            }
+                        case .completed(let pt, _):
+                            if let pt { self.lastInputTokens = pt }
+                        case .failed:
+                            break
+                        }
+                    }
+                }
 
                 guard !Task.isCancelled else { return }
                 guard let lastIndex = messages.indices.last else { return }
 
+                // Reconcile from the authoritative ResponseResult — protects
+                // against dropped deltas, out-of-order Task execution, or a
+                // non-SSE fallback path where we emitted no live events.
                 messages[lastIndex].content = result.content
                 messages[lastIndex].thinkingContent = result.thinkingContent
                 let (filteredTools, subagent) = Self.splitSubagentContent(result.toolCalls)

@@ -143,7 +143,7 @@ class HermesClient {
         case textDelta(String)
         case thinkingDelta(String)
         case toolCallStarted(id: String, name: String, argsPreview: String)
-        case toolCallCompleted(id: String, resultPreview: String)
+        case toolCallCompleted(id: String, name: String, resultPreview: String)
         case completed(promptTokens: Int?, completionTokens: Int?)
         case failed(String)
     }
@@ -281,7 +281,7 @@ class HermesClient {
                     let name = callNames[callId] ?? "tool"
                     let resultPreview = joinOutputParts(item["output"])
                     toolCallsAccumulated += "✓ \(name)\n"
-                    onEvent(.toolCallCompleted(id: callId, resultPreview: String(resultPreview.prefix(60))))
+                    onEvent(.toolCallCompleted(id: callId, name: name, resultPreview: String(resultPreview.prefix(60))))
                 default:
                     break
                 }
