@@ -130,6 +130,228 @@ class HermesClient {
         )
     }
 
+    // MARK: - Streaming conversation via /v1/responses (SSE)
+
+    /// Live event surfaced by `streamResponse` to the caller. Text and
+    /// thinking deltas are opaque string chunks (can be a single char or
+    /// a full paragraph depending on provider). Tool events fire once
+    /// per tool lifecycle (`started` on the function_call added event,
+    /// `completed` on the function_call_output added event). `completed`
+    /// fires exactly once with final usage; `failed` fires on
+    /// `response.failed` and `streamResponse` then throws.
+    enum StreamEvent {
+        case textDelta(String)
+        case thinkingDelta(String)
+        case toolCallStarted(id: String, name: String, argsPreview: String)
+        case toolCallCompleted(id: String, resultPreview: String)
+        case completed(promptTokens: Int?, completionTokens: Int?)
+        case failed(String)
+    }
+
+    /// Streaming equivalent of `sendResponse`. Subscribes to Hermes's
+    /// OpenAI-Responses SSE stream, forwards live events to `onEvent`,
+    /// and returns the same `ResponseResult` the non-streaming path
+    /// would. If the server replies with `application/json` instead of
+    /// `text/event-stream` (older Hermes builds silently ignore
+    /// `stream: true`), falls back to batch parsing and emits a single
+    /// synthetic `.completed`.
+    func streamResponse(
+        input: String,
+        systemContext: String? = nil,
+        onEvent: @escaping (StreamEvent) -> Void
+    ) async throws -> ResponseResult {
+        guard let url = URL(string: "\(baseURL)/v1/responses") else {
+            throw HermesError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue(ensureSessionId(), forHTTPHeaderField: "X-Hermes-Session-Id")
+
+        let inputValue: Any
+        if let systemContext {
+            inputValue = [
+                ["role": "system", "content": systemContext],
+                ["role": "user", "content": input]
+            ]
+        } else {
+            inputValue = input
+        }
+
+        let body: [String: Any] = [
+            "model": "hermes-agent",
+            "input": inputValue,
+            "conversation": conversationId,
+            "store": true,
+            "stream": true,
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+
+        if httpResponse.statusCode != 200 {
+            var accum = Data()
+            for try await byte in bytes {
+                accum.append(byte)
+                if accum.count > 16_384 { break }
+            }
+            let bodyString = String(data: accum, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
+        }
+
+        let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
+        let isSSE = contentType.lowercased().contains("text/event-stream")
+
+        if !isSSE {
+            // Server ignored stream:true — batch-parse and emit a single completed.
+            var accum = Data()
+            for try await byte in bytes {
+                accum.append(byte)
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: accum) as? [String: Any],
+                  let output = json["output"] as? [[String: Any]] else {
+                throw HermesError.invalidResponse
+            }
+            let parsed = parseOutput(output)
+            var promptTokens: Int? = nil
+            var completionTokens: Int? = nil
+            if let usage = json["usage"] as? [String: Any] {
+                promptTokens = usage["input_tokens"] as? Int
+                completionTokens = usage["output_tokens"] as? Int
+            }
+            onEvent(.completed(promptTokens: promptTokens, completionTokens: completionTokens))
+            return ResponseResult(
+                content: parsed.content,
+                thinkingContent: parsed.thinkingContent,
+                toolCalls: parsed.toolCalls,
+                promptTokens: promptTokens,
+                completionTokens: completionTokens
+            )
+        }
+
+        // SSE path — accumulate live state while forwarding events.
+        var content = ""
+        var thinkingContent = ""
+        var toolCallsAccumulated = ""
+        var callNames: [String: String] = [:]
+        var promptTokens: Int? = nil
+        var completionTokens: Int? = nil
+
+        for try await event in SSEStream(bytes: bytes) {
+            guard let payloadData = event.data.data(using: .utf8),
+                  let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+            else { continue }
+
+            switch event.name ?? "" {
+            case "response.output_text.delta":
+                if let delta = payload["delta"] as? String, !delta.isEmpty {
+                    content += delta
+                    onEvent(.textDelta(delta))
+                }
+
+            case "response.reasoning_text.delta",
+                 "response.reasoning_summary_text.delta":
+                if let delta = payload["delta"] as? String, !delta.isEmpty {
+                    thinkingContent += delta
+                    onEvent(.thinkingDelta(delta))
+                }
+
+            case "response.output_item.added":
+                guard let item = payload["item"] as? [String: Any],
+                      let type = item["type"] as? String else { break }
+                switch type {
+                case "function_call":
+                    let name = item["name"] as? String ?? "tool"
+                    let callId = item["call_id"] as? String ?? ""
+                    let args = item["arguments"] as? String ?? ""
+                    let preview = String(args.prefix(60))
+                    callNames[callId] = name
+                    toolCallsAccumulated += "→ \(name) \(preview)\n"
+                    onEvent(.toolCallStarted(id: callId, name: name, argsPreview: preview))
+                case "function_call_output":
+                    let callId = item["call_id"] as? String ?? ""
+                    let name = callNames[callId] ?? "tool"
+                    let resultPreview = joinOutputParts(item["output"])
+                    toolCallsAccumulated += "✓ \(name)\n"
+                    onEvent(.toolCallCompleted(id: callId, resultPreview: String(resultPreview.prefix(60))))
+                default:
+                    break
+                }
+
+            case "response.completed":
+                if let responseObj = payload["response"] as? [String: Any] {
+                    if let usage = responseObj["usage"] as? [String: Any] {
+                        promptTokens = usage["input_tokens"] as? Int
+                        completionTokens = usage["output_tokens"] as? Int
+                    }
+                    if let output = responseObj["output"] as? [[String: Any]] {
+                        let parsed = parseOutput(output)
+                        if !parsed.content.isEmpty { content = parsed.content }
+                        if !parsed.thinkingContent.isEmpty { thinkingContent = parsed.thinkingContent }
+                        if !parsed.toolCalls.isEmpty { toolCallsAccumulated = parsed.toolCalls }
+                    }
+                }
+                onEvent(.completed(promptTokens: promptTokens, completionTokens: completionTokens))
+                return ResponseResult(
+                    content: content,
+                    thinkingContent: thinkingContent,
+                    toolCalls: toolCallsAccumulated,
+                    promptTokens: promptTokens,
+                    completionTokens: completionTokens
+                )
+
+            case "response.failed":
+                let message: String
+                if let responseObj = payload["response"] as? [String: Any],
+                   let error = responseObj["error"] as? [String: Any],
+                   let m = error["message"] as? String {
+                    message = m
+                } else {
+                    message = "Hermes returned a failed response"
+                }
+                onEvent(.failed(message))
+                throw HermesError.httpErrorWithBody(500, message)
+
+            case "response.output_item.done",
+                 "response.output_text.done",
+                 "response.created":
+                // Redundant with other events; no client action needed.
+                break
+
+            case "":
+                break
+
+            default:
+                print("[SSE] unknown event: \(event.name ?? "")")
+            }
+        }
+
+        // Stream closed without response.completed — still produce a final.
+        onEvent(.completed(promptTokens: promptTokens, completionTokens: completionTokens))
+        return ResponseResult(
+            content: content,
+            thinkingContent: thinkingContent,
+            toolCalls: toolCallsAccumulated,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens
+        )
+    }
+
+    /// function_call_output.output is `[{"type":"input_text","text":"..."}, ...]`.
+    /// Join the `text` fields for preview purposes.
+    private func joinOutputParts(_ raw: Any?) -> String {
+        guard let parts = raw as? [[String: Any]] else { return "" }
+        return parts.compactMap { $0["text"] as? String }.joined(separator: "\n")
+    }
+
     private func parseOutput(_ output: [[String: Any]]) -> ResponseResult {
         var content = ""
         var thinkingContent = ""
