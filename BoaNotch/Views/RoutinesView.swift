@@ -489,9 +489,12 @@ struct RoutinesView: View {
                 ForEach(ScheduleFrequency.allCases, id: \.self) { freq in
                     frequencyPill(freq)
                 }
+                if scheduleFrequency != .hourly {
+                    timeRow.padding(.leading, 6)
+                }
             }
 
-            scheduleSubControls
+            scheduleExtras
 
             Text(humanSchedule(composedCron))
                 .font(.caption2)
@@ -500,20 +503,14 @@ struct RoutinesView: View {
     }
 
     @ViewBuilder
-    private var scheduleSubControls: some View {
+    private var scheduleExtras: some View {
         switch scheduleFrequency {
         case .daily, .weekdays:
-            timeRow
+            EmptyView()
         case .weekly:
-            VStack(alignment: .leading, spacing: 10) {
-                weekdayPicker
-                timeRow
-            }
+            weekdayPicker
         case .monthly:
-            HStack(spacing: 14) {
-                dayOfMonthControl
-                timeRow
-            }
+            dayOfMonthControl
         case .hourly:
             intervalPicker
         }
@@ -580,6 +577,8 @@ struct RoutinesView: View {
             DatePicker("", selection: $scheduleTime, displayedComponents: .hourAndMinute)
                 .labelsHidden()
                 .datePickerStyle(.compact)
+                .fixedSize()
+                .frame(minWidth: 84)
         }
     }
 
