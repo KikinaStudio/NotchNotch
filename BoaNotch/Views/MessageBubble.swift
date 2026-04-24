@@ -15,6 +15,7 @@ struct MessageBubble: View {
     @State private var isHoveredCopy = false
     @State private var isHoveredRetry = false
     @State private var isHovered = false
+    @State private var pulseOpacity: Double = 0.3
 
     @EnvironmentObject var appearanceSettings: AppearanceSettings
 
@@ -40,9 +41,13 @@ struct MessageBubble: View {
                     subagentIndicator
                 }
 
-                // Collapsible tool calling section
+                // Live tool-call preview (during streaming) or collapsed toggle (after)
                 if !message.toolCallContent.isEmpty {
-                    toolCallToggle
+                    if message.isStreaming {
+                        liveToolCalls
+                    } else {
+                        toolCallToggle
+                    }
                 }
 
                 // Message content with clickable file paths (final response only)
@@ -200,6 +205,41 @@ struct MessageBubble: View {
                     .padding(.top, 4)
                     .padding(.leading, 13)
                     .transition(.opacity)
+            }
+        }
+    }
+
+    // MARK: - Live tool-call preview (streaming)
+
+    private var liveToolCalls: some View {
+        let lines = message.toolCallContent
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+        let tail = Array(lines.suffix(3))
+
+        return VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(tail.enumerated()), id: \.offset) { idx, line in
+                let isLast = idx == tail.count - 1
+                let inProgress = isLast && line.hasPrefix("→")
+                HStack(spacing: 5) {
+                    if inProgress {
+                        Circle()
+                            .fill(.white.opacity(pulseOpacity))
+                            .frame(width: 4, height: 4)
+                    }
+                    Text(line)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+        .transition(.opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                pulseOpacity = 0.85
             }
         }
     }
