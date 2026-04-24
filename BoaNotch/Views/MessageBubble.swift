@@ -31,8 +31,12 @@ struct MessageBubble: View {
                     }
                 }
 
-                // Collapsible thinking section
-                if !message.thinkingContent.isEmpty {
+                // Thinking: live rolling preview while we're inside a
+                // `<think>` block, collapsed toggle once the model has
+                // finished reasoning.
+                if message.isCurrentlyThinking {
+                    liveThinkingPreview
+                } else if !message.thinkingContent.isEmpty {
                     thinkingToggle
                 }
 
@@ -134,6 +138,36 @@ struct MessageBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+    }
+
+    // MARK: - Live thinking preview (streaming, inside <think>)
+
+    private var liveThinkingPreview: some View {
+        HStack(alignment: .top, spacing: 6) {
+            Circle()
+                .fill(.white.opacity(pulseOpacity))
+                .frame(width: 4, height: 4)
+                .padding(.top, 6)
+            Text(currentThinkingText)
+                .font(.system(size: 11))
+                .italic()
+                .foregroundStyle(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
+        .transition(.opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                pulseOpacity = 0.85
+            }
+        }
+    }
+
+    private var currentThinkingText: String {
+        let trimmed = message.currentThinkingBlock.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Réflexion…" : trimmed
     }
 
     // MARK: - Thinking toggle

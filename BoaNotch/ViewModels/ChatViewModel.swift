@@ -134,8 +134,17 @@ class ChatViewModel: ObservableObject {
                             self.messages[lastIndex].content.append(d)
                         case .thinkingDelta(let d):
                             self.messages[lastIndex].thinkingContent.append(d)
+                            if self.messages[lastIndex].isCurrentlyThinking {
+                                self.messages[lastIndex].currentThinkingBlock.append(d)
+                            }
+                        case .thinkingStarted:
+                            self.messages[lastIndex].isCurrentlyThinking = true
+                            self.messages[lastIndex].currentThinkingBlock = ""
+                        case .thinkingEnded:
+                            self.messages[lastIndex].isCurrentlyThinking = false
+                            self.messages[lastIndex].currentThinkingBlock = ""
                         case .toolCallStarted(_, let name, let preview):
-                            let line = "→ \(name) \(preview)\n"
+                            let line = preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
                             if name == "delegate_task" || line.contains("🤖") {
                                 self.messages[lastIndex].subagentActivity.append(line)
                             } else {
@@ -176,6 +185,8 @@ class ChatViewModel: ObservableObject {
                     messages[lastIndex].thinkingDuration = Date().timeIntervalSince(startTime)
                 }
                 messages[lastIndex].isStreaming = false
+                messages[lastIndex].isCurrentlyThinking = false
+                messages[lastIndex].currentThinkingBlock = ""
                 isStreaming = false
                 connectionError = nil
 
@@ -208,6 +219,8 @@ class ChatViewModel: ObservableObject {
                     }
                     if let lastIndex = messages.indices.last {
                         messages[lastIndex].isStreaming = false
+                        messages[lastIndex].isCurrentlyThinking = false
+                        messages[lastIndex].currentThinkingBlock = ""
                         if messages[lastIndex].content.isEmpty {
                             messages.removeLast()
                         }
@@ -260,6 +273,8 @@ class ChatViewModel: ObservableObject {
         streamTask = nil
         if let lastIndex = messages.indices.last, messages[lastIndex].isStreaming {
             messages[lastIndex].isStreaming = false
+            messages[lastIndex].isCurrentlyThinking = false
+            messages[lastIndex].currentThinkingBlock = ""
         }
         isStreaming = false
     }

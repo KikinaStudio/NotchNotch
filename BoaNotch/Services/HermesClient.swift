@@ -112,7 +112,7 @@ class HermesClient {
             throw HermesError.invalidResponse
         }
 
-        let parsed = parseOutput(output)
+        let parsed = Self.postProcessResult(parseOutput(output))
 
         var promptTokens: Int? = nil
         var completionTokens: Int? = nil
@@ -142,6 +142,11 @@ class HermesClient {
     enum StreamEvent {
         case textDelta(String)
         case thinkingDelta(String)
+        /// Fired when an opening `<think>` tag is detected in the output
+        /// text stream. The bubble uses this to switch to a live thinking
+        /// preview until `thinkingEnded` arrives.
+        case thinkingStarted
+        case thinkingEnded
         case toolCallStarted(id: String, name: String, argsPreview: String)
         case toolCallCompleted(id: String, name: String, resultPreview: String)
         case completed(promptTokens: Int?, completionTokens: Int?)
@@ -220,7 +225,7 @@ class HermesClient {
                   let output = json["output"] as? [[String: Any]] else {
                 throw HermesError.invalidResponse
             }
-            let parsed = parseOutput(output)
+            let parsed = Self.postProcessResult(parseOutput(output))
             var promptTokens: Int? = nil
             var completionTokens: Int? = nil
             if let usage = json["usage"] as? [String: Any] {
@@ -244,6 +249,10 @@ class HermesClient {
         var callNames: [String: String] = [:]
         var promptTokens: Int? = nil
         var completionTokens: Int? = nil
+        // Splits <think>...</think> blocks embedded in output_text deltas
+        // into distinct text / thinking streams so the bubble never shows
+        // raw reasoning tags.
+        var thinkSplitter = ThinkTagSplitter()
 
         for try await event in SSEStream(bytes: bytes) {
             guard let payloadData = event.data.data(using: .utf8),
@@ -255,8 +264,21 @@ class HermesClient {
             switch event.name ?? "" {
             case "response.output_text.delta":
                 if let delta = payload["delta"] as? String, !delta.isEmpty {
-                    content += delta
-                    onEvent(.textDelta(delta))
+                    let routed = thinkSplitter.feed(delta)
+                    for tagEvent in routed.events {
+                        switch tagEvent {
+                        case .thinkingStarted: onEvent(.thinkingStarted)
+                        case .thinkingEnded: onEvent(.thinkingEnded)
+                        }
+                    }
+                    if !routed.text.isEmpty {
+                        content += routed.text
+                        onEvent(.textDelta(routed.text))
+                    }
+                    if !routed.thinking.isEmpty {
+                        thinkingContent += routed.thinking
+                        onEvent(.thinkingDelta(routed.thinking))
+                    }
                 }
 
             case "response.reasoning_text.delta",
@@ -274,9 +296,10 @@ class HermesClient {
                     let name = item["name"] as? String ?? "tool"
                     let callId = item["call_id"] as? String ?? ""
                     let args = item["arguments"] as? String ?? ""
-                    let preview = String(args.prefix(60))
+                    let preview = Self.toolArgsPreview(toolName: name, rawArgs: args)
                     callNames[callId] = name
-                    toolCallsAccumulated += "→ \(name) \(preview)\n"
+                    let line = preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
+                    toolCallsAccumulated += line
                     onEvent(.toolCallStarted(id: callId, name: name, argsPreview: preview))
                 case "function_call_output":
                     let callId = item["call_id"] as? String ?? ""
@@ -289,13 +312,20 @@ class HermesClient {
                 }
 
             case "response.completed":
+                // Drain any chars still held back by the tag splitter
+                // (e.g. trailing ambiguous fragment that never completed).
+                let flushed = thinkSplitter.flush()
+                if !flushed.text.isEmpty { content += flushed.text; onEvent(.textDelta(flushed.text)) }
+                if !flushed.thinking.isEmpty { thinkingContent += flushed.thinking; onEvent(.thinkingDelta(flushed.thinking)) }
+                if thinkSplitter.insideThink { onEvent(.thinkingEnded) }
+
                 if let responseObj = payload["response"] as? [String: Any] {
                     if let usage = responseObj["usage"] as? [String: Any] {
                         promptTokens = usage["input_tokens"] as? Int
                         completionTokens = usage["output_tokens"] as? Int
                     }
                     if let output = responseObj["output"] as? [[String: Any]] {
-                        let parsed = parseOutput(output)
+                        let parsed = Self.postProcessResult(parseOutput(output))
                         if !parsed.content.isEmpty { content = parsed.content }
                         if !parsed.thinkingContent.isEmpty { thinkingContent = parsed.thinkingContent }
                         if !parsed.toolCalls.isEmpty { toolCallsAccumulated = parsed.toolCalls }
@@ -369,8 +399,8 @@ class HermesClient {
                 let callId = item["call_id"] as? String ?? ""
                 callNames[callId] = name
                 let args = item["arguments"] as? String ?? ""
-                let preview = String(args.prefix(60))
-                toolCalls += "→ \(name) \(preview)\n"
+                let preview = Self.toolArgsPreview(toolName: name, rawArgs: args)
+                toolCalls += preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
             case "function_call_output":
                 let callId = item["call_id"] as? String ?? ""
                 let name = callNames[callId] ?? "tool"
@@ -500,6 +530,182 @@ class HermesClient {
             print("[notchnotch] Health check error: \(error)")
             return false
         }
+    }
+}
+
+// MARK: - Output hygiene
+
+extension HermesClient {
+    /// Post-process a parsed ResponseResult: extract any leftover
+    /// `<think>...</think>` blocks from `content` and fold them into
+    /// `thinkingContent`, so the visible response never contains raw
+    /// reasoning tags. The streaming path also does this live via
+    /// `ThinkTagSplitter`; this helper covers the batch/non-streaming
+    /// reconciliation paths.
+    static func postProcessResult(_ result: ResponseResult) -> ResponseResult {
+        let (cleanContent, extracted) = stripThinkTags(result.content)
+        let mergedThinking: String
+        if result.thinkingContent.isEmpty {
+            mergedThinking = extracted
+        } else if extracted.isEmpty {
+            mergedThinking = result.thinkingContent
+        } else {
+            mergedThinking = result.thinkingContent + "\n\n" + extracted
+        }
+        return ResponseResult(
+            content: cleanContent,
+            thinkingContent: mergedThinking,
+            toolCalls: result.toolCalls,
+            promptTokens: result.promptTokens,
+            completionTokens: result.completionTokens
+        )
+    }
+
+    /// Split a string on `<think>...</think>` boundaries, returning the
+    /// cleaned text and the concatenated thinking blocks. Unclosed
+    /// `<think>` tags (stream cut mid-reasoning) are treated as
+    /// thinking content through end of string.
+    static func stripThinkTags(_ text: String) -> (text: String, thinking: String) {
+        var cleaned = ""
+        var thinking = ""
+        var remaining = Substring(text)
+        while let startRange = remaining.range(of: "<think>") {
+            cleaned += remaining[..<startRange.lowerBound]
+            let afterStart = remaining[startRange.upperBound...]
+            if let endRange = afterStart.range(of: "</think>") {
+                if !thinking.isEmpty { thinking += "\n\n" }
+                thinking += afterStart[..<endRange.lowerBound]
+                remaining = afterStart[endRange.upperBound...]
+            } else {
+                if !thinking.isEmpty { thinking += "\n\n" }
+                thinking += afterStart
+                remaining = ""
+                break
+            }
+        }
+        cleaned += remaining
+        return (
+            text: cleaned.trimmingCharacters(in: .whitespacesAndNewlines),
+            thinking: thinking.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    /// Produce a short, safe-to-display summary of a tool call's JSON
+    /// argument string. Strips secret-like patterns (env-var assignments,
+    /// `sk-…` keys, bearer tokens) and truncates aggressively. For shell
+    /// tools the raw command often embeds API keys as env vars, so we
+    /// collapse to a generic label instead of risking leakage.
+    static func toolArgsPreview(toolName: String, rawArgs: String) -> String {
+        let trimmed = rawArgs.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let shellTools: Set<String> = ["terminal", "bash", "shell", "run_shell", "execute_shell"]
+        if shellTools.contains(toolName) { return "running command" }
+
+        if let data = trimmed.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            let priority = ["query", "prompt", "path", "url", "message", "text", "name", "file_path", "pattern"]
+            for key in priority {
+                if let val = json[key] {
+                    let valStr = String(describing: val)
+                    return truncateAndScrub(valStr)
+                }
+            }
+            if let firstKey = json.keys.sorted().first, let val = json[firstKey] {
+                let valStr = String(describing: val)
+                return "\(firstKey): \(truncateAndScrub(valStr))"
+            }
+        }
+        return truncateAndScrub(trimmed)
+    }
+
+    private static func truncateAndScrub(_ s: String) -> String {
+        var out = scrubSecrets(s)
+        // Collapse whitespace for cleaner previews.
+        out = out.replacingOccurrences(of: "\n", with: " ")
+        if out.count > 40 { out = String(out.prefix(40)) + "…" }
+        return out
+    }
+
+    private static func scrubSecrets(_ s: String) -> String {
+        var r = s
+        let subs: [(pattern: String, template: String)] = [
+            (#"([A-Z][A-Z0-9_]{2,})=\"[^\"]{8,}\""#, "$1=***"),
+            (#"([A-Z][A-Z0-9_]{2,})=[^\s\"]{20,}"#, "$1=***"),
+            (#"sk-[A-Za-z0-9\-_]{16,}"#, "sk-***"),
+            (#"(Bearer\s+)[A-Za-z0-9\-_\.]{20,}"#, "$1***"),
+        ]
+        for sub in subs {
+            if let regex = try? NSRegularExpression(pattern: sub.pattern) {
+                let range = NSRange(r.startIndex..., in: r)
+                r = regex.stringByReplacingMatches(in: r, range: range, withTemplate: sub.template)
+            }
+        }
+        return r
+    }
+}
+
+/// Stateful splitter that routes a live `<think>...</think>`-laced text
+/// stream into separate text and thinking channels. Handles tag markers
+/// that straddle delta boundaries by holding back the shortest ambiguous
+/// suffix until the next delta arrives (or `flush()` is called at end of
+/// stream). Callers fire the returned tag events at the moment each tag
+/// is consumed, so UI can toggle "currently thinking" state precisely.
+struct ThinkTagSplitter {
+    enum TagEvent { case thinkingStarted, thinkingEnded }
+
+    var insideThink: Bool = false
+    private var buffer: String = ""
+
+    mutating func feed(_ delta: String) -> (text: String, thinking: String, events: [TagEvent]) {
+        buffer += delta
+        var text = ""
+        var thinking = ""
+        var events: [TagEvent] = []
+
+        while true {
+            let target = insideThink ? "</think>" : "<think>"
+            if let range = buffer.range(of: target) {
+                let before = buffer[..<range.lowerBound]
+                if insideThink { thinking += before } else { text += before }
+                events.append(insideThink ? .thinkingEnded : .thinkingStarted)
+                insideThink.toggle()
+                buffer = String(buffer[range.upperBound...])
+                continue
+            }
+            // No complete tag in buffer. Hold back the longest suffix that
+            // could still be the start of the tag we're searching for.
+            var holdBack = 0
+            let maxCheck = min(buffer.count, target.count - 1)
+            if maxCheck > 0 {
+                for i in stride(from: maxCheck, through: 1, by: -1) {
+                    let tail = String(buffer.suffix(i))
+                    if target.hasPrefix(tail) {
+                        holdBack = i
+                        break
+                    }
+                }
+            }
+            let drainLen = buffer.count - holdBack
+            if drainLen > 0 {
+                let splitIdx = buffer.index(buffer.startIndex, offsetBy: drainLen)
+                let safe = buffer[..<splitIdx]
+                if insideThink { thinking += safe } else { text += safe }
+                buffer = String(buffer[splitIdx...])
+            }
+            break
+        }
+        return (text, thinking, events)
+    }
+
+    /// Drain anything still in the buffer. Call once at end of stream.
+    mutating func flush() -> (text: String, thinking: String) {
+        guard !buffer.isEmpty else { return ("", "") }
+        var text = ""
+        var thinking = ""
+        if insideThink { thinking = buffer } else { text = buffer }
+        buffer = ""
+        return (text, thinking)
     }
 }
 

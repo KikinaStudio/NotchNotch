@@ -11,6 +11,12 @@ struct ChatMessage: Identifiable {
     let timestamp: Date
     var attachments: [Attachment]
     var isStreaming: Bool
+    var isCurrentlyThinking: Bool = false
+    /// Text accumulated inside the most recent `<think>...</think>` block,
+    /// reset each time a new opening tag is seen. The bubble renders this
+    /// verbatim while `isCurrentlyThinking` is true; `thinkingContent`
+    /// retains the full history across blocks for the collapsed toggle.
+    var currentThinkingBlock: String = ""
     var promptTokens: Int? = nil
     var completionTokens: Int? = nil
 
