@@ -17,10 +17,23 @@ struct RoutinesView: View {
 
     @State private var formName: String = ""
     @State private var formPrompt: String = ""
-    @State private var formSchedule: String = ""
     @State private var formDeliver: String = "Notch"
 
+    @State private var scheduleFrequency: ScheduleFrequency = .daily
+    @State private var scheduleTime: Date = Self.defaultScheduleTime()
+    @State private var selectedWeekdays: Set<Int> = [1]
+    @State private var dayOfMonth: Int = 1
+    @State private var intervalHours: Int = 2
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private enum ScheduleFrequency: String, CaseIterable, Hashable {
+        case daily = "Daily"
+        case weekdays = "Weekdays"
+        case weekly = "Weekly"
+        case monthly = "Monthly"
+        case hourly = "Hourly"
+    }
 
     private let deliverOptions: [(name: String, icon: String)] = [
         ("Notch", "bell.badge.fill"),
@@ -29,6 +42,12 @@ struct RoutinesView: View {
         ("Slack", "number")
     ]
     private let selectedDeliverColor = Color(red: 0xA8/255.0, green: 0xDC/255.0, blue: 0xFC/255.0)
+    private let weekdayLabels = ["S", "M", "T", "W", "T", "F", "S"]
+    private let hourIntervals: [Int] = [1, 2, 3, 4, 6, 12]
+
+    private static func defaultScheduleTime() -> Date {
+        Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
+    }
 
     private var gridColumns: [GridItem] {
         // .large panel (900pt wide) → 3 columns, .standard (680pt) → 2 columns
@@ -403,14 +422,8 @@ struct RoutinesView: View {
                         .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
                 }
 
-                formField(label: "When?", optional: false, hint: "e.g. every day at 9am · every 2h · 0 9 * * 1-5") {
-                    TextField("Schedule", text: $formSchedule)
-                        .textFieldStyle(.plain)
-                        .font(.callout)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
+                formField(label: "When?", optional: false) {
+                    scheduleSection
                 }
 
                 formField(label: "Deliver to", optional: false) {
@@ -468,6 +481,171 @@ struct RoutinesView: View {
         }
     }
 
+    // MARK: - Schedule picker
+
+    private var scheduleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                ForEach(ScheduleFrequency.allCases, id: \.self) { freq in
+                    frequencyPill(freq)
+                }
+            }
+
+            scheduleSubControls
+
+            Text(humanSchedule(composedCron))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    @ViewBuilder
+    private var scheduleSubControls: some View {
+        switch scheduleFrequency {
+        case .daily, .weekdays:
+            timeRow
+        case .weekly:
+            VStack(alignment: .leading, spacing: 10) {
+                weekdayPicker
+                timeRow
+            }
+        case .monthly:
+            HStack(spacing: 14) {
+                dayOfMonthControl
+                timeRow
+            }
+        case .hourly:
+            intervalPicker
+        }
+    }
+
+    private func frequencyPill(_ freq: ScheduleFrequency) -> some View {
+        let isSelected = scheduleFrequency == freq
+        return Button {
+            scheduleFrequency = freq
+        } label: {
+            Text(freq.rawValue)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background {
+                    if isSelected {
+                        Capsule().fill(selectedDeliverColor)
+                    } else {
+                        Capsule().fill(.quaternary.opacity(0.6))
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+    }
+
+    private var weekdayPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<7, id: \.self) { idx in
+                let isSelected = selectedWeekdays.contains(idx)
+                Button {
+                    if isSelected {
+                        if selectedWeekdays.count > 1 {
+                            selectedWeekdays.remove(idx)
+                        }
+                    } else {
+                        selectedWeekdays.insert(idx)
+                    }
+                } label: {
+                    Text(weekdayLabels[idx])
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
+                        .frame(width: 26, height: 26)
+                        .background {
+                            if isSelected {
+                                Circle().fill(selectedDeliverColor)
+                            } else {
+                                Circle().fill(.quaternary.opacity(0.6))
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+        }
+    }
+
+    private var timeRow: some View {
+        HStack(spacing: 8) {
+            Text("at")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            DatePicker("", selection: $scheduleTime, displayedComponents: .hourAndMinute)
+                .labelsHidden()
+                .datePickerStyle(.compact)
+        }
+    }
+
+    private var dayOfMonthControl: some View {
+        HStack(spacing: 6) {
+            Text("Day")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            Stepper(value: $dayOfMonth, in: 1...28) {
+                Text("\(dayOfMonth)")
+                    .font(.callout.monospacedDigit())
+                    .foregroundStyle(.primary)
+                    .frame(minWidth: 20, alignment: .trailing)
+            }
+            .labelsHidden()
+        }
+    }
+
+    private var intervalPicker: some View {
+        HStack(spacing: 6) {
+            Text("Every")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            ForEach(hourIntervals, id: \.self) { h in
+                let isSelected = intervalHours == h
+                Button {
+                    intervalHours = h
+                } label: {
+                    Text("\(h)h")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background {
+                            if isSelected {
+                                Capsule().fill(selectedDeliverColor)
+                            } else {
+                                Capsule().fill(.quaternary.opacity(0.6))
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+        }
+    }
+
+    private var composedCron: String {
+        let cal = Calendar.current
+        let h = cal.component(.hour, from: scheduleTime)
+        let m = cal.component(.minute, from: scheduleTime)
+        switch scheduleFrequency {
+        case .daily:
+            return "\(m) \(h) * * *"
+        case .weekdays:
+            return "\(m) \(h) * * 1-5"
+        case .weekly:
+            let days = selectedWeekdays.sorted().map(String.init).joined(separator: ",")
+            return "\(m) \(h) * * \(days.isEmpty ? "1" : days)"
+        case .monthly:
+            return "\(m) \(h) \(dayOfMonth) * *"
+        case .hourly:
+            return "0 */\(intervalHours) * * *"
+        }
+    }
+
     private func formField<Content: View>(
         label: String,
         optional: Bool,
@@ -495,27 +673,29 @@ struct RoutinesView: View {
     }
 
     private var customFormValid: Bool {
-        !formPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !formSchedule.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !formPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func resetForm() {
         formName = ""
         formPrompt = ""
-        formSchedule = ""
         formDeliver = "Notch"
+        scheduleFrequency = .daily
+        scheduleTime = Self.defaultScheduleTime()
+        selectedWeekdays = [1]
+        dayOfMonth = 1
+        intervalHours = 2
     }
 
     private func submitCustomRoutine() {
         guard customFormValid else { return }
         let name = formName.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let schedule = formSchedule.trimmingCharacters(in: .whitespacesAndNewlines)
         let deliverKey = formDeliver == "Notch" ? "local" : formDeliver.lowercased()
 
         var headerParts: [String] = ["Create a new routine"]
         if !name.isEmpty { headerParts.append("named \"\(name)\"") }
-        headerParts.append("running \(schedule)")
+        headerParts.append("running on cron schedule \(composedCron)")
         headerParts.append("delivered via \(deliverKey)")
         let draft = headerParts.joined(separator: " ") + ".\n\nThe routine should: \(prompt)"
 
