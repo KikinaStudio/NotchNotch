@@ -72,8 +72,9 @@ struct MessageBubble: View {
                             }
                         } label: {
                             Image(systemName: showCopyConfirm ? "checkmark" : "square.on.square")
-                                .font(.system(size: 11))
-                                .foregroundStyle(.white.opacity(isHoveredCopy ? 0.5 : 0.25))
+                                .font(DS.Text.caption)
+                                // TODO(design): 0.28 idle — picked between quaternary (0.22) and tertiary (0.30) for icon visibility
+                                .foregroundStyle(isHoveredCopy ? AnyShapeStyle(DS.Surface.secondary) : AnyShapeStyle(.white.opacity(0.28)))
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
@@ -84,8 +85,9 @@ struct MessageBubble: View {
                                 onRetry()
                             } label: {
                                 Image(systemName: "arrow.counterclockwise")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.white.opacity(isHoveredRetry ? 0.5 : 0.25))
+                                    .font(DS.Text.caption)
+                                    // TODO(design): 0.28 idle — picked between quaternary (0.22) and tertiary (0.30) for icon visibility
+                                    .foregroundStyle(isHoveredRetry ? AnyShapeStyle(DS.Surface.secondary) : AnyShapeStyle(.white.opacity(0.28)))
                             }
                             .buttonStyle(.plain)
                             .pointingHandCursor()
@@ -101,7 +103,7 @@ struct MessageBubble: View {
             .background {
                 if isUser {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0).opacity(0.8))
+                        .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0))
                 }
             }
 
@@ -111,8 +113,9 @@ struct MessageBubble: View {
                     if let onEdit {
                         Button { onEdit(message) } label: {
                             Image(systemName: "pencil")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(.white.opacity(isHovered ? 0.5 : 0.25))
+                                .font(DS.Text.captionMedium)
+                                // TODO(design): 0.28 idle — picked between quaternary (0.22) and tertiary (0.30) for icon visibility
+                                .foregroundStyle(isHovered ? AnyShapeStyle(DS.Surface.secondary) : AnyShapeStyle(.white.opacity(0.28)))
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
@@ -128,8 +131,8 @@ struct MessageBubble: View {
                         }
                     } label: {
                         Image(systemName: showCopyConfirm ? "checkmark" : "square.on.square")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(isHoveredCopy ? 0.5 : 0.25))
+                            .font(DS.Text.caption)
+                            .foregroundStyle(isHoveredCopy ? DS.Surface.secondary : DS.Surface.quaternary)
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -145,13 +148,14 @@ struct MessageBubble: View {
     private var liveThinkingPreview: some View {
         HStack(alignment: .top, spacing: 6) {
             Circle()
+                // TODO(design): animated opacity, not a static design token
                 .fill(.white.opacity(pulseOpacity))
                 .frame(width: 4, height: 4)
                 .padding(.top, 6)
             Text(currentThinkingText)
-                .font(.system(size: 11))
+                .font(DS.Text.caption)
                 .italic()
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(DS.Surface.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
         }
@@ -179,7 +183,7 @@ struct MessageBubble: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: showThinking ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(DS.Icon.chevronBold)
                     if message.isStreaming && message.content.isEmpty {
                         Text("Thinking...")
                             .italic()
@@ -188,16 +192,16 @@ struct MessageBubble: View {
                         Text("Thought for \(duration)s")
                     }
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.35))
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.tertiary)
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
 
             if showThinking {
                 Text(message.thinkingContent)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.25))
+                    .font(DS.Text.captionMono)
+                    .foregroundStyle(DS.Surface.quaternary)
                     .textSelection(.enabled)
                     .padding(.top, 4)
                     .padding(.leading, 13)
@@ -215,9 +219,9 @@ struct MessageBubble: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: showToolCalls ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(DS.Icon.chevronBold)
                     Image(systemName: "wrench.and.screwdriver")
-                        .font(.system(size: 10))
+                        .font(DS.Text.micro)
                     if message.isStreaming && message.content.isEmpty {
                         Text("Using tools...")
                             .italic()
@@ -225,16 +229,16 @@ struct MessageBubble: View {
                         Text("Used tools")
                     }
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.35))
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.tertiary)
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
 
             if showToolCalls {
                 Text(message.toolCallContent)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.25))
+                    .font(DS.Text.captionMono)
+                    .foregroundStyle(DS.Surface.quaternary)
                     .textSelection(.enabled)
                     .padding(.top, 4)
                     .padding(.leading, 13)
@@ -258,12 +262,13 @@ struct MessageBubble: View {
                 HStack(spacing: 5) {
                     if inProgress {
                         Circle()
+                            // TODO(design): animated opacity, not a static design token
                             .fill(.white.opacity(pulseOpacity))
                             .frame(width: 4, height: 4)
                     }
                     Text(line)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .font(DS.Text.captionMono)
+                        .foregroundStyle(DS.Surface.tertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -294,9 +299,9 @@ struct MessageBubble: View {
     private var subagentIndicator: some View {
         HStack(spacing: 5) {
             Image(systemName: "person.2.fill")
-                .font(.system(size: 9))
+                .font(DS.Text.nano)
             Text(subagentLabel)
-                .font(.system(size: 11))
+                .font(DS.Text.caption)
         }
         .foregroundStyle(AppColors.accent.opacity(0.6))
         .padding(.vertical, 2)
@@ -332,11 +337,12 @@ struct MessageBubble: View {
                 case .blockquote(let text):
                     HStack(alignment: .top, spacing: 8) {
                         RoundedRectangle(cornerRadius: 1)
+                            // TODO(design): 0.15 fill bar — between DS.Stroke.hairline (0.06) and DS.Surface.quaternary (0.22); kept inline for visual fidelity
                             .fill(.white.opacity(0.15))
                             .frame(width: 2)
                         Text(markdownString(text))
-                            .font(.system(size: 13))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .font(DS.Text.bodySmall)
+                            .foregroundStyle(DS.Surface.secondary)
                             .lineSpacing(3)
                             .italic()
                     }
@@ -355,15 +361,16 @@ struct MessageBubble: View {
                         } else if !part.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             HStack(alignment: .lastTextBaseline, spacing: 0) {
                                 Text(markdownString(part.text))
-                                    .font(.system(size: 14 * appearanceSettings.textSize.scale))
+                                    // TODO(design): scaled by accessibility, fixed-size DS.Text.* not applicable
+                                    .font(.system(size: messageBodySize))
                                     .lineSpacing(isUser ? 0 : 4)
-                                    .foregroundStyle(.white.opacity(0.82))
+                                    .foregroundStyle(DS.Surface.primary)
                                     .textSelection(.enabled)
 
                                 if message.isStreaming && idx == blocks.count - 1 && part == parts.last {
                                     Text("▊")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(.white.opacity(0.3))
+                                        .font(DS.Text.bodySmall)
+                                        .foregroundStyle(DS.Surface.tertiary)
                                 }
                             }
                         }
@@ -379,23 +386,24 @@ struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 0) {
             if !language.isEmpty {
                 Text(language)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .font(DS.Text.microMono)
+                    .fontWeight(.medium)
+                    .foregroundStyle(DS.Surface.tertiary)
                     .padding(.horizontal, 10)
                     .padding(.top, 6)
                     .padding(.bottom, 2)
             }
             Text(code)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(.white.opacity(0.8))
+                .font(DS.Text.codeBlock)
+                .foregroundStyle(DS.Surface.primary)
                 .textSelection(.enabled)
                 .padding(.horizontal, 10)
                 .padding(.vertical, language.isEmpty ? 8 : 4)
                 .padding(.bottom, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .background(DS.Stroke.hairline)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.chip))
     }
 
     // MARK: - Block parsing (code blocks vs text)
@@ -504,7 +512,8 @@ struct MessageBubble: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: 280, maxHeight: 200)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.1), lineWidth: 0.5))
+                    // TODO(design): 0.1 stroke — between DS.Stroke.hairline (0.06) and 0.15; kept inline for visual fidelity
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.1), lineWidth: DS.Hairline.standard))
                     .onTapGesture { NSWorkspace.shared.open(url) }
                     .contextMenu {
                         Button("Open in default app") { NSWorkspace.shared.open(url) }
@@ -512,9 +521,9 @@ struct MessageBubble: View {
                     }
 
                 Text(shortPath)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DS.Text.captionMono)
                     .italic()
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(DS.Surface.tertiary)
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
@@ -540,9 +549,10 @@ struct MessageBubble: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Image(systemName: sfIconForFileType(ext))
-                        .font(.system(size: 12))
+                        .font(DS.Text.label)
                     Text(fileName)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(DS.Text.bodySmall)
+                        .fontWeight(.medium)
                         .lineLimit(1)
                 }
                 .foregroundStyle(color)
@@ -551,12 +561,12 @@ struct MessageBubble: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(color.opacity(0.15))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.25), lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.25), lineWidth: DS.Hairline.standard))
 
                 Text(shortPath)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(DS.Text.captionMono)
                     .italic()
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(DS.Surface.tertiary)
                     .lineLimit(1)
                     .padding(.horizontal, 4)
             }
@@ -574,15 +584,15 @@ struct MessageBubble: View {
     private func attachmentCard(_ att: Attachment) -> some View {
         HStack(spacing: 7) {
             Image(systemName: sfIconForFileType(att.fileType))
-                .font(.system(size: 11))
+                .font(DS.Text.caption)
             Text(att.fileName)
-                .font(.system(size: 12, weight: .medium))
+                .font(DS.Text.labelMedium)
                 .lineLimit(1)
         }
-        .foregroundStyle(.white.opacity(0.5))
+        .foregroundStyle(DS.Surface.secondary)
         .padding(.horizontal, 10)
         .padding(.vertical, 5)
-        .background(.white.opacity(0.06))
+        .background(DS.Stroke.hairline)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
@@ -657,6 +667,13 @@ struct MessageBubble: View {
 
     // MARK: - Helpers
 
+    private var messageBodySize: CGFloat {
+        switch appearanceSettings.textSize {
+        case .medium: return 12
+        case .large:  return 15
+        }
+    }
+
     private var displayContent: String {
         var text = message.content
         // Strip attachment markers
@@ -691,7 +708,7 @@ struct MessageBubble: View {
             if let inlinePresentationIntent = run.inlinePresentationIntent,
                inlinePresentationIntent.contains(.stronglyEmphasized) {
                 let range = run.range
-                result[range].font = .system(size: 14, weight: .semibold)
+                result[range].font = .system(size: messageBodySize, weight: .semibold)
             }
         }
 

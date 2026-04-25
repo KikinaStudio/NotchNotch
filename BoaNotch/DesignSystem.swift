@@ -24,10 +24,8 @@ enum DS {
         /// (Privacy / Install / Choose / Telegram).
         static let titleSmall    = Font.system(size: 16, weight: .semibold)
         /// 14pt regular. Texte de lecture chat principal.
-        /// Note: pour MessageBubble, multiplier par appearanceSettings.textSize.scale au call site.
+        /// Note: pour MessageBubble, voir `messageBodySize` (scalé par textSize.medium=12 / large=15).
         static let body          = Font.system(size: 14)
-        /// 14pt semibold. Markdown bold inline (rendu en dark mode dans MessageBubble).
-        static let bodyBold      = Font.system(size: 14, weight: .semibold)
         /// 13pt regular. Blockquotes, file card titles, streaming cursor.
         static let bodySmall     = Font.system(size: 13)
         /// 12pt regular. CTA labels, code blocks inline.

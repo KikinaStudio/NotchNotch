@@ -197,11 +197,9 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                         Spacer()
                         HStack(spacing: 0) {
-                            textSizeSegment(.small, display: 10)
+                            textSizeSegment(.medium, display: 12)
                             segmentDivider
-                            textSizeSegment(.medium, display: 13)
-                            segmentDivider
-                            textSizeSegment(.large, display: 16)
+                            textSizeSegment(.large, display: 15)
                         }
                         .background(Capsule().fill(.quaternary))
                     }

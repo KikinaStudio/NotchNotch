@@ -475,7 +475,12 @@ ShapeStyles) over `DS.Stroke.*` (explicit `Color.white.opacity`) when a
 semantic ShapeStyle is sufficient — `DS.Stroke` exists only for fine-grained
 stroke control on overlays.
 
-Migration is incremental, zone by zone (Onboarding → MessageBubble → rest).
+Migration is incremental, zone by zone (Onboarding ✅ → MessageBubble ✅ → rest).
+MessageBubble (session 3) reduced 51 hardcodes to 5 justified TODOs (animated
+pulse opacity ×2, blockquote bar 0.15, image overlay 0.1, action button idle
+0.28). Tokens added during that pass: `DS.Text.bodySmall`, `DS.Text.captionMono`,
+`DS.Icon.chevronBold`. Remaining zones: ChatView, NotchView, BrainView,
+SettingsView, RoutinesView, TemplateBrowserView.
 A bash check script `scripts/lint-design.sh` lists remaining hardcoded
 `.system(size:)` and `.white.opacity()` outside `DesignSystem.swift`. Output
 format is `file:line:` directly clickable in editors. Run before committing
@@ -524,7 +529,7 @@ already wrap in `AnyShapeStyle` so they compose directly:
 - `hermesConversationId` — server-side conversation UUID (HermesClient)
 - `notchnotchSessionId` — current NotchNotch chat session ID, sent as `X-Hermes-Session-Id` (HermesClient)
 - `hermesSessionId` — legacy Telegram-derived session ID (SessionStore, informational only)
-- `textSize` — chat/brain text size picker: "small" | "medium" | "large" (AppearanceSettings)
+- `textSize` — chat/brain text size picker: "medium" | "large" (AppearanceSettings). Legacy `"small"` falls back to `.medium` via `?? .medium` rawValue init. MessageBubble body size is custom-mapped (medium=12pt, large=15pt) via private `messageBodySize` rather than `textSize.scale`; bold markdown scales the same. BrainView/ChatView still use `textSize.scale` (1.0 / 1.25).
 - `panelSize` — open panel size variant: "standard" (680×380) | "large" (≤900×600, clamped to 0.9×visibleFrame) (PanelSizeStore)
 - `googleConnectedEmail` — connected Gmail address after OAuth; absence = not connected (GoogleOAuthService / GoogleConnectionState)
 

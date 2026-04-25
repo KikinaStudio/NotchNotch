@@ -3,11 +3,10 @@ import CoreGraphics
 
 final class AppearanceSettings: ObservableObject {
     enum TextSize: String, CaseIterable {
-        case small, medium, large
+        case medium, large
 
         var scale: CGFloat {
             switch self {
-            case .small:  return 0.85
             case .medium: return 1.0
             case .large:  return 1.25
             }
