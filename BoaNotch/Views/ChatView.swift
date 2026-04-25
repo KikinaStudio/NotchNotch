@@ -78,9 +78,9 @@ struct ChatView: View {
             if let errorMessage = chatVM.connectionError {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 10))
+                        .font(DS.Text.micro)
                     Text(errorMessage)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(DS.Text.microMedium)
                         .lineLimit(3)
                 }
                 .foregroundStyle(.orange)
@@ -122,15 +122,15 @@ struct ChatView: View {
             if chatVM.editingMessageId != nil {
                 HStack {
                     Text("Editing message")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .font(DS.Text.micro)
+                        .foregroundStyle(DS.Surface.tertiary)
                     Spacer()
                     Button("Cancel") {
                         chatVM.editingMessageId = nil
                         chatVM.draft = ""
                     }
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.tertiary)
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 8)
@@ -161,11 +161,12 @@ struct ChatView: View {
     private func routineContextTag(_ job: CronJob) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: 9))
+                .font(DS.Text.nano)
                 .foregroundStyle(AppColors.accent)
 
             Text(job.name)
-                .font(.system(size: 10, weight: .medium))
+                .font(DS.Text.microMedium)
+                // TODO(design): 0.7 — entre primary (~1.0) et secondary (~0.55), aucun ShapeStyle natif aligné
                 .foregroundStyle(.white.opacity(0.7))
                 .lineLimit(1)
 
@@ -173,8 +174,8 @@ struct ChatView: View {
                 chatVM.clearRoutineContext()
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.tertiary)
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
@@ -204,6 +205,7 @@ struct ChatView: View {
             HStack(alignment: .center, spacing: 10) {
                 TextField("", text: $chatVM.draft, axis: .vertical)
                     .textFieldStyle(.plain)
+                    // TODO(design): 13pt scaled par appearanceSettings.textSize, token DS.Text.* fixe non applicable
                     .font(.system(size: 13 * appearanceSettings.textSize.scale))
                     .foregroundStyle(.white)
                     .tint(AppColors.accent)
@@ -213,8 +215,8 @@ struct ChatView: View {
 
                 Button { openFilePicker() } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .font(DS.Icon.secondary)
+                        .foregroundStyle(DS.Surface.secondary)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
@@ -228,14 +230,16 @@ struct ChatView: View {
                     }
                 } label: {
                     Image(systemName: notchVM.isExpandedBarOpen ? "ellipsis.circle.fill" : "ellipsis.circle")
+                        // TODO(design): 15pt one-off entre DS.Icon.secondary (14) et DS.Icon.primary (18) — taille intermédiaire pour ce toggle
                         .font(.system(size: 15))
-                        .foregroundStyle(notchVM.isExpandedBarOpen ? AppColors.accent : .white.opacity(0.4))
+                        .foregroundStyle(notchVM.isExpandedBarOpen ? AnyShapeStyle(AppColors.accent) : DS.Surface.tertiary)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
 
                 if chatVM.isStreaming {
                     Button { chatVM.cancelStream() } label: {
+                        // TODO(design): 0.7 spinner — entre primary (~1.0) et secondary (~0.55), pas de ShapeStyle natif aligné
                         BrailleSpinner(size: 16, color: .white.opacity(0.7))
                     }
                     .buttonStyle(.plain)
@@ -243,8 +247,8 @@ struct ChatView: View {
                 } else {
                     Button { sendAndCloseBar() } label: {
                         Image(systemName: "arrow.up.circle.fill")
-                            .foregroundStyle(canSend ? .white.opacity(0.85) : .white.opacity(0.15))
-                            .font(.system(size: 18))
+                            .foregroundStyle(canSend ? DS.Surface.primary : AnyShapeStyle(Color.white.opacity(0.20)))
+                            .font(DS.Icon.primary)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
@@ -279,8 +283,8 @@ struct ChatView: View {
         case .idle:
             Button { chatVM.toggleVoiceRecord() } label: {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .font(DS.Icon.secondary)
+                    .foregroundStyle(DS.Surface.secondary)
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
@@ -288,7 +292,7 @@ struct ChatView: View {
         case .recording:
             Button { chatVM.toggleVoiceRecord() } label: {
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 14))
+                    .font(DS.Icon.secondary)
                     .foregroundStyle(AppColors.accent)
             }
             .buttonStyle(.plain)
@@ -373,21 +377,21 @@ struct PendingAttachmentChip: View {
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             } else {
                 Image(systemName: sfIconForFileType(attachment.fileType))
-                    .font(.system(size: 9))
+                    .font(DS.Text.nano)
             }
             Text(attachment.fileName)
-                .font(.system(size: 10))
+                .font(DS.Text.micro)
                 .lineLimit(1)
             Button { onRemove() } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 10))
+                    .font(DS.Text.micro)
             }
             .buttonStyle(.plain)
         }
-        .foregroundStyle(.white.opacity(0.5))
+        .foregroundStyle(DS.Surface.secondary)
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(.white.opacity(0.06))
+        .background(DS.Stroke.hairline)
         .clipShape(Capsule())
     }
 }

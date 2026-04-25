@@ -18,6 +18,8 @@ struct NotchView: View {
     @AppStorage("hasCompletedBrainOnboarding") private var hasCompletedBrainOnboarding = false
     @State private var didEvaluateBrainOnboarding = false
     @State private var showBrainOnboarding = false
+    @State private var hoverNewConvo = false
+    @State private var hoverResize = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -268,22 +270,23 @@ struct NotchView: View {
             if notchVM.isOpen && !onboardingVM.needsOnboarding {
                 let isDeployed = notchVM.isMenuExpanded || notchVM.isAnyPanelOpen
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     // Left: new conversation (always visible)
                     Button {
                         chatVM.startNewConversation()
                     } label: {
                         Image(systemName: "plus.bubble")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .font(DS.Icon.secondary)
+                            .foregroundStyle(hoverNewConvo ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
+                    .onHover { hoverNewConvo = $0 }
 
                     Spacer()
 
                     // Right cluster: action icons (when deployed) + burger/X + resize
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         if isDeployed {
                             menuButton("clock.arrow.circlepath", active: notchVM.isHistoryOpen) {
                                 if notchVM.isHistoryOpen {
@@ -338,8 +341,8 @@ struct NotchView: View {
                             }
                         } label: {
                             Image(systemName: isDeployed ? "xmark" : "line.3.horizontal")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.secondary)
+                                .font(DS.Icon.secondary)
+                                .foregroundStyle(isDeployed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                                 .contentTransition(.symbolEffect(.replace))
                         }
                         .buttonStyle(.plain)
@@ -352,11 +355,12 @@ struct NotchView: View {
                             Image(systemName: panelSizeStore.size == .standard
                                   ? "arrow.up.left.and.arrow.down.right"
                                   : "arrow.down.right.and.arrow.up.left")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.tertiary)
+                                .font(DS.Icon.secondary)
+                                .foregroundStyle(hoverResize ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
+                        .onHover { hoverResize = $0 }
                     }
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isDeployed)
                     .onHover { hovering in
@@ -375,7 +379,7 @@ struct NotchView: View {
                     }
                 }
                 .padding(.horizontal, 42)
-                .padding(.top, 6)
+                .padding(.top, 10)
                 .transition(.opacity.animation(.easeIn(duration: 0.15).delay(0.1)))
             }
         }
@@ -384,10 +388,13 @@ struct NotchView: View {
     // MARK: - Burger menu icon button
 
     private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        // Le glyph "brain" rend visuellement ~1pt plus large que les autres SF Symbols à taille égale.
+        let size: CGFloat = (icon == "brain") ? 13 : 14
+        return Button(action: action) {
             Image(systemName: icon)
                 .symbolVariant(active ? .fill : .none)
-                .font(.system(size: 14, weight: active ? .semibold : .medium))
+                // TODO(design): poids conditionnel actif=semibold/inactif=medium ; DS.Icon.secondary fixe medium, on garde le ternaire pour l'affordance d'état
+                .font(.system(size: size, weight: active ? .semibold : .medium))
                 .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
         }
         .buttonStyle(.plain)
@@ -429,9 +436,9 @@ struct RecordingToastView: View {
             Button { notchVM.onTalkAction?() } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "text.bubble.fill")
-                        .font(.system(size: 10))
+                        .font(DS.Text.micro)
                     Text("Talk")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -606,6 +613,7 @@ struct BrailleSpinner: View {
         TimelineView(.periodic(from: .now, by: 0.08)) { timeline in
             let idx = Int(timeline.date.timeIntervalSinceReferenceDate / 0.08) % Self.frames.count
             Text(Self.frames[idx])
+                // TODO(design): taille paramétrique (size CGFloat), token DS.Text.* fixe non applicable
                 .font(.system(size: size, weight: .medium, design: .monospaced))
                 .foregroundStyle(color)
         }

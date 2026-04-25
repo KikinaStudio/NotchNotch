@@ -39,6 +39,8 @@ enum DS {
         static let captionMedium = Font.system(size: 11, weight: .medium)
         /// 10pt regular. Métadonnées faibles, labels secondaires onboarding.
         static let micro         = Font.system(size: 10)
+        /// 10pt medium. Étiquettes affirmées (banner d'erreur, tag de routine active).
+        static let microMedium   = Font.system(size: 10, weight: .medium)
         /// 9pt regular. Métadonnées très faibles, fine print, descriptions discrètes.
         static let nano          = Font.system(size: 9)
         /// 12pt monospaced. Code blocks dans MessageBubble.
@@ -93,10 +95,10 @@ enum DS {
         static let primary    = AnyShapeStyle(.primary)
         /// Texte secondaire, body lecture. ShapeStyle natif .secondary (≈ 55%).
         static let secondary  = AnyShapeStyle(.secondary)
-        /// Texte tertiaire, hints, métadonnées. ShapeStyle natif .tertiary (≈ 30%).
-        static let tertiary   = AnyShapeStyle(.tertiary)
-        /// Texte très faible, désactivé, fills cartes routines. ShapeStyle natif .quaternary (≈ 22%).
-        static let quaternary = AnyShapeStyle(.quaternary)
+        /// Texte tertiaire, hints, métadonnées. Blanc 33%.
+        static let tertiary   = AnyShapeStyle(Color.white.opacity(0.33))
+        /// Texte très faible, désactivé, fills cartes routines. Blanc 24%.
+        static let quaternary = AnyShapeStyle(Color.white.opacity(0.24))
         /// Hairlines dividers. ShapeStyle natif .separator.
         static let separator  = AnyShapeStyle(.separator)
     }
