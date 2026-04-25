@@ -6,15 +6,11 @@ struct TemplateBrowserView: View {
     var onSelectTemplate: (String) -> Void
     var onCreateOwn: () -> Void
 
-    @State private var selectedCategory: RoutineCategory?
     @State private var selectedTemplate: RoutineTemplate?
     @State private var inputValues: [String: String] = [:]
     @State private var hoveredTemplateId: String?
 
-    private var gridColumns: [GridItem] {
-        let count = panelSize == .large ? 3 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: count)
-    }
+    private let cardWidth: CGFloat = 220
 
     var body: some View {
         ZStack {
@@ -24,14 +20,8 @@ struct TemplateBrowserView: View {
                         insertion: .move(edge: .trailing),
                         removal: .move(edge: .leading)
                     ))
-            } else if let category = selectedCategory {
-                templateListScreen(category)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing),
-                        removal: .move(edge: .leading)
-                    ))
             } else {
-                categoriesScreen
+                homepageScreen
                     .transition(.asymmetric(
                         insertion: .move(edge: .leading),
                         removal: .move(edge: .leading)
@@ -41,117 +31,81 @@ struct TemplateBrowserView: View {
         .clipped()
     }
 
-    // MARK: - Screen 1: Categories
+    // MARK: - Netflix-style homepage
 
-    private var categoriesScreen: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Pick a category, or describe your own in the chat.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.bottom, 2)
+    private var homepageScreen: some View {
+        FadingScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(RoutineCategory.all) { category in
+                    categorySection(category)
+                }
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 4) {
-                    ForEach(RoutineCategory.all) { category in
-                        categoryRow(category)
+                createOwnRow
+                    .padding(.top, 4)
+            }
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func categorySection(_ category: RoutineCategory) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: category.icon)
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(AppColors.accent)
+                Text(category.title)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("\(category.templates.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 8) {
+                    ForEach(category.templates) { template in
+                        templateCard(template)
+                            .frame(width: cardWidth)
                     }
-
-                    // Create your own
-                    Button {
-                        onCreateOwn()
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus")
-                                .font(.body)
-                                .foregroundStyle(AppColors.accent.opacity(0.6))
-                                .frame(width: 20)
-
-                            Text("Create your own")
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(.secondary)
-
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8).fill(.quinary)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
                 }
             }
         }
     }
 
-    private func categoryRow(_ category: RoutineCategory) -> some View {
+    private var createOwnRow: some View {
         Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedCategory = category
-            }
+            onCreateOwn()
         } label: {
-            HStack(spacing: 10) {
-                Image(systemName: category.icon)
-                    .font(.body)
-                    .foregroundStyle(AppColors.accent.opacity(0.7))
-                    .frame(width: 20)
-
-                Text(category.title)
-                    .font(.footnote.weight(.medium))
+            HStack(spacing: 8) {
+                Image(systemName: "plus")
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(AppColors.accent)
+                Text("Create your own")
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(.primary)
-
                 Spacer()
-
-                Text("\(category.templates.count)")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .monospacedDigit()
-
                 Image(systemName: "chevron.right")
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 8).fill(.quinary)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(.separator.opacity(0.5), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.quaternary.opacity(0.6))
             )
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
     }
 
-    // MARK: - Screen 2: Template list
-
-    private func templateListScreen(_ category: RoutineCategory) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            backButton(category.title) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    selectedCategory = nil
-                }
-            }
-
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
-                    ForEach(category.templates) { template in
-                        templateCard(template)
-                    }
-                }
-            }
-        }
-    }
+    // MARK: - Template card (matches Routines jobCard visual)
 
     private func templateCard(_ template: RoutineTemplate) -> some View {
         let isAlert = template.deliver == "local"
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
-        return VStack(alignment: .leading, spacing: 6) {
-            // Row 1: title + alert glyph
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(template.title)
                     .font(.callout.weight(.medium))
@@ -163,21 +117,20 @@ struct TemplateBrowserView: View {
 
                 if isAlert {
                     Image(systemName: "bell.badge.fill")
-                        .font(.system(size: 11))
+                        .font(DS.Icon.caption)
                         .foregroundStyle(AppColors.accent)
                         .accessibilityLabel("Alert routine — notifies in the notch")
                 }
             }
 
-            // Row 2: subtitle
             Text(template.subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Row 3: dot + schedule + toggle (off)
             HStack(spacing: 6) {
                 Circle()
                     .fill(Color.gray.opacity(0.35))
@@ -191,25 +144,16 @@ struct TemplateBrowserView: View {
                     .truncationMode(.tail)
 
                 Spacer(minLength: 0)
-
-                Toggle("", isOn: Binding(
-                    get: { false },
-                    set: { _ in openTemplate(template) }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .tint(AppColors.accent)
-                .accessibilityLabel("Activate \(template.title)")
             }
+            .padding(.top, 5)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .nnGlass(in: cardShape)
+        .background(cardShape.fill(.quaternary.opacity(0.6)))
         .overlay(
             cardShape
-                .fill(hoveredTemplateId == template.id ? Color.white.opacity(0.04) : .clear)
+                .fill(hoveredTemplateId == template.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
                 .allowsHitTesting(false)
         )
         .contentShape(Rectangle())
@@ -221,7 +165,6 @@ struct TemplateBrowserView: View {
 
     private func openTemplate(_ template: RoutineTemplate) {
         inputValues = [:]
-        // Pre-fill defaults for number inputs and first option for pickers
         for input in template.inputs {
             if case .number(_, let defaultValue) = input.type, let dv = defaultValue {
                 inputValues[input.id] = "\(dv)"
@@ -235,7 +178,7 @@ struct TemplateBrowserView: View {
         }
     }
 
-    // MARK: - Screen 3: Form
+    // MARK: - Form screen (unchanged)
 
     private func formScreen(_ template: RoutineTemplate) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -245,7 +188,6 @@ struct TemplateBrowserView: View {
                 }
             }
 
-            // Schedule info
             HStack(spacing: 4) {
                 Image(systemName: "clock")
                 Text(template.schedule)
@@ -261,7 +203,7 @@ struct TemplateBrowserView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer()
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
+                FadingScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(template.inputs) { input in
                             inputField(input)
@@ -271,7 +213,6 @@ struct TemplateBrowserView: View {
                 }
             }
 
-            // Create button
             Button {
                 let draft = template.composeDraft(values: inputValues)
                 onSelectTemplate(draft)
@@ -283,9 +224,9 @@ struct TemplateBrowserView: View {
                     .padding(.vertical, 8)
                     .background {
                         if allRequiredFilled(template) {
-                            Capsule().fill(AppColors.accent.opacity(0.35))
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35))
                         } else {
-                            Capsule().fill(.quaternary)
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
                         }
                     }
             }
@@ -294,8 +235,6 @@ struct TemplateBrowserView: View {
             .pointingHandCursor()
         }
     }
-
-    // MARK: - Input fields
 
     @ViewBuilder
     private func inputField(_ input: TemplateInput) -> some View {
@@ -334,9 +273,9 @@ struct TemplateBrowserView: View {
                                 .padding(.vertical, 4)
                                 .background {
                                     if inputValues[input.id] == option {
-                                        Capsule().fill(AppColors.accent.opacity(0.35))
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35))
                                     } else {
-                                        Capsule().fill(.quaternary)
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
                                     }
                                 }
                         }
@@ -382,8 +321,6 @@ struct TemplateBrowserView: View {
             }
         }
     }
-
-    // MARK: - Helpers
 
     private func backButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {

@@ -28,12 +28,8 @@ struct ConversationHistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header (title shown in top bar; this row keeps search + new)
             HStack(spacing: 12) {
-                Text("Conversations")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
                 searchField
 
                 Button {
@@ -66,7 +62,7 @@ struct ConversationHistoryView: View {
                     .foregroundStyle(.tertiary)
                 Spacer()
             } else {
-                ScrollView {
+                FadingScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(filteredSessions) { session in
                             sessionRow(session)

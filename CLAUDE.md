@@ -424,6 +424,72 @@ notch. Native macOS editorial feel wins inside the panel: confident
 typography, dividers, accent sparingly. User explicitly rejected the 
 MD3 pill+card look (2026-04-18).
 
+**Pill vs button rule (2026-04-26)**: `Capsule()` is reserved for 
+*tag-like* information chips that display state without being a primary 
+action — the active routine context tag (`ChatView.routineContextTag`), 
+the streaming/loading indicator, the ExpandedBar profile/model/reasoning 
+chips, `nnGlass()` floating toasts. Anything that's a *button* (segmented 
+control, picker pill, CTA) uses `RoundedRectangle(cornerRadius: 8, style: .continuous)`. 
+Send button (`arrow.up.circle.fill`) is the only documented exception 
+that keeps a Capsule shape — it's a recognizable affordance carried over 
+from chat conventions. Migrated all settings segments + Routines/Templates 
+custom-form pickers on 2026-04-26.
+
+**Top bar panel title (2026-04-25)**: when a panel is open, the left 
+slot of the top bar displays the panel title (`"Conversations"`, 
+`"Routines"`, `"Settings"`, `"Search"`) instead of the new-conversation 
+button. For the Brain panel the slot is taken by the 3 tabs 
+(`Memory · Skills · Wiki`) instead — `BrainViewModel.activeTab` is 
+`@Published` so NotchView can render the tab bar in `brainTabsBar` 
+while BrainView reads/writes the same state. Per-panel titles are 
+removed from the panel content (no internal `Text("Settings").font(.headline)` 
+header anymore). Earned a content line of vertical space.
+
+**StatusDotButton primitive (`LiquidGlass.swift`, 2026-04-26)**: 
+radio-style toggle for any on/off action. Always-visible gray ring 
+(18pt), inner dot (7pt) blue when `.on`, yellow when `.error`, 
+transparent when `.off`. Hit area 24pt. Replaces every SwiftUI `Toggle` 
+in routine cards (the dot IS the pause/resume) and Settings (Stream 
+responses, Launch at login). Two inits: `init(isOn: Bool, ...)` for 
+binary call sites, `init(state: DotState, ...)` for routines that 
+surface error state. Uses Button internally so SwiftUI's button-in-button 
+gesture routing works — required because the routine card itself is 
+now a Button (`.onTapGesture` propagation on macOS DOES bubble to 
+parents; only Button-in-Button reliably consumes). Don't try 
+`.highPriorityGesture` to fix this — it only competes with gestures 
+on the same view, not parent gestures.
+
+**FadingScrollView (`ScrollEdgeFade.swift`, 2026-04-26)**: drop-in 
+replacement for `ScrollView` with a soft bottom-only gradient mask. 
+Tint is `#0C0C0C` (calibrated to match the panel's perceived black 
+after macOS rendering — `Color.black` rendered slightly off through 
+the semi-transparent `NotchPanel`). The content gets 
+`.padding(.bottom, fadeHeight)` baked in so the last item can scroll 
+fully past the gradient instead of being clipped. Used in 
+BrainView/RoutinesView/TemplateBrowser/Settings/ConversationHistory. 
+Top is intentionally NOT faded — fading at scroll position 0 has no 
+semantic meaning.
+
+**Memory tab is flat (2026-04-25)**: the Memory tab in BrainView 
+shows `brainVM.allMemoryBlocks` as a flat list of `memoryCardCompact` 
+(full-width cards), not grouped by category. The category info still 
+informs the leading icon via `iconForCategory(_ raw: String)` (heuristic 
+FR/EN keyword match in `BrainView.swift` — perso/famille/work/voyage/santé/ 
+finance/cuisine/agent/notes/code/maison/études/musique/agenda + `tag.fill` 
+fallback). Skills and Wiki retain category sections (skills in horizontal 
+scroll, wiki as a flat ask-list).
+
+**`tabIntro` is blue, not italic (2026-04-26)**: the one-line French 
+intro at the top of each Brain tab uses `DS.Text.caption` + 
+`AppColors.accent`. Italic was previously used and was rejected by the 
+user. Don't reintroduce italics for these intro lines.
+
+**Settings section dividers (2026-04-25)**: each `settingsSection(...)` 
+in `SettingsView` is separated from the next by a full-width 
+`sectionDivider` (`Rectangle().fill(DS.Stroke.hairline).frame(height: 1)`). 
+Each section has 14pt vertical padding internally. The outer VStack 
+spacing is 0 (the dividers + padding handle the rhythm).
+
 **Liquid Glass (macOS 26+) policy**: `.glassEffect()` DOES ship on 
 macOS 26 (Tahoe). NotchNotch deployment target is 14, so glass usage 
 MUST go through `nnGlass()` / `nnGlass(in:)` / `NNGlassContainer` 
@@ -455,8 +521,8 @@ compile.
 Single source of truth for all visual tokens: `BoaNotch/DesignSystem.swift`.
 Catalog organized as nested enums under `DS`:
 
-- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `label` 12 / `labelMedium` / `caption` 11 / `captionMedium` / `micro` 10 / `microMedium` 10 medium / `nano` 9. Mono variants: `codeBlock` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium.
-- `DS.Icon.*` — SF Symbol sizes (`hero` 28 / `large` 22 / `primary` 18 / `secondary` 14 / `inline` 13 / `glyph` 12 / `mini` 9 / `chevron` 8 medium / `chevronBold` 8 bold)
+- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `label` 12 / `labelMedium` / `caption` 11 / `captionMedium` / `micro` 10 / `microMedium` 10 medium / `nano` 9. Mono variants: `codeBlock` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium. Brand: `serifMark` 13 serif (§ glyph in MemoryCards).
+- `DS.Icon.*` — SF Symbol sizes (`hero` 28 / `large` 22 / `primary` 18 / `secondary` 14 / `inline` 13 / `glyph` 12 / `caption` 11 / `mini` 9 / `chevron` 8 medium / `chevronBold` 8 bold)
 - `DS.Surface.*` — semantic foreground/fill ShapeStyles wrapped in `AnyShapeStyle`. `primary` / `secondary` are native macOS ShapeStyles (~85% / ~55% en dark mode). `tertiary` et `quaternary` ont été tunés sur valeurs explicites (`Color.white.opacity(0.33)` et `0.24` respectivement) pour cohérence visuelle entre tous les call-sites — ne PAS revenir aux ShapeStyles natifs sans un nouveau call. `separator` reste natif.
 - `DS.Stroke.*` — hairline strokes for overlays where fine opacity control is needed (`hairline` 0.06, `lineWidth` 0.5)
 - `DS.Radius.*` — corner radii (`chip` 6, `card` 12)
@@ -475,7 +541,7 @@ ShapeStyles) over `DS.Stroke.*` (explicit `Color.white.opacity`) when a
 semantic ShapeStyle is sufficient — `DS.Stroke` exists only for fine-grained
 stroke control on overlays.
 
-Migration is incremental, zone by zone (Onboarding ✅ → MessageBubble ✅ → ChatView ✅ → NotchView ✅ → rest).
+Migration is incremental, zone by zone (Onboarding ✅ → MessageBubble ✅ → ChatView ✅ → NotchView ✅ → BrainView ✅ → RoutinesView ✅ → TemplateBrowserView ✅ → LiquidGlass ✅). Migration v1 close (session 5): seuls 4 TODO(design) résiduels sur ces 4 fichiers — 2× glass material stroke (LiquidGlass.swift, matière non tokenisable) et 2× `textSize.scale` dynamique (BrainView.swift, scale runtime). Tokens ajoutés session 5: `DS.Icon.caption` (11pt, bell.badge.fill alert routines), `DS.Text.serifMark` (13pt serif, § brand glyph MemoryCards).
 MessageBubble (session 3) reduced 51 hardcodes to 5 justified TODOs (animated
 pulse opacity ×2, blockquote bar 0.15, image overlay 0.1, action button idle
 0.28). Tokens added during that pass: `DS.Text.bodySmall`, `DS.Text.captionMono`,
@@ -541,8 +607,9 @@ Add new keys here when introducing them.
 ### What NotchNotch never does
 - Write to `~/.hermes/config.yaml` directly (only reads; config changes go 
   through chat messages to Hermes)
-- Call Hermes's skill manager, cron API, or memory tool directly (all 
-  goes through `sendCompletion` as natural language)
+- Call Hermes's skill manager, cron API (with one exception, see below), 
+  or memory tool directly (all goes through `sendCompletion` as natural 
+  language)
 - Edit any file under `~/.hermes/brain/wiki/` (Hermes owns it)
 - Edit any file under `~/.hermes/memories/` (Hermes owns it)
 
@@ -558,6 +625,27 @@ so the `google-workspace` skill reads it with `Credentials.from_authorized_user_
 See `GoogleOAuthService.swift` for the 8-scope set and `setup.py` in 
 `~/.hermes/skills/productivity/google-workspace/scripts/` for the downstream 
 consumer.
+
+**Documented exception — cron pause/resume direct REST**: `HermesClient.pauseCronJob(id:)` 
+and `resumeCronJob(id:)` POST to `localhost:8642/api/jobs/{id}/pause` 
+and `/resume` (defined at `~/.hermes/hermes-agent/gateway/platforms/api_server.py:2048-2084`), 
+bypassing chat. Note: the path is `/api/jobs/...` (NOT `/api/cron/jobs/...` — 
+that latter exists in `hermes_cli/web_server.py` but is a different module 
+that's not actually served by `hermes gateway run`; verify with curl before 
+trusting any path you grep for in the Hermes repo). Used by the `StatusDotButton` on routine cards and the 
+Pause/Resume context-menu item — both call `ChatViewModel.setRoutinePaused(_:paused:)` 
+which fires the request and shows a toast (`"Routine en pause"` / 
+`"Routine relancée"` / `"Échec — Hermes injoignable"`). 
+
+Justification: the `sendCompletion("Pause routine X")` alternative adds 
+500ms-1s of LLM latency, can be misrouted by weak free-tier models (same 
+gotcha as `brain-ingest`), and forced a panel switch + a visible chat 
+message every time the user toggled a routine. CronStore's DispatchSource 
+on `jobs.json` picks up the change automatically — no client-side state 
+mutation needed. 
+
+Other cron operations (create, update schedule, remove) **still go 
+through chat** because they need user input or confirmation.
 
 ## 1. Think Before Coding
 

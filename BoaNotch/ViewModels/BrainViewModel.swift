@@ -50,6 +50,7 @@ class BrainViewModel: ObservableObject {
     @Published var pendingRawCount: Int = 0
     @Published var isIngesting: Bool = false
     @Published var hasLoaded = false
+    @Published var activeTab: BrainTab = .memory
 
     var memoryCategories: [MemoryCategoryGroup] {
         let grouped = Dictionary(grouping: allMemoryBlocks, by: \.category)

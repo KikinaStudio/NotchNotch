@@ -55,6 +55,9 @@ enum DS {
         static let sectionHead   = Font.system(size: 10, weight: .bold, design: .monospaced)
         /// 8pt monospaced medium. Badges discrets (Free/Pro pills ChooseModelStep).
         static let badge         = Font.system(size: 8, weight: .medium, design: .monospaced)
+        /// 13pt serif regular. Marque brand `§` en tête des MemoryCards (Brain panel).
+        /// Glyphe signature, ne pas réutiliser pour autre chose.
+        static let serifMark     = Font.system(size: 13, weight: .regular, design: .serif)
     }
 
     // MARK: - Icon
@@ -73,6 +76,8 @@ enum DS {
         static let inline    = Font.system(size: 13)
         /// 12pt regular. Icônes intégrées dans bouton wide.
         static let glyph     = Font.system(size: 12)
+        /// 11pt regular. Petit glyphe inline (bell.badge.fill marquant les routines alert).
+        static let caption   = Font.system(size: 11)
         /// 9pt regular. Petite icône inline (status checkmark "Connected").
         static let mini      = Font.system(size: 9)
         /// 8pt medium. Chevrons inline (back arrow onboarding container).

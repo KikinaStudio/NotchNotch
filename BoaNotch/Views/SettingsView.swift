@@ -10,21 +10,16 @@ struct SettingsView: View {
     @State private var apiKey = ""
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                // Header
-                Text("Settings")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-
+        FadingScrollView {
+            VStack(alignment: .leading, spacing: 0) {
                 // ── AI Provider ──
                 settingsSection("AI Provider") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Model provider")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 2) {
+                        HStack(spacing: 4) {
                             ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic"), ("minimax", "MiniMax")], id: \.0) { value, label in
                                 segmentedButton(label: label, isSelected: hermesConfig.modelProvider == value) {
                                     hermesConfig.modelProvider = value
@@ -38,7 +33,7 @@ struct SettingsView: View {
 
                         if hermesConfig.modelProvider == "nous" {
                             Text("Free models via Nous Portal. No API key needed.")
-                                .font(.caption2)
+                                .font(DS.Text.micro)
                                 .foregroundStyle(AppColors.accent.opacity(0.6))
                         }
 
@@ -48,20 +43,24 @@ struct SettingsView: View {
                     }
                 }
 
+                sectionDivider
+
                 // ── Google Workspace ──
                 settingsSection("Google Workspace") {
                     googleWorkspaceSection
                 }
+
+                sectionDivider
 
                 // ── Agent ──
                 settingsSection("Agent") {
                     // Max iterations
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Max iterations")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 2) {
+                        HStack(spacing: 4) {
                             ForEach([("Quick", 15), ("Normal", 50), ("Deep", 90)], id: \.1) { label, val in
                                 segmentedButton(label: label, isSelected: hermesConfig.maxIterations == val) {
                                     hermesConfig.maxIterations = val
@@ -74,7 +73,7 @@ struct SettingsView: View {
                             // Native stepper for fine-grained control
                             HStack(spacing: 6) {
                                 Text("\(hermesConfig.maxIterations)")
-                                    .font(.footnote.monospacedDigit())
+                                    .font(DS.Text.caption.monospacedDigit())
                                     .foregroundStyle(.primary)
                                     .frame(width: 24)
                                 Stepper(
@@ -98,30 +97,28 @@ struct SettingsView: View {
                     // Streaming toggle
                     HStack {
                         Text("Stream responses")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { hermesConfig.streaming },
-                            set: { val in
-                                hermesConfig.streaming = val
-                                hermesConfig.setImmediate("display.streaming", value: val)
-                            }
-                        ))
-                        .toggleStyle(.switch)
-                        .controlSize(.mini)
-                        .labelsHidden()
+                        StatusDotButton(isOn: hermesConfig.streaming) {
+                            let newValue = !hermesConfig.streaming
+                            hermesConfig.streaming = newValue
+                            hermesConfig.setImmediate("display.streaming", value: newValue)
+                        }
+                        .accessibilityLabel("Stream responses")
                     }
                 }
+
+                sectionDivider
 
                 // ── Execution ──
                 settingsSection("Execution") {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Terminal backend")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 2) {
+                        HStack(spacing: 4) {
                             ForEach(["local", "docker", "ssh"], id: \.self) { backend in
                                 segmentedButton(label: backend, isSelected: hermesConfig.terminalBackend == backend) {
                                     hermesConfig.terminalBackend = backend
@@ -143,7 +140,7 @@ struct SettingsView: View {
                                 ))
                                 HStack {
                                     Text("Port")
-                                        .font(.caption)
+                                        .font(DS.Text.caption)
                                         .foregroundStyle(.secondary)
                                         .frame(width: 35, alignment: .leading)
                                     TextField("", value: Binding(
@@ -151,7 +148,7 @@ struct SettingsView: View {
                                         set: { hermesConfig.sshPort = $0; hermesConfig.set("terminal.ssh_port", value: $0) }
                                     ), format: .number)
                                     .textFieldStyle(.plain)
-                                    .font(.caption)
+                                    .font(DS.Text.caption)
                                     .foregroundStyle(.primary)
                                 }
                             }
@@ -170,30 +167,34 @@ struct SettingsView: View {
                     }
                 }
 
+                sectionDivider
+
                 // ── Session ──
                 settingsSection("Session") {
                     HStack(spacing: 6) {
                         Image(systemName: "paperplane.fill")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(sessionStore.isLinked ? AppColors.accent : Color.secondary)
                         Text(sessionStore.isLinked ? "Telegram linked" : "No Telegram session")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(sessionStore.isLinked ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                         if sessionStore.isLinked {
                             Spacer()
                             Text(sessionStore.selectedSessionId ?? "")
-                                .font(.caption2.monospaced())
+                                .font(DS.Text.microMono)
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(1)
                         }
                     }
                 }
 
+                sectionDivider
+
                 // ── Appearance ──
                 settingsSection("Appearance") {
                     HStack {
                         Text("Text size")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         HStack(spacing: 0) {
@@ -201,30 +202,27 @@ struct SettingsView: View {
                             segmentDivider
                             textSizeSegment(.large, display: 15)
                         }
-                        .background(Capsule().fill(.quaternary))
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
                     }
                 }
+
+                sectionDivider
 
                 // ── Startup ──
                 settingsSection("Startup") {
                     HStack {
                         Text("Launch notchnotch at login")
-                            .font(.footnote)
+                            .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { loginItemService.isEnabled },
-                            set: { loginItemService.setEnabled($0) }
-                        ))
-                        .toggleStyle(.switch)
-                        .tint(AppColors.accent)
-                        .controlSize(.mini)
-                        .labelsHidden()
+                        StatusDotButton(isOn: loginItemService.isEnabled) {
+                            loginItemService.setEnabled(!loginItemService.isEnabled)
+                        }
+                        .accessibilityLabel("Launch notchnotch at login")
                     }
                 }
             }
         }
-        .scrollIndicators(.hidden)
     }
 
     // MARK: - Helpers
@@ -232,11 +230,19 @@ struct SettingsView: View {
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.caption2.weight(.bold).monospaced())
+                .font(DS.Text.sectionHead)
                 .foregroundStyle(.tertiary)
                 .tracking(1.5)
             content()
         }
+        .padding(.vertical, 14)
+    }
+
+    private var sectionDivider: some View {
+        Rectangle()
+            .fill(DS.Stroke.hairline)
+            .frame(height: 1)
+            .frame(maxWidth: .infinity)
     }
 
     private var apiKeyPlaceholder: String {
@@ -255,24 +261,24 @@ struct SettingsView: View {
             if googleConnection.isConnected, let email = googleConnection.connectedEmail {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill")
-                        .font(.footnote)
+                        .font(DS.Text.caption)
                         .foregroundStyle(AppColors.accent)
                     Text("Connected as ")
-                        .font(.footnote)
+                        .font(DS.Text.caption)
                         .foregroundStyle(.secondary)
                     + Text(email)
-                        .font(.footnote.weight(.medium))
+                        .font(DS.Text.captionMedium)
                         .foregroundStyle(.primary)
                     Spacer()
                     Button {
                         googleConnection.disconnect()
                     } label: {
                         Text("Disconnect")
-                            .font(.caption.weight(.medium))
+                            .font(DS.Text.captionMedium)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
-                            .background(Capsule().fill(.quaternary))
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -290,19 +296,19 @@ struct SettingsView: View {
                                     .frame(width: 10, height: 10)
                             }
                             Text(googleConnection.isConnecting ? "Connecting…" : "Connect Google")
-                                .font(.caption.weight(.semibold))
+                                .font(DS.Text.caption.weight(.semibold))
                                 .foregroundStyle(googleConnection.isConnecting ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
-                        .background(Capsule().fill(AppColors.accent.opacity(0.35)))
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35)))
                     }
                     .buttonStyle(.plain)
                     .disabled(googleConnection.isConnecting)
                     .pointingHandCursor()
 
                     Text("Gmail, Calendar, Drive, and more")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -310,10 +316,10 @@ struct SettingsView: View {
             if let err = googleConnection.errorMessage {
                 HStack(spacing: 6) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.red)
                     Text(err)
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.red)
                         .lineLimit(3)
                     Spacer()
@@ -321,7 +327,7 @@ struct SettingsView: View {
                         googleConnection.dismissError()
                     } label: {
                         Image(systemName: "xmark")
-                            .font(.caption2)
+                            .font(DS.Text.micro)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
@@ -336,7 +342,7 @@ struct SettingsView: View {
         HStack(spacing: 6) {
             SecureField(apiKeyPlaceholder, text: $apiKey)
                 .textFieldStyle(.plain)
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
@@ -347,15 +353,16 @@ struct SettingsView: View {
                 apiKey = ""
             } label: {
                 Text("Save")
-                    .font(.caption.weight(.semibold))
+                    .font(DS.Text.caption.weight(.semibold))
                     .foregroundStyle(apiKey.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background {
+                        let saveShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
                         if apiKey.isEmpty {
-                            Capsule().fill(.clear)
+                            saveShape.fill(.clear)
                         } else {
-                            Capsule().fill(AppColors.accent.opacity(0.35))
+                            saveShape.fill(AppColors.accent.opacity(0.35))
                         }
                     }
             }
@@ -370,6 +377,7 @@ struct SettingsView: View {
             appearanceSettings.textSize = size
         } label: {
             Text("A")
+                // TODO(design): taille dynamique (12pt/15pt) reflétant le réglage textSize, pas tokenisable
                 .font(.system(size: display, weight: isSelected ? .semibold : .regular))
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .frame(width: 32, height: 26)
@@ -386,17 +394,19 @@ struct SettingsView: View {
     }
 
     private func segmentedButton(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        return Button(action: action) {
             Text(label)
-                .font(.caption.weight(isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                // TODO(design): poids conditionnel actif=semibold/inactif=medium pour affordance d'état segmenté
+                .font(DS.Text.caption.weight(isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
                 .background {
                     if isSelected {
-                        Capsule().fill(.quaternary)
+                        shape.fill(AppColors.accent)
                     } else {
-                        Capsule().fill(.clear)
+                        shape.stroke(Color.gray.opacity(0.45), lineWidth: 1)
                     }
                 }
         }
@@ -407,12 +417,12 @@ struct SettingsView: View {
     private func configTextField(_ label: String, text: Binding<String>) -> some View {
         HStack {
             Text(label)
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 35, alignment: .leading)
             TextField("", text: text)
                 .textFieldStyle(.plain)
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.primary)
         }
     }

@@ -9,6 +9,7 @@ struct RoutinesView: View {
     var onDropFile: ([NSItemProvider]) -> Void
     var onDraftAction: ((String, Bool) -> Void)? = nil
     var onCreateCustomRoutine: ((String) -> Void)? = nil
+    var onSetPaused: ((CronJob, Bool) -> Void)? = nil
 
     @State private var showingBrowser = false
     @State private var showingCustomForm = false
@@ -25,8 +26,6 @@ struct RoutinesView: View {
     @State private var dayOfMonth: Int = 1
     @State private var intervalHours: Int = 2
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     private enum ScheduleFrequency: String, CaseIterable, Hashable {
         case daily = "Daily"
         case weekdays = "Weekdays"
@@ -41,7 +40,6 @@ struct RoutinesView: View {
         ("Discord", "bubble.left.fill"),
         ("Slack", "number")
     ]
-    private let selectedDeliverColor = Color(red: 0xA8/255.0, green: 0xDC/255.0, blue: 0xFC/255.0)
     private let weekdayLabels = ["S", "M", "T", "W", "T", "F", "S"]
     private let hourIntervals: [Int] = [1, 2, 3, 4, 6, 12]
 
@@ -57,17 +55,6 @@ struct RoutinesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 4) {
-                Text("Routines")
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                if !cronStore.jobs.isEmpty {
-                    Text("(\(cronStore.jobs.count))")
-                        .font(.footnote)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-
             if showingCustomForm {
                 customForm
                     .transition(.opacity)
@@ -78,7 +65,7 @@ struct RoutinesView: View {
                     onCreateOwn: onCreateOwn
                 )
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
+                FadingScrollView {
                     VStack(spacing: 14) {
                         LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
                             ForEach(cronStore.sortedJobs) { job in
@@ -125,103 +112,97 @@ struct RoutinesView: View {
         let isPaused = job.state == "paused"
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
-        return VStack(alignment: .leading, spacing: 10) {
-            // Row 1: title + alert glyph
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(title)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        let isActive = job.enabled && job.state != "paused"
+        let hasError = (job.last_status != nil) && (job.last_status != "ok")
+        let dotState: StatusDotButton.DotState = {
+            if !isActive { return .off }
+            if hasError { return .error }
+            return .on
+        }()
 
-                Spacer(minLength: 0)
+        return Button {
+            onSelectJob(job)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                // Row 1: title + alert glyph
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
 
-                if isAlert {
-                    Image(systemName: "bell.badge.fill")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AppColors.accent)
-                        .accessibilityLabel("Alert routine — notifies in the notch")
+                    Spacer(minLength: 0)
+
+                    if isAlert {
+                        Image(systemName: "bell.badge.fill")
+                            .font(DS.Icon.caption)
+                            .foregroundStyle(AppColors.accent)
+                            .accessibilityLabel("Alert routine — notifies in the notch")
+                    }
                 }
-            }
 
-            // Row 2: description (only when title is distinct from prompt)
-            if hasName {
-                Text(job.prompt)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+                // Row 2: description (only when title is distinct from prompt)
+                if hasName {
+                    Text(job.prompt)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
-            // Row 3: dot + schedule + (counter OR next) + toggle
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(dotColor(for: job))
-                    .frame(width: 7, height: 7)
-                    .opacity(job.state == "running" ? 0.6 : 1.0)
-                    .animation(
-                        reduceMotion ? nil : .easeInOut(duration: 0.8).repeatForever(autoreverses: true),
-                        value: job.state == "running"
-                    )
+                // Row 3: clickable on/off dot + schedule + (counter OR next)
+                HStack(spacing: 6) {
+                    StatusDotButton(state: dotState) {
+                        onSetPaused?(job, isActive)
+                    }
+                    .accessibilityLabel(isActive ? "Pause \(title)" : "Resume \(title)")
 
-                Text(humanSchedule(job.schedule_display))
-                    .font(.caption2.weight(.medium).monospaced())
-                    .foregroundStyle(.secondary)
-                    .tracking(0.3)
-                    .lineLimit(1)
+                    Text(humanSchedule(job.schedule_display))
+                        .font(.caption2.weight(.medium).monospaced())
+                        .foregroundStyle(.secondary)
+                        .tracking(0.3)
+                        .lineLimit(1)
 
-                Text("·")
+                    Text("·")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+
+                    Group {
+                        if runCount > 0 {
+                            Text("\(runCount) run\(runCount == 1 ? "" : "s")")
+                                .foregroundStyle(.tertiary)
+                        } else if let nextRun {
+                            Text("next: \(nextRun)")
+                                .foregroundStyle(.tertiary)
+                        } else {
+                            Text("not yet run")
+                                .foregroundStyle(.quaternary)
+                        }
+                    }
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
 
-                Group {
-                    if runCount > 0 {
-                        Text("\(runCount) run\(runCount == 1 ? "" : "s")")
-                            .foregroundStyle(.tertiary)
-                    } else if let nextRun {
-                        Text("next: \(nextRun)")
-                            .foregroundStyle(.tertiary)
-                    } else {
-                        Text("not yet run")
-                            .foregroundStyle(.quaternary)
-                    }
+                    Spacer(minLength: 0)
                 }
-                .font(.caption2)
-                .lineLimit(1)
-
-                Spacer(minLength: 0)
-
-                Toggle("", isOn: Binding(
-                    get: { !isPaused && job.enabled },
-                    set: { newValue in
-                        let name = hasName ? job.name : String(job.prompt.prefix(30))
-                        let verb = newValue ? "Resume" : "Pause"
-                        onDraftAction?("\(verb) the routine \"\(name)\"", true)
-                    }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.mini)
-                .labelsHidden()
-                .tint(AppColors.accent)
-                .accessibilityLabel(isPaused ? "Resume \(title)" : "Pause \(title)")
+                .padding(.top, 5)
             }
-            .padding(.top, 5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(cardShape.fill(.quaternary.opacity(0.6)))
+            .overlay(
+                cardShape
+                    .fill(hoveredJobId == job.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
+                    .allowsHitTesting(false)
+            )
+            .contentShape(Rectangle())
+            .opacity(isPaused ? 0.5 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardShape.fill(.quaternary.opacity(0.6)))
-        .overlay(
-            cardShape
-                .fill(hoveredJobId == job.id ? Color.white.opacity(0.04) : .clear)
-                .allowsHitTesting(false)
-        )
-        .contentShape(Rectangle())
-        .opacity(isPaused ? 0.5 : 1.0)
-        .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
+        .buttonStyle(.plain)
         .onHover { over in hoveredJobId = over ? job.id : nil }
-        .onTapGesture { onSelectJob(job) }
         .pointingHandCursor()
         .contextMenu {
             Button {
@@ -232,9 +213,8 @@ struct RoutinesView: View {
             }
 
             Button {
-                let name = job.name.isEmpty ? String(job.prompt.prefix(30)) : job.name
-                let verb = job.state == "paused" ? "Resume" : "Pause"
-                onDraftAction?("\(verb) the routine \"\(name)\"", true)
+                let isCurrentlyActive = job.enabled && job.state != "paused"
+                onSetPaused?(job, isCurrentlyActive)
             } label: {
                 Label(
                     job.state == "paused" ? "Resume" : "Pause",
@@ -248,14 +228,6 @@ struct RoutinesView: View {
             } label: {
                 Label("Remove", systemImage: "trash")
             }
-        }
-    }
-
-    private func dotColor(for job: CronJob) -> Color {
-        switch job.state {
-        case "running": return AppColors.accent
-        case "paused": return .orange
-        default: return job.enabled ? .green.opacity(0.8) : .gray.opacity(0.3)
         }
     }
 
@@ -349,7 +321,7 @@ struct RoutinesView: View {
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: "plus")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(DS.Icon.large.weight(.semibold))
                     .foregroundStyle(AppColors.accent)
                 Text("Create routine")
                     .font(.caption.weight(.medium))
@@ -382,7 +354,7 @@ struct RoutinesView: View {
     // MARK: - Custom form
 
     private var customForm: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        FadingScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 // Back button
                 Button {
@@ -445,9 +417,9 @@ struct RoutinesView: View {
                                 .padding(.vertical, 5)
                                 .background {
                                     if isSelected {
-                                        Capsule().fill(selectedDeliverColor)
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent)
                                     } else {
-                                        Capsule().fill(.quaternary.opacity(0.6))
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6))
                                     }
                                 }
                             }
@@ -467,9 +439,9 @@ struct RoutinesView: View {
                         .padding(.vertical, 9)
                         .background {
                             if customFormValid {
-                                Capsule().fill(AppColors.accent.opacity(0.35))
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35))
                             } else {
-                                Capsule().fill(.quaternary.opacity(0.6))
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6))
                             }
                         }
                 }
@@ -528,9 +500,9 @@ struct RoutinesView: View {
                 .padding(.vertical, 5)
                 .background {
                     if isSelected {
-                        Capsule().fill(selectedDeliverColor)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent)
                     } else {
-                        Capsule().fill(.quaternary.opacity(0.6))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6))
                     }
                 }
         }
@@ -557,7 +529,7 @@ struct RoutinesView: View {
                         .frame(width: 26, height: 26)
                         .background {
                             if isSelected {
-                                Circle().fill(selectedDeliverColor)
+                                Circle().fill(AppColors.accent)
                             } else {
                                 Circle().fill(.quaternary.opacity(0.6))
                             }
@@ -614,9 +586,9 @@ struct RoutinesView: View {
                         .padding(.vertical, 5)
                         .background {
                             if isSelected {
-                                Capsule().fill(selectedDeliverColor)
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent)
                             } else {
-                                Capsule().fill(.quaternary.opacity(0.6))
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary.opacity(0.6))
                             }
                         }
                 }

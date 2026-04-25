@@ -452,6 +452,43 @@ class HermesClient {
         }
     }
 
+    // MARK: - Direct cron control (documented exception to "everything through chat")
+
+    /// Pause a cron job via the Hermes gateway's REST endpoint, bypassing the
+    /// chat layer. Defined in `~/.hermes/hermes-agent/gateway/platforms/api_server.py:2048`.
+    /// Atomically updates `~/.hermes/cron/jobs.json` AND the in-memory scheduler;
+    /// CronStore's DispatchSource picks up the change and re-renders the card.
+    /// Justified vs `sendCompletion`: instant (~50ms vs 500ms-1s LLM), deterministic,
+    /// model-agnostic. UI feedback comes from a toast in the caller.
+    func pauseCronJob(id: String) async throws {
+        try await postCronAction(id: id, action: "pause")
+    }
+
+    /// Resume a paused cron job — see `pauseCronJob` for rationale.
+    func resumeCronJob(id: String) async throws {
+        try await postCronAction(id: id, action: "resume")
+    }
+
+    private func postCronAction(id: String, action: String) async throws {
+        guard let encodedId = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(baseURL)/api/jobs/\(encodedId)/\(action)") else {
+            throw HermesError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
+        }
+    }
+
     // MARK: - Title generation (ChatGPT-style auto-name)
 
     /// Ask Hermes to summarize the first exchange into a 3-7 word title.

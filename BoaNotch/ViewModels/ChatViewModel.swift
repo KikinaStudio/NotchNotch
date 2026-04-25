@@ -398,6 +398,28 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Pause/resume a cron job silently via the Hermes REST endpoint — no chat
+    /// message is created, no panel switching. Documented exception to the
+    /// "everything through chat" principle (see CLAUDE.md). UX rationale: the
+    /// status dot toggle on routine cards must feel instant; routing through
+    /// the LLM added 500ms-1s of latency and could be misrouted.
+    func setRoutinePaused(_ job: CronJob, paused: Bool) {
+        Task { @MainActor in
+            do {
+                if paused {
+                    try await client.pauseCronJob(id: job.id)
+                    notchVM?.showToast("Routine en pause")
+                } else {
+                    try await client.resumeCronJob(id: job.id)
+                    notchVM?.showToast("Routine relancée")
+                }
+            } catch {
+                print("[notchnotch] setRoutinePaused error: \(error)")
+                notchVM?.showToast("Échec — Hermes injoignable")
+            }
+        }
+    }
+
     func setRoutineContext(_ job: CronJob) {
         activeRoutineContext = job
     }

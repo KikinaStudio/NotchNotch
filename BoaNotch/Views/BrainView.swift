@@ -11,37 +11,22 @@ struct BrainView: View {
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var notchVM: NotchViewModel
     var onSendToChat: ((String) -> Void)?
-    @State private var activeTab: BrainTab = .memory
     @State private var selectedSkill: SkillInfo?
-    @State private var selectedMemoryCategory: String?
+    @State private var selectedMemoryBlock: MemoryBlock?
+    @State private var hoveredMemoryId: String?
+    @State private var hoveredSkillId: String?
     @State private var syncPulseScale: CGFloat = 1.0
+
+    private let cardWidth: CGFloat = 220
 
     private let lightMetricsTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 0) {
-            // Tab bar
-            HStack(spacing: 16) {
-                tabButton(.memory)
-                tabButton(.skills)
-                if brainVM.hasWiki {
-                    tabButton(.wiki)
-                }
-                Spacer()
-                Button { brainVM.reload() } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                .pointingHandCursor()
-            }
-            .padding(.bottom, 12)
-
-            // Content
+            // Content (tabs now live in NotchView's top bar)
             ZStack {
                 contentForTab
-                    .opacity((selectedSkill == nil && selectedMemoryCategory == nil) ? 1 : 0)
+                    .opacity((selectedSkill == nil && selectedMemoryBlock == nil) ? 1 : 0)
 
                 if let skill = selectedSkill {
                     detailView(title: skill.name, content: skill.content) {
@@ -55,9 +40,8 @@ struct BrainView: View {
                     ))
                 }
 
-                if let category = selectedMemoryCategory,
-                   let group = brainVM.memoryCategories.first(where: { $0.name == category }) {
-                    memoryCategoryDetail(group: group)
+                if let block = selectedMemoryBlock {
+                    memoryBlockDetail(block: block)
                         .transition(.asymmetric(
                             insertion: .move(edge: .trailing),
                             removal: .move(edge: .trailing)
@@ -67,113 +51,101 @@ struct BrainView: View {
         }
         .onAppear { brainVM.refreshLightMetrics() }
         .onReceive(lightMetricsTimer) { _ in brainVM.refreshLightMetrics() }
-        .onChange(of: brainVM.allMemoryBlocks.map(\.id)) { _, _ in
-            if let sel = selectedMemoryCategory,
-               !brainVM.memoryCategories.contains(where: { $0.name == sel }) {
+        .onChange(of: brainVM.allMemoryBlocks.map(\.id)) { _, ids in
+            if let sel = selectedMemoryBlock, !ids.contains(sel.id) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    selectedMemoryCategory = nil
+                    selectedMemoryBlock = nil
                 }
             }
         }
-    }
-
-    // MARK: - Tab button
-
-    private func tabButton(_ tab: BrainTab) -> some View {
-        Button {
-            activeTab = tab
-            selectedSkill = nil
-            selectedMemoryCategory = nil
-        } label: {
-            Text(tab.rawValue)
-                .font(.callout.weight(activeTab == tab ? .semibold : .medium))
-                .foregroundStyle(activeTab == tab ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-                .padding(.vertical, 2)
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
     }
 
     // MARK: - Tab content
 
     @ViewBuilder
     private var contentForTab: some View {
-        switch activeTab {
+        switch brainVM.activeTab {
         case .memory: memoryTab
         case .skills: skillsTab
         case .wiki: wikiTab
         }
     }
 
-    // MARK: - Memory tab
+    // MARK: - Memory tab (flat full-width cards)
 
     private var memoryTab: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            tabIntro("Ce qu'Hermes retient de toi.")
+
             if brainVM.allMemoryBlocks.isEmpty {
                 emptyState("Hermes hasn't learned anything yet.\nStart chatting and it will remember what matters.")
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        tabIntro("Ce qu'Hermes retient de toi, rangé par sujet.")
-
-                        Text(categoryCountCaption(brainVM.memoryCategories.count))
-                            .font(.caption2.weight(.bold).monospaced())
-                            .foregroundStyle(.tertiary)
-                            .tracking(1.5)
-                            .padding(.bottom, 6)
-
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(brainVM.memoryCategories.enumerated()), id: \.element.id) { index, group in
-                                if index > 0 { blockDivider }
-                                categoryRow(group)
-                            }
+                FadingScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(brainVM.allMemoryBlocks) { block in
+                            memoryCardCompact(block)
                         }
                     }
+                    .padding(.bottom, 8)
                 }
             }
         }
     }
 
-    private func categoryRow(_ group: MemoryCategoryGroup) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedMemoryCategory = group.name
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Text(group.name)
-                    .font(.callout.weight(.semibold))
+    private func memoryCardCompact(_ block: MemoryBlock) -> some View {
+        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: iconForCategory(block.category))
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(AppColors.accent)
+                    .frame(width: 14, alignment: .leading)
+                Text(memoryTitleAttributed(block))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-
-                Spacer()
-
-                Text("\(group.count)")
-                    .font(.caption2.weight(.medium).monospaced())
-                    .foregroundStyle(.tertiary)
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.tertiary)
+                    .truncationMode(.tail)
             }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
+
+            Text(memoryPreview(block))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardShape.fill(.quaternary.opacity(0.6)))
+        .overlay(
+            cardShape
+                .fill(hoveredMemoryId == block.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
+                .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+        .onHover { over in hoveredMemoryId = over ? block.id : nil }
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                selectedMemoryBlock = block
+            }
+        }
         .pointingHandCursor()
+        .animation(.easeInOut(duration: 0.15), value: hoveredMemoryId == block.id)
     }
 
-    private func memoryCategoryDetail(group: MemoryCategoryGroup) -> some View {
+    private func memoryBlockDetail(block: MemoryBlock) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                    selectedMemoryCategory = nil
+                    selectedMemoryBlock = nil
                 }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.caption.weight(.semibold))
-                    Text(group.name)
+                    Text(block.category)
                         .font(.footnote.weight(.medium))
                         .lineLimit(1)
                 }
@@ -183,35 +155,91 @@ struct BrainView: View {
             .pointingHandCursor()
             .padding(.bottom, 10)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(group.blocks.enumerated()), id: \.element.id) { index, block in
-                        if index > 0 { blockDivider }
-                        MemoryCard(
-                            block: block,
-                            onUpdate: { newContent in
-                                chatVM.updateMemory(oldContent: block.content, newContent: newContent)
-                                scheduleBrainReload()
-                            },
-                            onDelete: {
-                                chatVM.deleteMemory(content: block.content)
-                                scheduleBrainReload()
-                            }
-                        )
+            FadingScrollView {
+                MemoryCard(
+                    block: block,
+                    onUpdate: { newContent in
+                        chatVM.updateMemory(oldContent: block.content, newContent: newContent)
+                        scheduleBrainReload()
+                    },
+                    onDelete: {
+                        chatVM.deleteMemory(content: block.content)
+                        scheduleBrainReload()
                     }
-                }
+                )
             }
         }
     }
 
-    private func categoryCountCaption(_ count: Int) -> String {
-        count == 1 ? "1 CATÉGORIE" : "\(count) CATÉGORIES"
+    private func memoryTitleAttributed(_ block: MemoryBlock) -> AttributedString {
+        (try? AttributedString(
+            markdown: block.title,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(block.title)
+    }
+
+    private func memoryPreview(_ block: MemoryBlock) -> String {
+        let trimmed = block.content
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed
+    }
+
+    /// Heuristic mapping from a memory category label to an SF Symbol.
+    /// Matches keywords case-insensitively in FR + EN; falls back to a generic
+    /// tag glyph for unknown categories.
+    private func iconForCategory(_ raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.contains("perso") || lower.contains("user") || lower.contains("profil") || lower.contains("identi") {
+            return "person.fill"
+        }
+        if lower.contains("famille") || lower.contains("family") || lower.contains("friend") || lower.contains("ami") {
+            return "person.2.fill"
+        }
+        if lower.contains("work") || lower.contains("travail") || lower.contains("project") || lower.contains("projet") || lower.contains("kikina") || lower.contains("boulot") {
+            return "briefcase.fill"
+        }
+        if lower.contains("travel") || lower.contains("voyage") || lower.contains("trip") {
+            return "airplane"
+        }
+        if lower.contains("health") || lower.contains("santé") || lower.contains("sante") || lower.contains("medic") {
+            return "heart.fill"
+        }
+        if lower.contains("finance") || lower.contains("money") || lower.contains("argent") || lower.contains("budget") || lower.contains("bank") {
+            return "dollarsign.circle.fill"
+        }
+        if lower.contains("food") || lower.contains("nourriture") || lower.contains("recipe") || lower.contains("cuisine") || lower.contains("restau") {
+            return "fork.knife"
+        }
+        if lower.contains("hermes") || lower.contains("agent") || lower.contains("assistant") || lower.contains("ai") {
+            return "sparkles"
+        }
+        if lower.contains("note") || lower.contains("journal") || lower.contains("idée") || lower.contains("idea") {
+            return "note.text"
+        }
+        if lower.contains("tech") || lower.contains("dev") || lower.contains("code") || lower.contains("programm") {
+            return "chevron.left.forwardslash.chevron.right"
+        }
+        if lower.contains("home") || lower.contains("maison") || lower.contains("appart") {
+            return "house.fill"
+        }
+        if lower.contains("learn") || lower.contains("study") || lower.contains("étud") || lower.contains("etude") || lower.contains("school") {
+            return "book.fill"
+        }
+        if lower.contains("music") || lower.contains("musique") || lower.contains("song") {
+            return "music.note"
+        }
+        if lower.contains("event") || lower.contains("événement") || lower.contains("evenement") || lower.contains("calendar") || lower.contains("agenda") {
+            return "calendar"
+        }
+        return "tag.fill"
     }
 
     private func tabIntro(_ text: String) -> some View {
         Text(text)
-            .font(.footnote.italic())
-            .foregroundStyle(.secondary)
+            .font(DS.Text.caption)
+            .foregroundStyle(AppColors.accent)
             .frame(maxWidth: .infinity, alignment: .leading)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.bottom, 12)
@@ -221,77 +249,104 @@ struct BrainView: View {
         Divider().padding(.leading, 14)
     }
 
-    // MARK: - Skills tab
+    // MARK: - Skills tab (Netflix-style)
 
     private var skillsTab: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
+            tabIntro("Les savoir-faire qu'Hermes peut mobiliser. Chacun lui apprend à faire quelque chose de précis.")
+
             if brainVM.skills.isEmpty {
                 emptyState("No skills installed yet.")
             } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        tabIntro("Les savoir-faire qu'Hermes peut mobiliser. Chacun lui apprend à faire quelque chose de précis.")
-
-                        Text("\(brainVM.skills.count) SKILLS AVAILABLE")
-                            .font(.caption2.weight(.bold).monospaced())
-                            .foregroundStyle(.tertiary)
-                            .tracking(1.5)
-                            .padding(.bottom, 6)
-
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(brainVM.skills.enumerated()), id: \.element.id) { index, skill in
-                                if index > 0 { blockDivider }
-                                skillRow(skill)
-                            }
+                FadingScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        ForEach(skillCategories, id: \.name) { group in
+                            skillCategorySection(group)
                         }
 
                         Text("Type /skill-name in chat to use a skill")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                             .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 14)
+                            .padding(.top, 6)
+                    }
+                    .padding(.bottom, 8)
+                }
+            }
+        }
+    }
+
+    private struct SkillCategoryGroup {
+        let name: String
+        let skills: [SkillInfo]
+    }
+
+    private var skillCategories: [SkillCategoryGroup] {
+        let grouped = Dictionary(grouping: brainVM.skills, by: \.category)
+        return grouped
+            .map { SkillCategoryGroup(name: $0.key, skills: $0.value) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private func skillCategorySection(_ group: SkillCategoryGroup) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(group.name.capitalized)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("\(group.skills.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 8) {
+                    ForEach(group.skills) { skill in
+                        skillCardCompact(skill)
+                            .frame(width: cardWidth)
                     }
                 }
             }
         }
     }
 
-    private func skillRow(_ skill: SkillInfo) -> some View {
-        Button {
+    private func skillCardCompact(_ skill: SkillInfo) -> some View {
+        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(skill.name)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            if !skill.description.isEmpty {
+                Text(skill.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardShape.fill(.quaternary.opacity(0.6)))
+        .overlay(
+            cardShape
+                .fill(hoveredSkillId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
+                .allowsHitTesting(false)
+        )
+        .contentShape(Rectangle())
+        .onHover { over in hoveredSkillId = over ? skill.id : nil }
+        .onTapGesture {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 selectedSkill = skill
             }
-        } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(skill.category.uppercased())
-                            .font(.caption2.weight(.bold).monospaced())
-                            .foregroundStyle(AppColors.accent.opacity(0.6))
-                            .tracking(1.2)
-                        Text(skill.name)
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(.primary)
-                    }
-                    if !skill.description.isEmpty {
-                        Text(skill.description)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.vertical, 10)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
         .pointingHandCursor()
+        .animation(.easeInOut(duration: 0.15), value: hoveredSkillId == skill.id)
     }
 
     // MARK: - Wiki tab (dashboard + ask)
@@ -320,7 +375,7 @@ struct BrainView: View {
                     .padding(.bottom, 8)
 
                     // Article list
-                    ScrollView(.vertical, showsIndicators: false) {
+                    FadingScrollView {
                         VStack(spacing: 2) {
                             ForEach(brainVM.wikiArticles) { article in
                                 Button {
@@ -481,7 +536,7 @@ struct BrainView: View {
             .pointingHandCursor()
             .padding(.bottom, 10)
 
-            ScrollView(.vertical, showsIndicators: false) {
+            FadingScrollView {
                 markdownText(content)
             }
         }
@@ -526,7 +581,7 @@ struct MemoryCard: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("§")
-                    .font(.system(size: 13, weight: .regular, design: .serif))
+                    .font(DS.Text.serifMark)
                     .foregroundStyle(AppColors.accent.opacity(0.6))
                 Text(titleAttributed)
                     .font(.callout.weight(.semibold))
@@ -548,6 +603,7 @@ struct MemoryCard: View {
                     .padding(.leading, 14)
             } else {
                 Text(markdownContent)
+                    // TODO(design): textSize.scale dynamique (medium=1.0/large=1.25), pas tokenisable.
                     .font(.system(size: 11 * appearanceSettings.textSize.scale))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -616,14 +672,15 @@ struct MemoryCard: View {
     private var editor: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextEditor(text: $draft)
+                // TODO(design): textSize.scale dynamique (medium=1.0/large=1.25), pas tokenisable.
                 .font(.system(size: 11 * appearanceSettings.textSize.scale))
                 .scrollContentBackground(.hidden)
-                .background(Color.white.opacity(0.05))
+                .background(DS.Stroke.hairline)
                 .foregroundStyle(.primary)
                 .frame(minHeight: 80, maxHeight: 220)
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(DS.Stroke.hairline, lineWidth: 1)
                 )
                 .cornerRadius(6)
                 .focused($editorFocused)

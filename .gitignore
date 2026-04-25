@@ -7,3 +7,6 @@ DerivedData/
 
 # Desktop OAuth client credentials — never commit real values
 BoaNotch/Resources/google_oauth_config.json
+
+# Claude Code local agent state (settings, worktrees)
+.claude/

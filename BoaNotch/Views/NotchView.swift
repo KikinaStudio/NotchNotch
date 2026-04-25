@@ -212,6 +212,8 @@ struct NotchView: View {
                                     if autoSend { chatVM.send() }
                                 }, onCreateCustomRoutine: { draft in
                                     chatVM.createRoutine(draft: draft)
+                                }, onSetPaused: { job, paused in
+                                    chatVM.setRoutinePaused(job, paused: paused)
                                 })
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
@@ -271,19 +273,10 @@ struct NotchView: View {
                 let isDeployed = notchVM.isMenuExpanded || notchVM.isAnyPanelOpen
 
                 HStack(spacing: 10) {
-                    // Left: new conversation (always visible)
-                    Button {
-                        chatVM.startNewConversation()
-                    } label: {
-                        Image(systemName: "plus.bubble")
-                            .font(DS.Icon.secondary)
-                            .foregroundStyle(hoverNewConvo ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
-                    }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
-                    .onHover { hoverNewConvo = $0 }
+                    // Left slot — context-dependent: brain tabs / panel title / new conversation
+                    leftSlot
 
-                    Spacer()
+                    Spacer(minLength: 8)
 
                     // Right cluster: action icons (when deployed) + burger/X + resize
                     HStack(spacing: 10) {
@@ -380,9 +373,62 @@ struct NotchView: View {
                 }
                 .padding(.horizontal, 42)
                 .padding(.top, 10)
+                .animation(.easeInOut(duration: 0.18), value: panelTitle)
                 .transition(.opacity.animation(.easeIn(duration: 0.15).delay(0.1)))
             }
         }
+    }
+
+    private var panelTitle: String? {
+        if notchVM.isHistoryOpen { return "Conversations" }
+        if notchVM.isRoutinesOpen { return "Routines" }
+        if notchVM.isSettingsOpen { return "Settings" }
+        if notchVM.isSearchOpen { return "Search" }
+        return nil
+    }
+
+    @ViewBuilder
+    private var leftSlot: some View {
+        if notchVM.isBrainOpen {
+            brainTabsBar
+        } else if let title = panelTitle {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        } else {
+            Button {
+                chatVM.startNewConversation()
+            } label: {
+                Image(systemName: "plus.bubble")
+                    .font(DS.Icon.secondary)
+                    .foregroundStyle(hoverNewConvo ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+            .onHover { hoverNewConvo = $0 }
+        }
+    }
+
+    private var brainTabsBar: some View {
+        HStack(spacing: 16) {
+            brainTabButton(.memory)
+            brainTabButton(.skills)
+            if brainVM.hasWiki { brainTabButton(.wiki) }
+        }
+    }
+
+    private func brainTabButton(_ tab: BrainTab) -> some View {
+        let isActive = brainVM.activeTab == tab
+        return Button {
+            brainVM.activeTab = tab
+        } label: {
+            Text(tab.rawValue)
+                .font(.headline)
+                .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     // MARK: - Burger menu icon button
