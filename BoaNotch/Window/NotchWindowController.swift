@@ -9,6 +9,7 @@ class NotchWindowController {
     private var dragMonitor: Any?
     private var dragEndMonitor: Any?
     private var sizeCancellable: AnyCancellable?
+    private var onboardingCancellable: AnyCancellable?
 
     static let shadowPadding: CGFloat = 20
 
@@ -81,6 +82,24 @@ class NotchWindowController {
             .sink { [weak self] _ in
                 self?.applyPanelSize(animated: true)
             }
+
+        // Onboarding forces .standard regardless of user preference. When
+        // `needsOnboarding` flips to false (Ready → Start chatting), restore
+        // the user's preferred size.
+        onboardingCancellable = onboardingVM.$needsOnboarding
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.applyPanelSize(animated: true)
+            }
+    }
+
+    /// During onboarding the panel is forced to `.standard` (the size
+    /// onboarding screens are designed for) even if the user has saved a
+    /// `.large` preference. After `completeOnboarding()`, the stored
+    /// preference takes over.
+    private func effectivePanelSize() -> PanelSize {
+        onboardingVM.needsOnboarding ? .standard : panelSizeStore.size
     }
 
     func showPanel() {
@@ -89,8 +108,8 @@ class NotchWindowController {
         let closedSize = Self.closedNotchSize(for: screen)
         notchVM.closedSize = closedSize
 
-        let initialPanelSize = Self.dimensions(for: panelSizeStore.size, on: screen)
-        notchVM.openSize = Self.openSize(for: panelSizeStore.size, on: screen)
+        let initialPanelSize = Self.dimensions(for: effectivePanelSize(), on: screen)
+        notchVM.openSize = Self.openSize(for: effectivePanelSize(), on: screen)
 
         let panelRect = NSRect(origin: .zero, size: initialPanelSize)
         let panel = NotchPanel(contentRect: panelRect)
@@ -159,8 +178,8 @@ class NotchWindowController {
     /// Called on showPanel(), screenDidChange(), and whenever the user toggles size.
     func applyPanelSize(animated: Bool = true) {
         guard let panel, let screen = Self.notchScreen() else { return }
-        let newPanelSize = Self.dimensions(for: panelSizeStore.size, on: screen)
-        let newOpenSize = Self.openSize(for: panelSizeStore.size, on: screen)
+        let newPanelSize = Self.dimensions(for: effectivePanelSize(), on: screen)
+        let newOpenSize = Self.openSize(for: effectivePanelSize(), on: screen)
         let screenFrame = screen.frame
         let x = screenFrame.origin.x + (screenFrame.width / 2) - (newPanelSize.width / 2)
         let y = screenFrame.origin.y + screenFrame.height - newPanelSize.height
