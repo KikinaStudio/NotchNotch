@@ -24,11 +24,11 @@ struct OnboardingContainerView: View {
                     Button { onboardingVM.goBack() } label: {
                         HStack(spacing: 3) {
                             Image(systemName: "chevron.left")
-                                .font(.system(size: 8, weight: .medium))
+                                .font(DS.Icon.chevron)
                             Text("Back")
-                                .font(.system(size: 10))
+                                .font(DS.Text.micro)
                         }
-                        .foregroundStyle(.white.opacity(0.2))
+                        .foregroundStyle(DS.Surface.secondary)
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -39,6 +39,7 @@ struct OnboardingContainerView: View {
                     HStack(spacing: 5) {
                         ForEach(0..<6, id: \.self) { i in
                             Circle()
+                                // TODO(design): pas de bucket DS.Surface pour 0.1 (étape inactive); 0.5 ≈ secondary mais ternaire mixte conservé en littéral pour cohérence visuelle.
                                 .fill(.white.opacity(i == onboardingVM.currentStep ? 0.5 : 0.1))
                                 .frame(width: 4, height: 4)
                         }

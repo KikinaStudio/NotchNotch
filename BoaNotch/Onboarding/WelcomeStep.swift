@@ -18,7 +18,7 @@ struct WelcomeStep: View {
             }
 
             Text("Your AI agent, one knock away.")
-                .font(.system(size: 11))
+                .font(DS.Text.caption)
                 .foregroundStyle(AppColors.accent.opacity(0.6))
                 .padding(.top, 4)
 
@@ -51,16 +51,18 @@ struct OnboardingButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(disabled ? 0.25 : 0.85))
+                .font(DS.Text.labelMedium)
+                .foregroundStyle(disabled ? DS.Surface.quaternary : DS.Surface.primary)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 9)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
+                        // TODO(design): button fill 0.10/0.18 hors bucket DS.Surface (fills très spécifiques composant CTA).
                         .fill(.white.opacity(isHovered && !disabled ? 0.18 : 0.10))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
+                        // TODO(design): button stroke 0.05/0.18 hors bucket DS.Surface (stroke composant CTA).
                         .stroke(.white.opacity(disabled ? 0.05 : 0.18), lineWidth: 0.5)
                 )
         }
@@ -86,19 +88,21 @@ struct OnboardingWideButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 12))
+                    .font(DS.Icon.glyph)
                 Text(label)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(DS.Text.labelMedium)
             }
-            .foregroundStyle(.white.opacity(disabled ? 0.25 : 0.85))
+            .foregroundStyle(disabled ? DS.Surface.quaternary : DS.Surface.primary)
             .frame(maxWidth: 280)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
+                    // TODO(design): button fill 0.10/0.18 hors bucket DS.Surface (fills très spécifiques composant CTA).
                     .fill(.white.opacity(isHovered && !disabled ? 0.18 : 0.10))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
+                    // TODO(design): button stroke 0.05/0.18 hors bucket DS.Surface (stroke composant CTA).
                     .stroke(.white.opacity(disabled ? 0.05 : 0.18), lineWidth: 0.5)
             )
         }

@@ -8,16 +8,16 @@ struct ReadyStep: View {
             Spacer()
 
             Image(systemName: "checkmark")
-                .font(.system(size: 28, weight: .light))
+                .font(DS.Icon.hero)
                 .foregroundStyle(AppColors.accent.opacity(0.7))
 
             Text("You're all set")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
+                .font(DS.Text.title)
+                .foregroundStyle(DS.Surface.primary)
                 .padding(.top, 14)
 
             Text("Your AI agent is ready. Say hello.")
-                .font(.system(size: 11))
+                .font(DS.Text.caption)
                 .foregroundStyle(AppColors.accent.opacity(0.5))
                 .padding(.top, 4)
 

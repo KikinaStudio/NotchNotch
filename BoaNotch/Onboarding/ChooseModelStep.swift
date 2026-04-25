@@ -28,11 +28,11 @@ struct ChooseModelStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Choose your AI model")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
+                .font(DS.Text.titleSmall)
+                .foregroundStyle(DS.Surface.primary)
 
             Text("You can change this anytime in settings.")
-                .font(.system(size: 10))
+                .font(DS.Text.micro)
                 .foregroundStyle(AppColors.accent.opacity(0.45))
                 .padding(.top, 3)
                 .padding(.bottom, 14)
@@ -46,7 +46,7 @@ struct ChooseModelStep: View {
             }
 
             Text("You can switch models and add your own API keys anytime in settings.")
-                .font(.system(size: 9))
+                .font(DS.Text.nano)
                 .foregroundStyle(AppColors.accent.opacity(0.4))
                 .padding(.top, 6)
 
@@ -77,42 +77,46 @@ struct ChooseModelStep: View {
             HStack(spacing: 10) {
                 // Minimal radio dot
                 Circle()
-                    .fill(isSelected ? .white.opacity(0.8) : .clear)
+                    // TODO(design): radio fill 0.8 hors bucket DS.Surface (entre secondary 0.55 et primary 0.85).
+                    .fill(isSelected ? Color.white.opacity(0.8) : Color.clear)
                     .frame(width: 5, height: 5)
                     .padding(4)
                     .overlay(
                         Circle()
+                            // TODO(design): radio stroke 0.12 (unselected) hors bucket; ternaire conservé en littéral pour cohérence selected/unselected.
                             .stroke(.white.opacity(isSelected ? 0.3 : 0.12), lineWidth: 0.5)
                     )
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(model.name)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(isSelected ? 0.85 : 0.55))
+                        .font(DS.Text.captionMedium)
+                        .foregroundStyle(isSelected ? DS.Surface.primary : DS.Surface.secondary)
 
                     Text(model.description)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .font(DS.Text.nano)
+                        .foregroundStyle(DS.Surface.tertiary)
                 }
 
                 Spacer()
 
                 if let badge = model.badge {
                     Text(badge)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(DS.Text.badge)
                         .textCase(.uppercase)
                         .tracking(0.5)
-                        .foregroundStyle(badge == "Free" ? .green.opacity(0.6) : .white.opacity(0.25))
+                        .foregroundStyle(badge == "Free" ? AnyShapeStyle(Color.green.opacity(0.6)) : DS.Surface.quaternary)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
+                    // TODO(design): card fill 0.06/0.02 hors bucket (DS.Stroke.hairline = 0.06 mais 0.02 pas de token); ternaire conservé pour cohérence.
                     .fill(.white.opacity(isSelected ? 0.06 : 0.02))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
+                    // TODO(design): card stroke 0.12/0.04 hors bucket DS.Surface.
                     .stroke(.white.opacity(isSelected ? 0.12 : 0.04), lineWidth: 0.5)
             )
         }

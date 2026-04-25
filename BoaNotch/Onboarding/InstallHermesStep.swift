@@ -8,8 +8,8 @@ struct InstallHermesStep: View {
             Spacer()
 
             Text("Setting up your AI agent")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
+                .font(DS.Text.titleSmall)
+                .foregroundStyle(DS.Surface.primary)
 
             if onboardingVM.needsGitInstall {
                 gitInstallMessage
@@ -33,17 +33,17 @@ struct InstallHermesStep: View {
     private var gitInstallMessage: some View {
         VStack(spacing: 10) {
             Image(systemName: "wrench.and.screwdriver")
-                .font(.system(size: 22))
+                .font(DS.Icon.large)
                 .foregroundStyle(AppColors.accent.opacity(0.6))
 
             Text("macOS needs to install a small developer tool first.")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.5))
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.secondary)
                 .multilineTextAlignment(.center)
 
             Text("A system popup will appear \u{2014} click Install and wait about 1 minute.")
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.3))
+                .font(DS.Text.micro)
+                .foregroundStyle(DS.Surface.tertiary)
                 .multilineTextAlignment(.center)
 
             SpinningRing()
@@ -56,8 +56,8 @@ struct InstallHermesStep: View {
             SpinningRing()
 
             Text(onboardingVM.installStatus)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.tertiary)
                 .animation(.easeInOut(duration: 0.3), value: onboardingVM.installStatus)
         }
     }
@@ -65,25 +65,28 @@ struct InstallHermesStep: View {
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 18))
+                .font(DS.Icon.primary)
                 .foregroundStyle(.red.opacity(0.5))
 
             Text("Installation failed")
-                .font(.system(size: 12, weight: .medium))
+                .font(DS.Text.labelMedium)
+                // TODO(design): 0.6 hors bucket DS.Surface (entre secondary 0.55 et primary 0.85).
                 .foregroundStyle(.white.opacity(0.6))
 
             ScrollView {
                 Text(error)
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .font(DS.Text.nanoMono)
+                    .foregroundStyle(DS.Surface.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxHeight: 80)
             .padding(8)
+            // TODO(design): error frame fill 0.03 hors bucket DS.Surface (background subtil très spécifique).
             .background(.white.opacity(0.03))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
+                    // TODO(design): error frame stroke 0.05 hors bucket DS.Surface.
                     .stroke(.white.opacity(0.05), lineWidth: 0.5)
             )
 
@@ -97,8 +100,8 @@ struct InstallHermesStep: View {
     private var readyToInstallView: some View {
         VStack(spacing: 10) {
             Text("Preparing installation...")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.35))
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.tertiary)
             SpinningRing()
         }
     }

@@ -450,6 +450,44 @@ hardcoded `.white.opacity(x)` or `.system(size: N)`. Conditional
 ShapeStyle ternaries need `AnyShapeStyle(...)` on both branches to 
 compile.
 
+### Design system policy (DesignSystem.swift)
+
+Single source of truth for all visual tokens: `BoaNotch/DesignSystem.swift`.
+Catalog organized as nested enums under `DS`:
+
+- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `label` 12 / `labelMedium` / `caption` 11 / `captionMedium` / `micro` 10 / `nano` 9. Mono variants: `codeBlock` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium.
+- `DS.Icon.*` — SF Symbol sizes (`hero` 28 / `large` 22 / `primary` 18 / `secondary` 14 / `inline` 13 / `glyph` 12 / `mini` 9 / `chevron` 8 medium / `chevronBold` 8 bold)
+- `DS.Surface.*` — semantic foreground/fill ShapeStyles wrapped in `AnyShapeStyle` (`primary`, `secondary`, `tertiary`, `quaternary`, `separator`)
+- `DS.Stroke.*` — hairline strokes for overlays where fine opacity control is needed (`hairline` 0.06, `lineWidth` 0.5)
+- `DS.Radius.*` — corner radii (`chip` 6, `card` 12)
+- `DS.Spacing.*` — paddings & gaps (`sm` 8, `row` 10, `section` 16)
+- `DS.Hairline.*` — line widths (`standard` 0.5)
+- `DS.Motion.*` — animations (`standard` 0.2s easeInOut)
+
+**Hard rule for any new or modified UI**: use `DS.*` tokens. Do NOT hardcode
+`.system(size: N)`, `.white.opacity(x)`, `cornerRadius: N`, or ad-hoc paddings
+in views. If a needed value is not in the catalog, ADD the token to
+`DesignSystem.swift` first, then use it. Adding a one-off literal in a view is
+the failure mode this catalog exists to prevent.
+
+The v1 catalog is intentionally minimal. Prefer `DS.Surface.*` (native
+ShapeStyles) over `DS.Stroke.*` (explicit `Color.white.opacity`) when a
+semantic ShapeStyle is sufficient — `DS.Stroke` exists only for fine-grained
+stroke control on overlays.
+
+Migration is incremental, zone by zone (Onboarding → MessageBubble → rest).
+A bash check script `scripts/lint-design.sh` lists remaining hardcoded
+`.system(size:)` and `.white.opacity()` outside `DesignSystem.swift`. Output
+format is `file:line:` directly clickable in editors. Run before committing
+UI changes. SwiftLint was tried but requires full Xcode, not available in
+this dev environment — the bash script covers the same two rules with zero
+external dependency.
+
+**ShapeStyle ternaries reminder**: SwiftUI requires `AnyShapeStyle(...)` on
+both branches of a conditional `foregroundStyle`. The `DS.Surface.*` tokens
+already wrap in `AnyShapeStyle` so they compose directly:
+`.foregroundStyle(isActive ? DS.Surface.primary : DS.Surface.secondary)` ✓.
+
 ### Brain pipeline invariants
 - Wiki path: NotchNotch reads `~/.hermes/brain/wiki/`. The llm-wiki Hermes 
   skill defaults to `~/wiki` — setup MUST force the path via 

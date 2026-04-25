@@ -7,8 +7,8 @@ struct PrivacyStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("You're in control")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.88))
+                .font(DS.Text.titleSmall)
+                .foregroundStyle(DS.Surface.primary)
                 .padding(.bottom, 14)
 
             ScrollView(.vertical, showsIndicators: false) {
@@ -34,7 +34,7 @@ struct PrivacyStep: View {
                 NSWorkspace.shared.open(URL(string: "https://hermes-agent.nousresearch.com/docs/reference/security/")!)
             } label: {
                 Text("Learn more about security")
-                    .font(.system(size: 10))
+                    .font(DS.Text.micro)
                     .foregroundStyle(AppColors.accent.opacity(0.7))
             }
             .buttonStyle(.plain)
@@ -52,18 +52,19 @@ struct PrivacyStep: View {
     private func privacyRow(icon: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 13))
+                .font(DS.Icon.inline)
                 .foregroundStyle(AppColors.accent.opacity(0.7))
                 .frame(width: 20, alignment: .center)
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(DS.Text.captionMedium)
+                    // TODO(design): 0.75 hors bucket DS.Surface (entre secondary 0.55 et primary 0.85).
                     .foregroundStyle(.white.opacity(0.75))
                 Text(detail)
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.35))
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
