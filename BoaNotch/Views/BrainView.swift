@@ -307,6 +307,7 @@ struct BrainView: View {
                     }
                 }
             }
+            .scrollClipDisabled()
         }
     }
 
