@@ -436,7 +436,7 @@ struct NotchView: View {
     // MARK: - Burger menu icon button
 
     private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        let size: CGFloat = 14
+        let size: CGFloat = 13
         return Button(action: action) {
             Group {
                 if icon == "call.bell" {

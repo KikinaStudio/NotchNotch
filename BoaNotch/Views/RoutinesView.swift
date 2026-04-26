@@ -407,15 +407,7 @@ struct RoutinesView: View {
                 .buttonStyle(.plain)
                 .pointingHandCursor()
 
-                formField(label: "Name", optional: true) {
-                    TextField("e.g. Morning briefing", text: $formName)
-                        .textFieldStyle(.plain)
-                        .font(.callout)
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
-                }
+                titleHeader
 
                 formField(label: "What should it do?", optional: false) {
                     TextEditor(text: $formPrompt)
@@ -488,6 +480,20 @@ struct RoutinesView: View {
                 .pointingHandCursor()
                 .padding(.top, 4)
             }
+        }
+    }
+
+    private var titleHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            TextField("Name your routine", text: $formName)
+                .textFieldStyle(.plain)
+                .font(DS.Text.title)
+                .foregroundStyle(DS.Surface.primary)
+                .fixedSize(horizontal: true, vertical: false)
+            Image(systemName: "pencil.line")
+                .font(DS.Icon.secondary)
+                .foregroundStyle(DS.Surface.tertiary)
+            Spacer(minLength: 0)
         }
     }
 
