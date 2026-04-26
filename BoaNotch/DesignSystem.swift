@@ -70,6 +70,9 @@ enum DS {
         static let large     = Font.system(size: 22)
         /// 18pt. Icône CTA primaire (send button arrow.up.circle.fill) ou status icon error.
         static let primary   = Font.system(size: 18)
+        /// 13pt hierarchical. Glyph type d'une routine card (silent/digest/alert).
+        /// Discret : la distinction est portée par la forme du glyph, pas la taille.
+        static let routineType = Font.system(size: 13)
         /// 14pt medium. Icônes secondaires (top overlay et input bar). Cf CLAUDE.md "Icon sizing".
         static let secondary = Font.system(size: 14, weight: .medium)
         /// 13pt regular. Icônes inline list rows (privacy bullets).

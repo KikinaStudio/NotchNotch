@@ -33,6 +33,11 @@ class ChatViewModel: ObservableObject {
     /// Title cache for conversation history. Wired by AppDelegate.
     weak var titleStore: TitleStore?
 
+    /// Cron job store. Wired by AppDelegate; used for optimistic UI updates
+    /// when toggling routine pause/resume so the dot flips before Hermes
+    /// rewrites jobs.json.
+    weak var cronStore: CronStore?
+
     var sessionId: String? {
         get { client.sessionId }
         set {
@@ -404,17 +409,17 @@ class ChatViewModel: ObservableObject {
     /// status dot toggle on routine cards must feel instant; routing through
     /// the LLM added 500ms-1s of latency and could be misrouted.
     func setRoutinePaused(_ job: CronJob, paused: Bool) {
+        cronStore?.applyOptimisticPause(jobId: job.id, paused: paused)
         Task { @MainActor in
             do {
                 if paused {
                     try await client.pauseCronJob(id: job.id)
-                    notchVM?.showToast("Routine en pause")
                 } else {
                     try await client.resumeCronJob(id: job.id)
-                    notchVM?.showToast("Routine relancée")
                 }
             } catch {
                 print("[notchnotch] setRoutinePaused error: \(error)")
+                cronStore?.applyOptimisticPause(jobId: job.id, paused: !paused)
                 notchVM?.showToast("Échec — Hermes injoignable")
             }
         }

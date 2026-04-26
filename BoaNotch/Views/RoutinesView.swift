@@ -106,9 +106,6 @@ struct RoutinesView: View {
     private func jobCard(_ job: CronJob) -> some View {
         let hasName = !job.name.isEmpty
         let title = hasName ? job.name : String(job.prompt.prefix(40))
-        let runCount = job.repeat?.completed ?? 0
-        let nextRun = formatNextRun(job.next_run_at)
-        let isAlert = job.deliver == "local"
         let isPaused = job.state == "paused"
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
 
@@ -120,12 +117,20 @@ struct RoutinesView: View {
             return .on
         }()
 
+        let routineType = job.routineType
+
         return Button {
             onSelectJob(job)
         } label: {
             VStack(alignment: .leading, spacing: 10) {
-                // Row 1: title + alert glyph
+                // Row 1: type glyph (silent / digest / alert) + title
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: Self.iconName(for: routineType))
+                        .font(DS.Icon.routineType)
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(AppColors.accent)
+                        .accessibilityLabel(Self.accessibilityLabel(for: routineType))
+
                     Text(title)
                         .font(.callout.weight(.medium))
                         .foregroundStyle(.primary)
@@ -133,13 +138,6 @@ struct RoutinesView: View {
                         .truncationMode(.tail)
 
                     Spacer(minLength: 0)
-
-                    if isAlert {
-                        Image(systemName: "bell.badge.fill")
-                            .font(DS.Icon.caption)
-                            .foregroundStyle(AppColors.accent)
-                            .accessibilityLabel("Alert routine — notifies in the notch")
-                    }
                 }
 
                 // Row 2: description (only when title is distinct from prompt)
@@ -152,39 +150,21 @@ struct RoutinesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                // Row 3: clickable on/off dot + schedule + (counter OR next)
-                HStack(spacing: 6) {
+                // Row 3: failure pill + contextual info line + on/off dot
+                HStack(spacing: 8) {
+                    StatusPill(status: job.routineStatus)
+
+                    Text(footerText(for: job))
+                        .font(DS.Text.caption)
+                        .foregroundStyle(DS.Surface.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
                     StatusDotButton(state: dotState) {
                         onSetPaused?(job, isActive)
                     }
                     .accessibilityLabel(isActive ? "Pause \(title)" : "Resume \(title)")
-
-                    Text(humanSchedule(job.schedule_display))
-                        .font(.caption2.weight(.medium).monospaced())
-                        .foregroundStyle(.secondary)
-                        .tracking(0.3)
-                        .lineLimit(1)
-
-                    Text("·")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-
-                    Group {
-                        if runCount > 0 {
-                            Text("\(runCount) run\(runCount == 1 ? "" : "s")")
-                                .foregroundStyle(.tertiary)
-                        } else if let nextRun {
-                            Text("next: \(nextRun)")
-                                .foregroundStyle(.tertiary)
-                        } else {
-                            Text("not yet run")
-                                .foregroundStyle(.quaternary)
-                        }
-                    }
-                    .font(.caption2)
-                    .lineLimit(1)
-
-                    Spacer(minLength: 0)
                 }
                 .padding(.top, 5)
             }
@@ -202,6 +182,7 @@ struct RoutinesView: View {
             .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
         }
         .buttonStyle(.plain)
+        .help(tooltipText(for: job))
         .onHover { over in hoveredJobId = over ? job.id : nil }
         .pointingHandCursor()
         .contextMenu {
@@ -231,6 +212,65 @@ struct RoutinesView: View {
         }
     }
 
+    // MARK: - Routine type styling
+
+    private static func iconName(for type: RoutineType) -> String {
+        switch type {
+        case .silent: return "eye.fill"
+        case .digest: return "calendar"
+        case .alert:  return "bell.fill"
+        }
+    }
+
+    private static func accessibilityLabel(for type: RoutineType) -> String {
+        switch type {
+        case .silent: return "Silent routine"
+        case .digest: return "Digest routine"
+        case .alert:  return "Alert routine — notifies in the notch"
+        }
+    }
+
+    // MARK: - Footer text
+
+    private func footerText(for job: CronJob) -> String {
+        humanSchedule(job.schedule_display)
+    }
+
+    /// Multi-line content for the native `.help()` tooltip on the pill.
+    /// Phrasing varies by routine type (runs/deliveries/checks) but the
+    /// data shape is identical: count + last_run + next_run + optional error.
+    private func tooltipText(for job: CronJob) -> String {
+        let runs = job.repeat?.completed ?? 0
+        let lastRel = relativeTime(job.last_run_at)
+        let nextRel = relativeTime(job.next_run_at)
+
+        let (countNoun, lastLabel, nextLabel): (String, String, String) = {
+            switch job.routineType {
+            case .silent: return ("runs", "Last run", "Next run")
+            case .digest: return ("deliveries", "Last", "Next")
+            case .alert:  return ("checks", "Last check", "Next check")
+            }
+        }()
+
+        var lines: [String] = []
+        if runs > 0 { lines.append("\(runs) \(countNoun)") }
+        if let lastRel { lines.append("\(lastLabel): \(lastRel)") }
+        if let nextRel { lines.append("\(nextLabel): \(nextRel)") }
+
+        if job.routineStatus == .failed, let err = job.last_error, !err.isEmpty {
+            lines.insert("Error: \(err)", at: 0)
+        }
+
+        return lines.isEmpty ? "No data yet" : lines.joined(separator: "\n")
+    }
+
+    private func relativeTime(_ iso: String?) -> String? {
+        guard let date = parseISO(iso) else { return nil }
+        let fmt = RelativeDateTimeFormatter()
+        fmt.unitsStyle = .short
+        return fmt.localizedString(for: date, relativeTo: Date())
+    }
+
     private func parseISO(_ string: String?) -> Date? {
         guard let string else { return nil }
         let f = ISO8601DateFormatter()
@@ -238,17 +278,6 @@ struct RoutinesView: View {
         if let d = f.date(from: string) { return d }
         f.formatOptions = [.withInternetDateTime]
         return f.date(from: string)
-    }
-
-    private func formatNextRun(_ string: String?) -> String? {
-        guard let date = parseISO(string) else { return nil }
-        let fmt = DateFormatter()
-        if Calendar.current.isDateInToday(date) {
-            fmt.dateFormat = "h:mm a"
-        } else {
-            fmt.dateFormat = "MMM d"
-        }
-        return fmt.string(from: date)
     }
 
     private func humanSchedule(_ raw: String) -> String {
@@ -676,3 +705,35 @@ struct RoutinesView: View {
         }
     }
 }
+
+// MARK: - StatusPill
+
+/// Compact failure chip shown bottom-leading on a routine card when its
+/// last run reported a non-ok status. Renders nothing for `.nominal` /
+/// `.paused` (paused is already conveyed by the toggle dot + 50% card opacity).
+struct StatusPill: View {
+    let status: RoutineStatus
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(.white)
+                .frame(width: 5, height: 5)
+            Text(label)
+                .font(DS.Text.microMedium)
+                .foregroundStyle(DS.Surface.secondary)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(DS.Surface.quaternary))
+    }
+
+    private var label: String {
+        switch status {
+        case .nominal: return "active"
+        case .failed:  return "failed"
+        case .paused:  return "paused"
+        }
+    }
+}
+

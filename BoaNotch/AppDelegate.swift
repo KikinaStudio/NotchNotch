@@ -35,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         chatVM.notchVM = notchVM
         chatVM.audioRecorder = audioRecorder
         chatVM.titleStore = titleStore
+        chatVM.cronStore = cronStore
         // Note: do NOT hijack chatVM.sessionId from sessionStore.selectedSessionId.
         // That used to merge every NotchNotch chat into the Telegram session,
         // producing one giant 268-message blob. The HermesClient now owns its
