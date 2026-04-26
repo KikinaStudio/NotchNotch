@@ -197,6 +197,12 @@ MIT
 
 ---
 
+## Acknowledgements
+
+- Routines icon: `call-bell` from [Phosphor Icons](https://phosphoricons.com/), licensed under MIT.
+
+---
+
 <details>
 <summary><strong>Technical documentation</strong> (for contributors)</summary>
 

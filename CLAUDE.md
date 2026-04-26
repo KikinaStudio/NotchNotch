@@ -29,9 +29,15 @@ Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes
   Surface assumptions, confirm signatures, list impacted files, THEN code.
 - Match the signature style of existing callbacks in the same file 
   (e.g. `{ _, newValue in }` in `.onChange` if that's the local pattern)
-- Honor the "everything through chat" principle: NotchNotch sends natural-
-  language messages to Hermes via `sendCompletion`, never calls Hermes's 
-  skill/cron/config APIs directly. This keeps coupling thin as Hermes evolves.
+- Prefer chat for actions that need LLM judgment or free-form input 
+  (config edits, brain pipeline setup, multi-step changes, deletions that 
+  warrant a confirmation). Prefer **structured UI + direct REST** when 
+  Hermes exposes a deterministic endpoint and the data has a fixed shape — 
+  the user explicitly chose this for routine editing (2026-04-26) because 
+  chat-driven edits hid *what* was editable. Each direct-REST call must 
+  be listed under "Documented exception" with rationale. Current set: 
+  cron pause / resume / edit (see below). Do not silently add new 
+  exceptions — write the doc edit in the same diff.
 
 ### After
 - `git log --oneline -N` to verify commits match the stated scope
@@ -107,7 +113,7 @@ Per Google's Desktop OAuth docs the client secret isn't cryptographically secret
 - `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
 - `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` separator into `[MemoryBlock]` (title + category extracted from first bold label, dash-prefix, or heading — falls back to `Généralités`). `MemoryBlock.id` is a 16-char SHA-256 content hash (whitespace-normalized via `contentHashId(for:)`) so IDs survive small formatting edits. `memoryCategories: [MemoryCategoryGroup]` groups `allMemoryBlocks` (USER.md + MEMORY.md) by category with `localizedStandardCompare` sort and `Généralités` sunk to the bottom. Scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`. Checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each) and computes `wikiLastUpdated` from file modification dates via `computeWikiLastUpdated()`. `SkillInfo`, `MemoryBlock`, `MemoryCategoryGroup`, `MemorySource`, and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a full refresh and ends with `refreshLightMetrics()`. **Light metrics (cheap to recompute)**: `refreshLightMetrics()` updates `pendingRawCount` (via `countPendingRawFiles()`) and `wikiLastUpdated` without touching memory/skills/wiki article arrays — safe to call on a 60s timer. `countPendingRawFiles()` recurses `~/.hermes/brain/raw/{articles,papers,transcripts}` (skips `assets/` and any subdir not in that allow-list), filters by `mtime > ~/.hermes/brain/wiki/log.md.mtime` (if `log.md` is absent, every raw file counts as pending). `isIngesting: Bool` is toggled by the Wiki tab's sync button. Lint-report integration is stubbed with a `TODO:` before `loadWiki()` — deferred until `.lint-report.json` format is stable. All FileManager reads, no network calls.
 - `BrainView.swift` — Three-tab panel (Memory, Skills, Wiki) for browsing Hermes knowledge. Tab bar uses text-only buttons (no background): semibold primary for the active tab, tertiary for others — spacing 16 between tabs. Each tab opens with a short French italic `tabIntro(_:)` one-liner explaining the section for non-technical users. **Memory tab**: two-level drill-down. Screen 1 lists `memoryCategories` as hairline-dividered rows with count + chevron. Screen 2 (spring `.move(edge: .trailing)`) shows that category's `MemoryCard` rows with a back chevron. Each `MemoryCard` reveals pencil + trash icons on hover: pencil → inline `TextEditor` (Save ⌘↩ / Cancel), trash → inline "Supprimer ?" confirm. Edits/deletes go through `chatVM.updateMemory` / `deleteMemory` — see "Brain edit/delete pattern". After either, `scheduleBrainReload()` fires `brainVM.reload()` 5s later. `.onChange(of: brainVM.allMemoryBlocks.map(\.id))` guards stale `selectedMemoryCategory` after a delete empties the last category. Skills tab lists installed skills with uppercase tracked-mono category prefix in accent, title+description, dividered rows (no card background), chevron affordance. Wiki tab (hidden when no wiki directory exists) shows a French-localised dashboard with topic count, last-ingestion timestamp, a sync button, and "Ask" buttons — tapping an Ask sends a question to Hermes via `onSendToChat` (no article content preview). Refresh button reloads all sections. Calls `brainVM.refreshLightMetrics()` on appear and every 60 seconds via `Timer.publish(every: 60, on: .main, in: .common).autoconnect()` through `.onReceive`. Takes `chatVM` and `notchVM` so inline memory edits can route through `sendCompletion`.
-- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. Burger menu icons (left → right, when expanded): `bubble.left.and.bubble.right` (history), `magnifyingglass` (search), `flag.checkered` (routines), `books.vertical` (brain), `gearshape` (settings). `menuButton()` helper renders each — uses `.symbolVariant(active ? .fill : .none)` so SF Symbols with a `.fill` variant (`bubble.left.and.bubble.right`, `books.vertical`, `gearshape`) render filled when their panel is active; icons without a `.fill` variant (`magnifyingglass`, `flag.checkered`) stay outline but tinted `AppColors.accent`. When a panel is open, the overlay shows an xmark close button instead. **Sticky burger hover**: while the cursor stays inside the expanded menu area, `cancelMenuCollapse()` keeps it open; on cursor exit, `scheduleMenuCollapse(after: 0.6)` runs a short grace timer so a brief excursion doesn't slam the menu shut. **Top bar opacity rules**: au repos `plus.bubble`, burger fermé et resize sont à 20% (`Color.white.opacity(0.20)` inline — en-dessous de `DS.Surface.quaternary` à 24%). `plus.bubble` et resize ont chacun leur propre `@State hover` (`hoverNewConvo`, `hoverResize`) qui les fait passer à `.secondary` (~55%) sur hover individuel — ils ne réagissent PAS au déploiement du burger. Le burger/xmark + les action icons suivent au contraire `isDeployed` (= `isMenuExpanded || isAnyPanelOpen`) : passent à `.secondary` quand le cluster est hovered ou qu'un panneau est ouvert. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons. Also hosts the first-run brain onboarding sheet — see "Brain onboarding" section below.
+- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). Left side: `plus.bubble` new conversation button (visible when no panel is open). Right side: burger menu — on hover the burger (`line.3.horizontal`) expands into action icons (history, search, routines, brain, settings) that fan out to the left via a ZStack with opacity/offset animation. All views stay in the hierarchy, no conditional insertion/removal. Burger menu icons (left → right, when expanded): `bubble.left.and.bubble.right` (history), `magnifyingglass` (search), `call.bell` (routines, custom SVG pair), `books.vertical` (brain), `gearshape` (settings). `menuButton()` helper renders each — uses `.symbolVariant(active ? .fill : .none)` so SF Symbols with a `.fill` variant (`bubble.left.and.bubble.right`, `books.vertical`, `gearshape`) render filled when their panel is active; `magnifyingglass` has no `.fill` variant so it stays outline but tinted `AppColors.accent`. **`call.bell` is a custom outline+filled SVG pair from Phosphor Icons (MIT)** bundled in `Resources/` — `actool` requires full Xcode (this project ships only Command Line Tools), so we bypass `Assets.car` and load the two SVGs via `NSImage(contentsOf:)` with `isTemplate = true`. The `menuButton` helper branches on `icon == "call.bell"` and swaps between `callBellImage` / `callBellFillImage` based on `active`. Frame is bumped 1.35× because the SVG viewBox has more padding than SF Symbol metrics at 14pt — if you change the source SVG, re-tune this multiplier visually. When a panel is open, the overlay shows an xmark close button instead. **Sticky burger hover**: while the cursor stays inside the expanded menu area, `cancelMenuCollapse()` keeps it open; on cursor exit, `scheduleMenuCollapse(after: 0.6)` runs a short grace timer so a brief excursion doesn't slam the menu shut. **Top bar opacity rules**: au repos `plus.bubble`, burger fermé et resize sont à 20% (`Color.white.opacity(0.20)` inline — en-dessous de `DS.Surface.quaternary` à 24%). `plus.bubble` et resize ont chacun leur propre `@State hover` (`hoverNewConvo`, `hoverResize`) qui les fait passer à `.secondary` (~55%) sur hover individuel — ils ne réagissent PAS au déploiement du burger. Le burger/xmark + les action icons suivent au contraire `isDeployed` (= `isMenuExpanded || isAnyPanelOpen`) : passent à `.secondary` quand le cluster est hovered ou qu'un panneau est ouvert. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons. Also hosts the first-run brain onboarding sheet — see "Brain onboarding" section below.
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
@@ -258,7 +264,7 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 
 **Template browser** — `TemplateBrowserView` provides a three-screen drill-down replacing the old 4-card starter templates. Screen 1: 7 category rows (Personal, Professional, Research, Travel, Health, Finance, Creator) with SF Symbol icons, template counts, and a "Create your own" row at the bottom. Screen 2: template list for the selected category. Screen 3: form with structured inputs (text fields, capsule picker buttons, number fields, file pickers via NSOpenPanel) and a "Create routine" button. Navigation uses `@State` — resets to categories each time the panel reopens. Transitions: `.asymmetric(.move)` with spring animation.
 
-**Template data** — `RoutineTemplates.swift` defines 25 templates across 7 categories (`RoutineCategory.all`). Each `RoutineTemplate` has a `promptTemplate` with `{{placeholder}}` tokens and `[TemplateInput]` describing the form fields. `composeDraft(values:)` substitutes placeholders and prepends `"Schedule a new routine running <schedule>, delivered via <deliver>."` — producing a natural-language string that Hermes parses via its `cronjob(action="create", ...)` tool. NotchNotch never calls the cron API directly.
+**Template data** — `RoutineTemplates.swift` defines 25 templates across 7 categories (`RoutineCategory.all`). Each `RoutineTemplate` has a `promptTemplate` with `{{placeholder}}` tokens and `[TemplateInput]` describing the form fields. `composeDraft(values:)` substitutes placeholders and prepends `"Schedule a new routine running <schedule>, delivered via <deliver>."` — producing a natural-language string that Hermes parses via its `cronjob(action="create", ...)` tool. *Creation* still composes a natural-language draft for the `cronjob` tool; *edit*, *pause*, and *resume* go through direct REST (see Documented exceptions). *Removal* still goes through chat for now.
 
 **Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the job list with a "Browse templates" link at the bottom (toggles `@State showingBrowser`).
 
@@ -635,7 +641,7 @@ See `GoogleOAuthService.swift` for the 8-scope set and `setup.py` in
 `~/.hermes/skills/productivity/google-workspace/scripts/` for the downstream 
 consumer.
 
-**Documented exception — cron pause/resume direct REST**: `HermesClient.pauseCronJob(id:)` 
+**Documented exception — cron pause/resume/edit direct REST**: `HermesClient.pauseCronJob(id:)` 
 and `resumeCronJob(id:)` POST to `localhost:8642/api/jobs/{id}/pause` 
 and `/resume` (defined at `~/.hermes/hermes-agent/gateway/platforms/api_server.py:2048-2084`), 
 bypassing chat. Note: the path is `/api/jobs/...` (NOT `/api/cron/jobs/...` — 
@@ -653,8 +659,34 @@ message every time the user toggled a routine. CronStore's DispatchSource
 on `jobs.json` picks up the change automatically — no client-side state 
 mutation needed. 
 
-Other cron operations (create, update schedule, remove) **still go 
-through chat** because they need user input or confirmation.
+`HermesClient.updateCronJob(id:patch:)` PATCHes `localhost:8642/api/jobs/{id}` 
+with a JSON body of `{name?, prompt?, schedule?, deliver?, enabled?}` — 
+defined at `~/.hermes/hermes-agent/gateway/platforms/api_server.py:1997` 
+(allowed-fields whitelist `_UPDATE_ALLOWED_FIELDS` at `:1892`). Wired to 
+the routine card's tap (single click opens a pre-filled creation form, 
+2026-04-26): `RoutinesView.applyJobToForm` reads `schedule.expr` (the 
+canonical cron string — we expanded `CronJobSchedule` to decode it; 
+`schedule_display` is sometimes humanized and not a safe truth source) 
+and reverse-parses via `parseCron(_:)` into the form's structured state. 
+The form recognizes `M H * * *`, `M H * * 1-5`, `M H * * d1,d2,…`, 
+`M H D * *` (D ≤ 28), and `0 */N * * *` (N ∈ {1,2,3,4,6,12}) — 
+everything else (sub-hourly intervals, ranges, multi-day-of-month, 
+`month != *`, `kind != "cron"` like `every 90m`) falls back to a 
+read-only schedule chip + "Édite cette routine via le chat" hint while 
+keeping name/prompt/deliver editable. `ChatViewModel.updateRoutine` 
+assembles a *minimal* patch: each field is included only when it 
+actually changed, so unknown deliver values (`origin`, `email`, custom 
+platforms) survive untouched even though they map to the "Notch" pill 
+on read. Same rationale as pause/resume: deterministic, model-agnostic, 
+no chat noise. Tap behavior changed in tandem — the old "pull routine 
+into chat as system context" behavior moved to a right-click menu item 
+("Talk about this routine"); single tap = edit, single click on the 
+status dot = pause/resume.
+
+Other cron operations (create, remove) **still go through chat** — 
+creation because the prompt is the *content* of the routine and 
+benefits from LLM phrasing, removal because deleting work warrants a 
+confirmation step.
 
 ## 1. Think Before Coding
 

@@ -10,9 +10,13 @@ struct RoutinesView: View {
     var onDraftAction: ((String, Bool) -> Void)? = nil
     var onCreateCustomRoutine: ((String) -> Void)? = nil
     var onSetPaused: ((CronJob, Bool) -> Void)? = nil
+    var onUpdateRoutine: ((String, [String: Any]) -> Void)? = nil
 
     @State private var showingBrowser = false
     @State private var showingCustomForm = false
+    @State private var editingJob: CronJob? = nil
+    @State private var scheduleEditable: Bool = true
+    @State private var rawCronFallback: String = ""
     @State private var hoveredJobId: String?
     @State private var hoveredAddCard = false
 
@@ -120,7 +124,7 @@ struct RoutinesView: View {
         let routineType = job.routineType
 
         return Button {
-            onSelectJob(job)
+            enterEditMode(job)
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 // Row 1: type glyph (silent / digest / alert) + title
@@ -187,10 +191,9 @@ struct RoutinesView: View {
         .pointingHandCursor()
         .contextMenu {
             Button {
-                let name = job.name.isEmpty ? String(job.prompt.prefix(30)) : job.name
-                onDraftAction?("Change the schedule of \"\(name)\" to ", false)
+                onSelectJob(job)
             } label: {
-                Label("Change schedule", systemImage: "clock")
+                Label("Talk about this routine", systemImage: "bubble.left")
             }
 
             Button {
@@ -383,18 +386,20 @@ struct RoutinesView: View {
     // MARK: - Custom form
 
     private var customForm: some View {
-        FadingScrollView {
+        let isEditing = editingJob != nil
+        return FadingScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 // Back button
                 Button {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         showingCustomForm = false
                     }
+                    editingJob = nil
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.caption2.weight(.bold))
-                        Text("New routine")
+                        Text(isEditing ? "Edit routine" : "New routine")
                             .font(.caption.weight(.medium))
                     }
                     .foregroundStyle(.secondary)
@@ -424,7 +429,11 @@ struct RoutinesView: View {
                 }
 
                 formField(label: "When?", optional: false) {
-                    scheduleSection
+                    if scheduleEditable {
+                        scheduleSection
+                    } else {
+                        advancedScheduleNotice
+                    }
                 }
 
                 formField(label: "Deliver to", optional: false) {
@@ -459,9 +468,9 @@ struct RoutinesView: View {
                 }
 
                 Button {
-                    submitCustomRoutine()
+                    submit()
                 } label: {
-                    Text("Create routine")
+                    Text(isEditing ? "Save changes" : "Create routine")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(customFormValid ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .frame(maxWidth: .infinity)
@@ -479,6 +488,27 @@ struct RoutinesView: View {
                 .pointingHandCursor()
                 .padding(.top, 4)
             }
+        }
+    }
+
+    private var advancedScheduleNotice: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.badge.questionmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(rawCronFallback)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
+
+            Text("Édite cette routine via le chat — son planning n'est pas modifiable ici.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 
@@ -685,24 +715,184 @@ struct RoutinesView: View {
         selectedWeekdays = [1]
         dayOfMonth = 1
         intervalHours = 2
+        editingJob = nil
+        scheduleEditable = true
+        rawCronFallback = ""
     }
 
-    private func submitCustomRoutine() {
+    // MARK: - Submission
+
+    private func submit() {
         guard customFormValid else { return }
+        if let job = editingJob {
+            submitEdit(job)
+        } else {
+            submitCreate()
+        }
+    }
+
+    private func submitCreate() {
         let name = formName.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let deliverKey = formDeliver == "Notch" ? "local" : formDeliver.lowercased()
+        let deliver = deliverKey(for: formDeliver)
 
         var headerParts: [String] = ["Create a new routine"]
         if !name.isEmpty { headerParts.append("named \"\(name)\"") }
         headerParts.append("running on cron schedule \(composedCron)")
-        headerParts.append("delivered via \(deliverKey)")
+        headerParts.append("delivered via \(deliver)")
         let draft = headerParts.joined(separator: " ") + ".\n\nThe routine should: \(prompt)"
 
         onCreateCustomRoutine?(draft)
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
             showingCustomForm = false
         }
+    }
+
+    private func submitEdit(_ job: CronJob) {
+        var patch: [String: Any] = [:]
+        let trimmedName = formName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPrompt = formPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedName != job.name { patch["name"] = trimmedName }
+        if trimmedPrompt != job.prompt { patch["prompt"] = trimmedPrompt }
+
+        let newDeliver = deliverKey(for: formDeliver)
+        let originalDeliver = (job.deliver ?? "local").lowercased()
+        // Only send deliver when the user moved to a *different* pill. This
+        // keeps unknown delivers ("origin", "email", custom platforms) intact
+        // — they map to the "Notch" pill on read but we don't overwrite them
+        // unless the user actually picks a new one.
+        let originalPill = deliverPillName(for: job.deliver)
+        if formDeliver != originalPill, newDeliver != originalDeliver {
+            patch["deliver"] = newDeliver
+        }
+
+        if scheduleEditable {
+            let newCron = composedCron
+            let originalCron = job.schedule.expr ?? job.schedule_display
+            if newCron != originalCron { patch["schedule"] = newCron }
+        }
+
+        onUpdateRoutine?(job.id, patch)
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            showingCustomForm = false
+        }
+        editingJob = nil
+    }
+
+    // MARK: - Edit-mode entry
+
+    private func enterEditMode(_ job: CronJob) {
+        applyJobToForm(job)
+        editingJob = job
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            showingCustomForm = true
+        }
+    }
+
+    private func applyJobToForm(_ job: CronJob) {
+        formName = job.name
+        formPrompt = job.prompt
+        formDeliver = deliverPillName(for: job.deliver)
+
+        let cron = job.schedule.expr ?? job.schedule_display
+        if job.schedule.kind == "cron", let parsed = Self.parseCron(cron) {
+            scheduleFrequency = parsed.frequency
+            scheduleTime = parsed.time
+            selectedWeekdays = parsed.weekdays
+            dayOfMonth = parsed.dayOfMonth
+            intervalHours = parsed.intervalHours
+            scheduleEditable = true
+            rawCronFallback = ""
+        } else {
+            scheduleEditable = false
+            rawCronFallback = cron
+        }
+    }
+
+    // MARK: - Deliver mapping
+
+    private func deliverKey(for pill: String) -> String {
+        pill == "Notch" ? "local" : pill.lowercased()
+    }
+
+    private func deliverPillName(for deliver: String?) -> String {
+        switch (deliver ?? "local").lowercased() {
+        case "local", "origin": return "Notch"
+        case "telegram":        return "Telegram"
+        case "discord":         return "Discord"
+        case "slack":           return "Slack"
+        default:                return "Notch"
+        }
+    }
+
+    // MARK: - Cron parser (inverse of composedCron)
+
+    private struct ParsedSchedule {
+        let frequency: ScheduleFrequency
+        let time: Date
+        let weekdays: Set<Int>
+        let dayOfMonth: Int
+        let intervalHours: Int
+    }
+
+    /// Maps a 5-field cron expression back into form state. Returns nil when the
+    /// expression doesn't match one of the patterns the form generates today
+    /// (anything else falls back to the read-only schedule notice). Recognized:
+    ///   "M H * * *"        → daily
+    ///   "M H * * 1-5"      → weekdays
+    ///   "M H * * d1,d2,…"  → weekly (indices 0-6, Sun-Sat)
+    ///   "M H D * *"        → monthly (D in 1…28)
+    ///   "0 */N * * *"      → hourly (N in {1,2,3,4,6,12})
+    private static func parseCron(_ raw: String) -> ParsedSchedule? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let parts = trimmed.split(separator: " ").map(String.init)
+        guard parts.count == 5 else { return nil }
+        let (minute, hour, dom, month, dow) = (parts[0], parts[1], parts[2], parts[3], parts[4])
+        guard month == "*" else { return nil }
+
+        let presetIntervals: Set<Int> = [1, 2, 3, 4, 6, 12]
+        // "0 */N * * *" → hourly
+        if minute == "0", hour.hasPrefix("*/"), dom == "*", dow == "*" {
+            guard let n = Int(hour.dropFirst(2)), presetIntervals.contains(n) else { return nil }
+            return ParsedSchedule(
+                frequency: .hourly,
+                time: defaultScheduleTime(),
+                weekdays: [1],
+                dayOfMonth: 1,
+                intervalHours: n
+            )
+        }
+
+        // Time-based forms require numeric minute + hour.
+        guard let h = Int(hour), let m = Int(minute), (0..<24).contains(h), (0..<60).contains(m) else {
+            return nil
+        }
+        let time = Calendar.current.date(bySettingHour: h, minute: m, second: 0, of: Date())
+            ?? defaultScheduleTime()
+
+        // Daily: "M H * * *"
+        if dom == "*", dow == "*" {
+            return ParsedSchedule(frequency: .daily, time: time, weekdays: [1], dayOfMonth: 1, intervalHours: 2)
+        }
+
+        // Weekdays: "M H * * 1-5"
+        if dom == "*", dow == "1-5" {
+            return ParsedSchedule(frequency: .weekdays, time: time, weekdays: [1, 2, 3, 4, 5], dayOfMonth: 1, intervalHours: 2)
+        }
+
+        // Weekly: "M H * * d1,d2,…"
+        if dom == "*" {
+            let days = dow.split(separator: ",").compactMap { Int($0) }.filter { (0..<7).contains($0) }
+            guard !days.isEmpty, days.count == dow.split(separator: ",").count else { return nil }
+            return ParsedSchedule(frequency: .weekly, time: time, weekdays: Set(days), dayOfMonth: 1, intervalHours: 2)
+        }
+
+        // Monthly: "M H D * *"
+        if dow == "*", let d = Int(dom), (1...28).contains(d) {
+            return ParsedSchedule(frequency: .monthly, time: time, weekdays: [1], dayOfMonth: d, intervalHours: 2)
+        }
+
+        return nil
     }
 }
 

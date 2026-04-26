@@ -425,6 +425,23 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// Edit a cron job's name / prompt / schedule / deliver via the Hermes REST
+    /// endpoint. CronStore's file watcher reconciles the UI ~500ms after the
+    /// successful PATCH — same eventual-consistency pattern as memory edits.
+    /// Skip empty patches (no-op submit).
+    func updateRoutine(jobId: String, patch: [String: Any]) {
+        guard !patch.isEmpty else { return }
+        Task { @MainActor in
+            do {
+                try await client.updateCronJob(id: jobId, patch: patch)
+                notchVM?.showToast("Routine modifiée")
+            } catch {
+                print("[notchnotch] updateRoutine error: \(error)")
+                notchVM?.showToast("Échec — Hermes injoignable")
+            }
+        }
+    }
+
     func setRoutineContext(_ job: CronJob) {
         activeRoutineContext = job
     }

@@ -469,6 +469,37 @@ class HermesClient {
         try await postCronAction(id: id, action: "resume")
     }
 
+    /// Update a cron job via the Hermes gateway's REST endpoint, bypassing chat.
+    /// Defined in `~/.hermes/hermes-agent/gateway/platforms/api_server.py:1997`.
+    /// Allowed fields: name, schedule, prompt, deliver, enabled (others are dropped
+    /// server-side — see `_UPDATE_ALLOWED_FIELDS` at line 1892). Schedule is sent
+    /// as a plain cron string ("0 9 * * *") and the server normalizes via
+    /// `parse_schedule()` and recomputes `next_run_at`.
+    /// Caller is responsible for assembling `patch` — only include keys that
+    /// actually changed. Same rationale as pauseCronJob: deterministic,
+    /// model-agnostic, no chat noise.
+    func updateCronJob(id: String, patch: [String: Any]) async throws {
+        guard let encodedId = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(baseURL)/api/jobs/\(encodedId)") else {
+            throw HermesError.invalidURL
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: patch)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
+        }
+    }
+
     private func postCronAction(id: String, action: String) async throws {
         guard let encodedId = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "\(baseURL)/api/jobs/\(encodedId)/\(action)") else {

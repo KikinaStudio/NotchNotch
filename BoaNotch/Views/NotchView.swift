@@ -214,6 +214,8 @@ struct NotchView: View {
                                     chatVM.createRoutine(draft: draft)
                                 }, onSetPaused: { job, paused in
                                     chatVM.setRoutinePaused(job, paused: paused)
+                                }, onUpdateRoutine: { id, patch in
+                                    chatVM.updateRoutine(jobId: id, patch: patch)
                                 })
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
@@ -297,7 +299,7 @@ struct NotchView: View {
                                     notchVM.collapseMenu()
                                 }
                             }
-                            menuButton("flag.checkered", active: notchVM.isRoutinesOpen) {
+                            menuButton("call.bell", active: notchVM.isRoutinesOpen) {
                                 if notchVM.isRoutinesOpen {
                                     notchVM.closeAllPanels()
                                 } else {
@@ -436,14 +438,39 @@ struct NotchView: View {
     private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
         let size: CGFloat = 14
         return Button(action: action) {
-            Image(systemName: icon)
-                .symbolVariant(active ? .fill : .none)
-                // TODO(design): poids conditionnel actif=semibold/inactif=medium ; DS.Icon.secondary fixe medium, on garde le ternaire pour l'affordance d'état
-                .font(.system(size: size, weight: active ? .semibold : .medium))
-                .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
+            Group {
+                if icon == "call.bell" {
+                    // Bundled SVG (Phosphor Icons, MIT) — outline + filled pair to mimic SF Symbol .symbolVariant.
+                    // Frame is bumped 1.35× because the SVG viewBox has more padding than SF Symbol metrics at 14pt.
+                    (active ? Self.callBellFillImage : Self.callBellImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size * 1.35, height: size * 1.35)
+                } else {
+                    Image(systemName: icon)
+                        .symbolVariant(active ? .fill : .none)
+                        // TODO(design): poids conditionnel actif=semibold/inactif=medium ; DS.Icon.secondary fixe medium, on garde le ternaire pour l'affordance d'état
+                        .font(.system(size: size, weight: active ? .semibold : .medium))
+                }
+            }
+            .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
+    }
+
+    // Custom-symbol pair loaded from bundled template SVGs (actool needs full Xcode, project ships
+    // only Command Line Tools — so we bypass Assets.car and use NSImage isTemplate for tinting).
+    private static let callBellImage: Image = loadTemplateSVG("call.bell")
+    private static let callBellFillImage: Image = loadTemplateSVG("call.bell.fill")
+
+    private static func loadTemplateSVG(_ name: String) -> Image {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "svg"),
+              let nsImage = NSImage(contentsOf: url) else {
+            return Image(systemName: "bell")
+        }
+        nsImage.isTemplate = true
+        return Image(nsImage: nsImage).renderingMode(.template)
     }
 
     // MARK: - Settings top bar spacer (buttons moved to flanking overlay)

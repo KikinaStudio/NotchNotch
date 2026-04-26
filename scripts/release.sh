@@ -37,6 +37,7 @@ cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
 cp BoaNotch/Resources/*.png "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.icns "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.json "$APP_DIR/Resources/" 2>/dev/null || true
+cp BoaNotch/Resources/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 
 # Note: no SPM resource bundle copy. All resources load via Bundle.main
 # from Contents/Resources. Putting the SPM bundle inside the .app breaks

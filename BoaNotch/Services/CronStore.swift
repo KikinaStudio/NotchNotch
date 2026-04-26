@@ -7,6 +7,8 @@ struct CronJobRepeat: Codable {
 
 struct CronJobSchedule: Codable {
     let kind: String
+    let expr: String?
+    let display: String?
 }
 
 struct CronJobOrigin: Codable {
