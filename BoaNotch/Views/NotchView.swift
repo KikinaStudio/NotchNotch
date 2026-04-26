@@ -281,7 +281,7 @@ struct NotchView: View {
                     Spacer(minLength: 8)
 
                     // Right cluster: action icons (when deployed) + burger/X + resize
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         if isDeployed {
                             menuButton("bubble.left.and.bubble.right", active: notchVM.isHistoryOpen) {
                                 if notchVM.isHistoryOpen {
