@@ -399,7 +399,7 @@ struct SettingsView: View {
             Text(label)
                 // TODO(design): poids conditionnel actif=semibold/inactif=medium pour affordance d'état segmenté
                 .font(DS.Text.caption.weight(isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? AnyShapeStyle(Color.white) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isSelected ? AnyShapeStyle(Color.black.opacity(0.85)) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
                 .background {
