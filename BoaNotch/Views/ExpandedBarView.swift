@@ -110,25 +110,47 @@ struct ExpandedBarView: View {
 
             Spacer()
 
-            // Context window usage
-            if chatVM.lastInputTokens > 0 {
-                Text(formatTokenCount(chatVM.lastInputTokens))
-                    .font(.caption2.monospaced())
+            // Context window usage gauge
+            let rawRatio = min(Double(chatVM.lastInputTokens) / Double(contextWindowLimit), 1.0)
+            let color: Color = rawRatio >= 0.90 ? .red : (rawRatio >= 0.70 ? .orange : AppColors.accent)
+            let pct = Int(rawRatio * 100)
+            let trackWidth: CGFloat = 120
+            let innerWidth = trackWidth - 4
+            let visibleRatio = chatVM.lastInputTokens > 0 ? max(rawRatio, 0.05) : 0
+            HStack(spacing: 6) {
+                Text("Contexte")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                    .frame(width: trackWidth, height: 8)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(color)
+                            .frame(width: innerWidth * visibleRatio, height: 4)
+                            .padding(.leading, 2)
+                    }
             }
+            .help("\(chatVM.lastInputTokens) tokens · \(pct)% du contexte")
+            .accessibilityLabel("Contexte utilisé : \(pct) pour cent")
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .background(RoundedRectangle(cornerRadius: 6).fill(.quinary))
     }
 
-    private func formatTokenCount(_ count: Int) -> String {
-        if count >= 1_000_000 {
-            return String(format: "%.1fM", Double(count) / 1_000_000)
-        } else if count >= 1_000 {
-            return String(format: "%.1fk", Double(count) / 1_000)
-        }
-        return "\(count)"
+    private var contextWindowLimit: Int {
+        let m = config.modelDefault.lowercased()
+        if m.contains("claude") { return 200_000 }
+        if m.contains("gpt-4o") || m.contains("gpt-4.1") { return 128_000 }
+        if m.contains("gpt-5") || m.contains("o1") || m.contains("o3") { return 200_000 }
+        if m.contains("gemini") { return 1_000_000 }
+        if m.contains("nemotron") || m.contains("llama") { return 128_000 }
+        if m.contains("minimax") { return 200_000 }
+        if m.contains("deepseek") { return 128_000 }
+        if m.contains("qwen") { return 128_000 }
+        if m.contains("mistral") { return 128_000 }
+        return 128_000
     }
 
     private func shortLabel(_ level: String) -> String {
