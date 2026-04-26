@@ -12,7 +12,6 @@ No terminal. No API keys to find. No config files. notchnotch installs Hermes fo
 
 ![macOS](https://img.shields.io/badge/macOS-14%2B-black?logo=apple)
 ![Swift](https://img.shields.io/badge/Swift-5.9-orange?logo=swift)
-![Version](https://img.shields.io/badge/version-0.8.0-violet)
 
 <p align="center">
   <picture>
@@ -392,7 +391,7 @@ This script:
 3. Signs with ad-hoc certificate (`codesign --force --deep --sign -`)
 4. Creates a DMG via `create-dmg` (install with `brew install create-dmg`) or `hdiutil` fallback
 
-Output: `.build/notchnotch-v0.8.0.dmg`
+Output: `.build/notchnotch-vX.Y.Z.dmg`
 
 ### Publishing a release
 
@@ -401,12 +400,12 @@ Output: `.build/notchnotch-v0.8.0.dmg`
 bash scripts/release.sh
 
 # 2. Create a GitHub Release
-gh release create v0.8.0 .build/notchnotch-v0.8.0.dmg \
-    --title "notchnotch v0.8.0" \
+gh release create vX.Y.Z .build/notchnotch-vX.Y.Z.dmg \
+    --title "notchnotch vX.Y.Z" \
     --notes "Onboarding, notchnotch rebrand"
 
 # 3. Update Homebrew formula
-shasum -a 256 .build/notchnotch-v0.8.0.dmg
+shasum -a 256 .build/notchnotch-vX.Y.Z.dmg
 # Copy the hash into homebrew/notchnotch.rb sha256 field
 ```
 

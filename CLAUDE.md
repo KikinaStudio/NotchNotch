@@ -29,9 +29,7 @@ Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes
   Surface assumptions, confirm signatures, list impacted files, THEN code.
 - Match the signature style of existing callbacks in the same file 
   (e.g. `{ _, newValue in }` in `.onChange` if that's the local pattern)
-- Prefer chat for actions that need LLM judgment or free-form input 
-  (config edits, brain pipeline setup, multi-step changes, deletions that 
-  warrant a confirmation). Prefer **structured UI + direct REST** when 
+- Prefer **structured UI + direct REST** when 
   Hermes exposes a deterministic endpoint and the data has a fixed shape — 
   the user explicitly chose this for routine editing (2026-04-26) because 
   chat-driven edits hid *what* was editable. Each direct-REST call must 
@@ -77,6 +75,8 @@ Rules:
 bash scripts/run.sh      # Build + bundle + codesign + launch
 bash scripts/release.sh   # Universal binary + DMG
 ```
+
+**Version source of truth**: `BoaNotch/Info.plist` (`CFBundleShortVersionString`). `scripts/release.sh` reads it dynamically. Do not hardcode the version anywhere else — README intentionally has no version badge so it can't drift.
 
 ### Starting Hermes locally
 
