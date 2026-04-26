@@ -281,7 +281,7 @@ struct NotchView: View {
                     // Right cluster: action icons (when deployed) + burger/X + resize
                     HStack(spacing: 10) {
                         if isDeployed {
-                            menuButton("clock.arrow.circlepath", active: notchVM.isHistoryOpen) {
+                            menuButton("bubble.left.and.bubble.right", active: notchVM.isHistoryOpen) {
                                 if notchVM.isHistoryOpen {
                                     notchVM.closeAllPanels()
                                 } else {
@@ -297,7 +297,7 @@ struct NotchView: View {
                                     notchVM.collapseMenu()
                                 }
                             }
-                            menuButton("bolt", active: notchVM.isRoutinesOpen) {
+                            menuButton("flag.checkered", active: notchVM.isRoutinesOpen) {
                                 if notchVM.isRoutinesOpen {
                                     notchVM.closeAllPanels()
                                 } else {
@@ -305,7 +305,7 @@ struct NotchView: View {
                                     notchVM.collapseMenu()
                                 }
                             }
-                            menuButton("brain", active: notchVM.isBrainOpen) {
+                            menuButton("books.vertical", active: notchVM.isBrainOpen) {
                                 if notchVM.isBrainOpen {
                                     notchVM.closeAllPanels()
                                 } else {
@@ -434,8 +434,7 @@ struct NotchView: View {
     // MARK: - Burger menu icon button
 
     private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        // Le glyph "brain" rend visuellement ~1pt plus large que les autres SF Symbols à taille égale.
-        let size: CGFloat = (icon == "brain") ? 13 : 14
+        let size: CGFloat = 14
         return Button(action: action) {
             Image(systemName: icon)
                 .symbolVariant(active ? .fill : .none)
