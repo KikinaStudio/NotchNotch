@@ -97,7 +97,7 @@ brew install --cask KikinaStudio/tap/notchnotch --no-quarantine
 xattr -cr /Applications/notchnotch.app
 ```
 
-This clears the macOS quarantine flag (the app is not signed with an Apple Developer certificate yet).
+This clears the macOS quarantine flag (the app is not signed with an Apple Developer certificate yet). If macOS still blocks the app, see [docs/GATEKEEPER_FIRST_LAUNCH.md](docs/GATEKEEPER_FIRST_LAUNCH.md) for the right-click and System Settings workarounds — the same guide applies after every Sparkle auto-update.
 
 **Or build from source:**
 
@@ -181,9 +181,10 @@ macOS will prompt for:
 - [x] Inline images and paste from clipboard
 - [x] Edit messages and answers
 - [x] Expanded bar (model, reasoning effort, context gauge, incognito)
+- [x] LLM provider picker with brand icons (11 providers, custom OpenAI-compatible endpoints, custom model IDs)
+- [x] Memory provider selection UI (built-in, hindsight, mem0, supermemory, honcho, retaindb, openviking, byterover, holographic)
 - [ ] Dynamic notch height (auto-grow with content, drag handle)
-- [ ] Memory provider selection UI
-- [ ] Auto-update via Sparkle
+- [x] Auto-update via Sparkle (EdDSA-signed, ad-hoc release)
 - [ ] Universal binary (requires Xcode)
 - [ ] Apple Developer signing + notarization
 - [ ] Telegram Mini App (cron jobs, system monitoring, full mobile UI)

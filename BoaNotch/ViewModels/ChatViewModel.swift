@@ -211,9 +211,11 @@ class ChatViewModel: ObservableObject {
                     } else if desc.contains("timed out") || desc.contains("Timeout") {
                         connectionError = "Hermes took too long to respond. Try reducing max iterations in settings, or check if the agent is stuck (hermes logs)"
                     } else if let hermesError = error as? HermesError,
-                              case .httpErrorWithBody(let code, _) = hermesError {
+                              case .httpErrorWithBody(let code, let body) = hermesError {
                         if code == 401 || code == 403 {
                             connectionError = "Authentication error. If you set API_SERVER_KEY in ~/.hermes/.env, notchnotch doesn't send it yet. Remove API_SERVER_KEY or leave it empty for local use."
+                        } else if body.contains("Nous Portal") || body.contains("hermes auth add nous") {
+                            connectionError = "Nous Portal sign-in required. Open Terminal and run: hermes auth add nous"
                         } else if code >= 500 {
                             connectionError = "Hermes internal error. Check ~/.hermes/logs/err.log or run: hermes logs --tail 50"
                         } else {

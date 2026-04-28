@@ -22,7 +22,7 @@ class HermesConfig: ObservableObject {
     // Zone B: Expanded bar
     @Published var activeProfile: String = "default"
     @Published var modelDefault: String = ""
-    @Published var modelProvider: String = "nous"
+    @Published var modelProvider: String = "openrouter"
     @Published var reasoningEffort: String = "medium"
     @Published var skipMemory: Bool = false
     @Published var maxIterations: Int = 50
@@ -39,6 +39,15 @@ class HermesConfig: ObservableObject {
     // Profiles
     @Published var availableProfiles: [String] = ["default"]
 
+    // User-added custom model IDs per provider (persisted in UserDefaults)
+    @Published var userCustomModels: [String: [CustomModel]] = [:]
+    private let userCustomModelsKey = "userCustomModels"
+
+    struct CustomModel: Codable, Equatable {
+        let value: String
+        let label: String?
+    }
+
     // Compression (read-only — Hermes owns this field, we only observe)
     private var compressionBaseURLString: String?
 
@@ -48,40 +57,71 @@ class HermesConfig: ObservableObject {
     }
 
     var availableModels: [(value: String, label: String)] {
-        switch modelProvider {
-        case "openai":
-            return [
-                ("gpt-4o-mini", "gpt-4o mini"),
-                ("gpt-4o", "gpt-4o"),
-                ("gpt-5", "gpt-5"),
-            ]
-        case "anthropic":
-            return [
-                ("claude-sonnet-4-6-20250514", "sonnet 4.6"),
-                ("claude-opus-4-6-20250514", "opus 4.6"),
-            ]
-        case "openrouter":
-            return [
-                ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
-                ("google/gemini-3-flash-preview", "gemini flash"),
-                ("minimax/minimax-m2.7", "minimax m2.7"),
-                ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
-            ]
-        case "minimax":
-            return [
-                ("MiniMax-M2.7", "MiniMax M2.7"),
-                ("MiniMax-M2.5", "MiniMax M2.5"),
-                ("MiniMax-M2.1", "MiniMax M2.1"),
-                ("MiniMax-M2", "MiniMax M2"),
-            ]
-        default:
-            return [
-                ("xiaomi/mimo-v2-pro", "mimo v2 pro"),
-                ("minimax-m2.7", "minimax m2.7"),
-                ("nousresearch/hermes-4-70b", "hermes 4 70b"),
-                ("nousresearch/deephermes-3-8b", "deephermes 3 8b"),
-            ]
-        }
+        let base: [(value: String, label: String)] = {
+            switch modelProvider {
+            case "openai":
+                return [
+                    ("gpt-4o-mini", "gpt-4o mini"),
+                    ("gpt-4o", "gpt-4o"),
+                    ("gpt-5", "gpt-5"),
+                ]
+            case "anthropic":
+                return [
+                    ("claude-sonnet-4-6-20250514", "sonnet 4.6"),
+                    ("claude-opus-4-6-20250514", "opus 4.6"),
+                ]
+            case "openrouter":
+                return [
+                    ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
+                    ("google/gemini-3-flash-preview", "gemini flash"),
+                    ("minimax/minimax-m2.7", "minimax m2.7"),
+                    ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
+                ]
+            case "minimax":
+                return [
+                    ("MiniMax-M2.7", "MiniMax M2.7"),
+                    ("MiniMax-M2.5", "MiniMax M2.5"),
+                    ("MiniMax-M2.1", "MiniMax M2.1"),
+                    ("MiniMax-M2", "MiniMax M2"),
+                ]
+            case "gemini":
+                return [
+                    ("gemini-3-flash-preview", "gemini 3 flash"),
+                    ("gemini-3-pro", "gemini 3 pro"),
+                    ("gemini-2.5-flash", "gemini 2.5 flash"),
+                ]
+            case "huggingface":
+                return [
+                    ("meta-llama/Llama-3.3-70B-Instruct", "llama 3.3 70b"),
+                    ("Qwen/Qwen3-72B", "qwen 3 72b"),
+                ]
+            case "zai":
+                return [
+                    ("glm-4.7", "glm 4.7"),
+                    ("glm-4.7-flash", "glm 4.7 flash"),
+                ]
+            case "kimi-coding":
+                return [("kimi-k3-coding", "kimi k3 coding")]
+            case "xiaomi":
+                return [
+                    ("xiaomi/mimo-v2-pro", "mimo v2 pro"),
+                    ("xiaomi/mimo-v2", "mimo v2"),
+                ]
+            case "custom":
+                return []
+            case "nous":
+                fallthrough
+            default:
+                return [
+                    ("nousresearch/hermes-4-70b", "hermes 4 70b"),
+                    ("nousresearch/deephermes-3-8b", "deephermes 3 8b"),
+                ]
+            }
+        }()
+        let customs = userCustomModels[modelProvider]?.map {
+            (value: $0.value, label: $0.label ?? $0.value)
+        } ?? []
+        return customs + base
     }
 
     static func defaultBaseURL(for provider: String) -> String? {
@@ -91,6 +131,12 @@ class HermesConfig: ObservableObject {
         case "openrouter": return "https://openrouter.ai/api/v1"
         case "nous": return "https://inference-api.nousresearch.com/v1"
         case "minimax": return "https://api.minimax.io/v1"
+        case "gemini": return "https://generativelanguage.googleapis.com/v1beta/openai"
+        case "huggingface": return "https://router.huggingface.co/v1"
+        case "zai": return "https://api.z.ai/api/paas/v4"
+        case "kimi-coding": return "https://api.moonshot.cn/v1"
+        case "xiaomi": return "https://api.xiaomimimo.com/v1"
+        case "custom": return nil  // user supplies via Advanced > Base URL
         default: return nil
         }
     }
@@ -112,22 +158,73 @@ class HermesConfig: ObservableObject {
         switch provider {
         case "openai": envKey = "OPENAI_API_KEY"
         case "anthropic": envKey = "ANTHROPIC_API_KEY"
+        case "openrouter": envKey = "OPENROUTER_API_KEY"
         case "minimax": envKey = "MINIMAX_API_KEY"
-        default: envKey = "OPENROUTER_API_KEY"
+        case "nous": envKey = "NOUS_API_KEY"
+        case "gemini": envKey = "GEMINI_API_KEY"
+        case "huggingface": envKey = "HF_TOKEN"
+        case "zai": envKey = "ZAI_API_KEY"
+        case "kimi-coding": envKey = "KIMI_API_KEY"
+        case "xiaomi": envKey = "XIAOMI_API_KEY"
+        case "custom": envKey = "OPENAI_API_KEY"  // custom maps to provider:openai in config.yaml
+        default: return  // unknown provider: do nothing instead of trashing OPENROUTER_API_KEY
         }
+        writeRawEnv(key: envKey, value: key)
+    }
 
+    /// Write or replace a single KEY=VALUE line in ~/.hermes/.env atomically.
+    /// Idempotent: existing line for the same key is replaced, not duplicated.
+    func writeRawEnv(key: String, value: String) {
         let hermesHome = ProcessInfo.processInfo.environment["HERMES_HOME"]
             ?? "\(NSHomeDirectory())/.hermes"
         let envPath = "\(hermesHome)/.env"
-
         try? FileManager.default.createDirectory(atPath: hermesHome, withIntermediateDirectories: true)
 
         var content = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
-        if !content.isEmpty && !content.hasSuffix("\n") {
-            content += "\n"
+        let pattern = "(?m)^" + NSRegularExpression.escapedPattern(for: key) + "=.*$"
+        if let regex = try? NSRegularExpression(pattern: pattern),
+           regex.firstMatch(in: content, range: NSRange(content.startIndex..., in: content)) != nil {
+            content = regex.stringByReplacingMatches(
+                in: content,
+                range: NSRange(content.startIndex..., in: content),
+                withTemplate: NSRegularExpression.escapedTemplate(for: "\(key)=\(value)"))
+        } else {
+            if !content.isEmpty && !content.hasSuffix("\n") { content += "\n" }
+            content += "\(key)=\(value)\n"
         }
-        content += "\(envKey)=\(key)\n"
         try? content.write(toFile: envPath, atomically: true, encoding: .utf8)
+    }
+
+    // MARK: - Custom model storage (UserDefaults)
+
+    func addCustomModel(provider: String, modelID: String, label: String? = nil) {
+        let entry = CustomModel(value: modelID, label: label)
+        var list = userCustomModels[provider] ?? []
+        guard !list.contains(where: { $0.value == modelID }) else { return }
+        list.append(entry)
+        userCustomModels[provider] = list
+        persistCustomModels()
+    }
+
+    func removeCustomModel(provider: String, modelID: String) {
+        userCustomModels[provider]?.removeAll { $0.value == modelID }
+        if userCustomModels[provider]?.isEmpty == true {
+            userCustomModels.removeValue(forKey: provider)
+        }
+        persistCustomModels()
+    }
+
+    private func persistCustomModels() {
+        if let data = try? JSONEncoder().encode(userCustomModels) {
+            UserDefaults.standard.set(data, forKey: userCustomModelsKey)
+        }
+    }
+
+    private func loadCustomModels() {
+        guard let data = UserDefaults.standard.data(forKey: userCustomModelsKey),
+              let decoded = try? JSONDecoder().decode([String: [CustomModel]].self, from: data)
+        else { return }
+        userCustomModels = decoded
     }
 
     // MARK: - File watcher
@@ -140,6 +237,7 @@ class HermesConfig: ObservableObject {
 
     init() {
         load()
+        loadCustomModels()
         scanProfiles()
         startWatching()
     }

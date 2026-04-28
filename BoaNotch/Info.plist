@@ -11,7 +11,7 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.2.0</string>
+    <string>1.2.1</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -33,6 +33,16 @@
             </array>
         </dict>
     </array>
+    <key>SUFeedURL</key>
+    <string>https://kikinastudio.github.io/NotchNotch/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>AO2N1zvLVB6I3IrJ+AhPoVbCsrP3xPzMBX9kOwhv+yI=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUEnableInstallerLauncherService</key>
+    <true/>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key>

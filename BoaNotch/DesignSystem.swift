@@ -53,7 +53,7 @@ enum DS {
         static let nanoMono      = Font.system(size: 9, design: .monospaced)
         /// 10pt monospaced bold. Section headers UPPERCASE et badges numérotés (step rows).
         static let sectionHead   = Font.system(size: 10, weight: .bold, design: .monospaced)
-        /// 8pt monospaced medium. Badges discrets (Free/Pro pills ChooseModelStep).
+        /// 8pt monospaced medium. Badges discrets (statuts, tags `Free`/`Pro`).
         static let badge         = Font.system(size: 8, weight: .medium, design: .monospaced)
         /// 13pt serif regular. Marque brand `§` en tête des MemoryCards (Brain panel).
         /// Glyphe signature, ne pas réutiliser pour autre chose.

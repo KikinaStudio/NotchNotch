@@ -8,8 +8,27 @@ struct SettingsView: View {
     @ObservedObject var appearanceSettings: AppearanceSettings
     @StateObject private var googleConnection = GoogleConnectionState()
     @State private var apiKey = ""
+    @State private var customBaseURL: String = ""
+    @State private var showCustomModelSheet: Bool = false
+    @State private var isOpenRouterConnecting: Bool = false
+    @State private var openRouterError: String?
 
     var body: some View {
+        bodyContent
+            .sheet(isPresented: $showCustomModelSheet) {
+                CustomModelSheet(provider: hermesConfig.modelProvider) { modelID, label in
+                    hermesConfig.addCustomModel(
+                        provider: hermesConfig.modelProvider,
+                        modelID: modelID,
+                        label: label
+                    )
+                    hermesConfig.switchModel((value: modelID, label: label ?? modelID))
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var bodyContent: some View {
         FadingScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // ── AI Provider ──
@@ -19,28 +38,90 @@ struct SettingsView: View {
                             .font(DS.Text.caption)
                             .foregroundStyle(.secondary)
 
-                        HStack(spacing: 4) {
-                            ForEach([("nous", "Nous"), ("openrouter", "OpenRouter"), ("openai", "OpenAI"), ("anthropic", "Anthropic"), ("minimax", "MiniMax")], id: \.0) { value, label in
-                                segmentedButton(label: label, isSelected: hermesConfig.modelProvider == value) {
-                                    hermesConfig.modelProvider = value
-                                    hermesConfig.setImmediate("model.provider", value: value)
-                                    if let baseURL = HermesConfig.defaultBaseURL(for: value) {
-                                        hermesConfig.setImmediate("model.base_url", value: baseURL)
-                                    }
-                                }
+                        FlowLayout(spacing: 4) {
+                            ForEach(Self.providerCatalog, id: \.0) { value, label in
+                                providerPill(value: value, label: label)
                             }
                         }
 
-                        if hermesConfig.modelProvider == "nous" {
-                            Text("Free models via Nous Portal. No API key needed.")
-                                .font(DS.Text.micro)
-                                .foregroundStyle(AppColors.accent.opacity(0.6))
+                        if hermesConfig.modelProvider == "openrouter" {
+                            openRouterSignInRow
                         }
 
-                        if hermesConfig.modelProvider != "nous" {
-                            apiKeyField
+                        apiKeyField
+
+                        providerKeyLink
+
+                        if let err = openRouterError {
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(DS.Text.micro)
+                                    .foregroundStyle(.red)
+                                Text(err)
+                                    .font(DS.Text.micro)
+                                    .foregroundStyle(.red)
+                                    .lineLimit(3)
+                                Spacer()
+                                Button {
+                                    openRouterError = nil
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(DS.Text.micro)
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .pointingHandCursor()
+                            }
+                        }
+
+                        DisclosureGroup {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("URL")
+                                        .font(DS.Text.caption)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 35, alignment: .leading)
+                                    TextField(
+                                        HermesConfig.defaultBaseURL(for: hermesConfig.modelProvider) ?? "https://...",
+                                        text: $customBaseURL
+                                    )
+                                    .textFieldStyle(.plain)
+                                    .font(DS.Text.caption)
+                                    .foregroundStyle(.primary)
+                                    .onSubmit {
+                                        if !customBaseURL.isEmpty {
+                                            hermesConfig.setImmediate("model.base_url", value: customBaseURL)
+                                        }
+                                    }
+                                }
+                                Button {
+                                    showCustomModelSheet = true
+                                } label: {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus.circle")
+                                        Text("Add custom model ID")
+                                    }
+                                    .font(DS.Text.micro)
+                                    .foregroundStyle(AppColors.accent.opacity(0.7))
+                                }
+                                .buttonStyle(.plain)
+                                .pointingHandCursor()
+                            }
+                            .padding(.leading, 8)
+                            .padding(.top, 4)
+                        } label: {
+                            Text("Advanced")
+                                .font(DS.Text.micro)
+                                .foregroundStyle(.secondary)
                         }
                     }
+                }
+
+                sectionDivider
+
+                // ── Memory ──
+                settingsSection("Memory") {
+                    MemoryProviderSection()
                 }
 
                 sectionDivider
@@ -221,7 +302,36 @@ struct SettingsView: View {
                         .accessibilityLabel("Launch notchnotch at login")
                     }
                 }
+
+                sectionDivider
+
+                // ── Updates ──
+                settingsSection("Updates") {
+                    updatesRow
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var updatesRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Check for updates")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
+                    .font(DS.Text.micro)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            Button("Check now") {
+                UpdaterService.shared.checkForUpdates()
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
         }
     }
 
@@ -248,11 +358,65 @@ struct SettingsView: View {
     private var apiKeyPlaceholder: String {
         switch hermesConfig.modelProvider {
         case "openrouter": return "sk-or-v1-..."
-        case "openai": return "sk-..."
+        case "openai", "custom": return "sk-..."
         case "anthropic": return "sk-ant-..."
         case "minimax": return "sk-..."
+        case "gemini": return "AIza..."
+        case "huggingface": return "hf_..."
+        case "zai": return "..."
+        case "kimi-coding": return "sk-..."
+        case "xiaomi": return "..."
+        case "nous": return ""
         default: return ""
         }
+    }
+
+    private static let providerCatalog: [(String, String)] = [
+        ("nous", "Nous"),
+        ("openrouter", "OpenRouter"),
+        ("openai", "OpenAI"),
+        ("anthropic", "Anthropic"),
+        ("gemini", "Google"),
+        ("minimax", "MiniMax"),
+        ("huggingface", "HuggingFace"),
+        ("zai", "z.ai"),
+        ("kimi-coding", "Kimi"),
+        ("xiaomi", "Xiaomi"),
+        ("custom", "Custom"),
+    ]
+
+    private func providerPill(value: String, label: String) -> some View {
+        let isSelected = hermesConfig.modelProvider == value
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        return Button {
+            hermesConfig.modelProvider = value
+            // "custom" maps to provider:openai in config.yaml — Hermes has no
+            // "custom" provider id; OpenAI-compatible endpoints use provider:openai
+            // with model.base_url overridden.
+            let providerForConfig = (value == "custom") ? "openai" : value
+            hermesConfig.setImmediate("model.provider", value: providerForConfig)
+            if let baseURL = HermesConfig.defaultBaseURL(for: value) {
+                hermesConfig.setImmediate("model.base_url", value: baseURL)
+            }
+            customBaseURL = ""
+        } label: {
+            HStack(spacing: 5) {
+                ProviderIcon(providerID: value, size: 11)
+                Text(label)
+                    .font(DS.Text.caption.weight(isSelected ? .semibold : .medium))
+            }
+            .foregroundStyle(isSelected
+                             ? AnyShapeStyle(Color.black.opacity(0.85))
+                             : AnyShapeStyle(.secondary))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background {
+                if isSelected { shape.fill(AppColors.accent) }
+                else { shape.stroke(Color.gray.opacity(0.45), lineWidth: 1) }
+            }
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
     }
 
     @ViewBuilder
@@ -336,6 +500,71 @@ struct SettingsView: View {
                 .padding(.top, 2)
             }
         }
+    }
+
+    @ViewBuilder
+    private var openRouterSignInRow: some View {
+        HStack(spacing: 8) {
+            Button {
+                Task { await runOpenRouterSignIn() }
+            } label: {
+                HStack(spacing: 6) {
+                    if isOpenRouterConnecting {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .scaleEffect(0.7)
+                            .frame(width: 10, height: 10)
+                    }
+                    Text(isOpenRouterConnecting ? "Connecting…" : "Sign in with OpenRouter")
+                        .font(DS.Text.caption.weight(.semibold))
+                        .foregroundStyle(isOpenRouterConnecting ? AnyShapeStyle(.tertiary) : AnyShapeStyle(Color.black.opacity(0.85)))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent))
+            }
+            .buttonStyle(.plain)
+            .disabled(isOpenRouterConnecting)
+            .pointingHandCursor()
+
+            Text("Free models, no key to copy")
+                .font(DS.Text.micro)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var providerKeyLink: some View {
+        if let urlString = OnboardingViewModel.providerKeyURLs[hermesConfig.modelProvider],
+           let url = URL(string: urlString) {
+            Button {
+                NSWorkspace.shared.open(url)
+            } label: {
+                Text("Get a key at \(url.host ?? urlString)")
+                    .font(DS.Text.nano)
+                    .foregroundStyle(AppColors.accent.opacity(0.55))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+        }
+    }
+
+    private func runOpenRouterSignIn() async {
+        isOpenRouterConnecting = true
+        openRouterError = nil
+        do {
+            _ = try await OpenRouterOAuthService.shared.connect()
+        } catch let err as OpenRouterOAuthService.OAuthError {
+            if case .userCancelled = err {
+                isOpenRouterConnecting = false
+                return
+            }
+            openRouterError = err.localizedDescription
+        } catch {
+            openRouterError = error.localizedDescription
+        }
+        isOpenRouterConnecting = false
     }
 
     private var apiKeyField: some View {

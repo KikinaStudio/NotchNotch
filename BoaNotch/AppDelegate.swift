@@ -43,7 +43,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         searchVM.chatVM = chatVM
 
         onboardingVM.notchVM = notchVM
-        onboardingVM.hermesConfig = hermesConfig
 
         panelController = NotchWindowController(chatVM: chatVM, notchVM: notchVM, sessionStore: sessionStore, searchVM: searchVM, hermesConfig: hermesConfig, onboardingVM: onboardingVM, cronStore: cronStore, brainVM: brainVM, loginItemService: loginItemService, appearanceSettings: appearanceSettings, panelSizeStore: panelSizeStore, titleStore: titleStore)
         panelController?.showPanel()
@@ -62,6 +61,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startClipperListener()
         wireCronOutputToasts()
         probeCompressionEndpointOnce()
+
+        // After Sparkle relaunches us, surface the Gatekeeper hint so users know
+        // macOS may block the new binary on first run (we ship ad-hoc-signed).
+        UpdaterService.shared.presentPostUpdateGatekeeperHintIfNeeded()
     }
 
     private func ensureBrainDirectories() {

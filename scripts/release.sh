@@ -1,125 +1,117 @@
 #!/bin/bash
-# Build notchnotch for release: universal binary (when possible) + DMG + ad-hoc codesign
+# Build, sign, package, EdDSA-sign, publish a notchnotch release.
 #
-# Output: .build/notchnotch-v<VERSION>.dmg containing:
-#   - notchnotch.app
-#   - Applications (symlink)
-#   - INSTALL.txt   (the xattr -cr instruction, prominently visible)
+# This script ships an *ad-hoc-signed* build (no Apple Developer cert).
+# It does NOT call notarytool or stapler. The Gatekeeper warning persists
+# on every install and every update — that's expected and documented in
+# docs/GATEKEEPER_FIRST_LAUNCH.md. Sparkle handles auto-update via EdDSA
+# signatures, which is independent of Apple's notarization.
 #
-# Universal binary requires Xcode (not just CLT) because cross-compiling
-# the Yams C dependency needs xcbuild. On a CLT-only machine the build
-# falls back to the host arch and the script prints a warning so you
-# don't accidentally ship arm64-only.
-set -e
+# Pipeline:
+#   1. Universal binary (arm64+x86_64)         → requires Xcode
+#   2. Bundle .app + ad-hoc codesign (hardened runtime)
+#   3. Build DMG (create-dmg or hdiutil)
+#   4. Ad-hoc codesign the DMG
+#   5. EdDSA-sign the DMG with Sparkle's sign_update (private key from Keychain)
+#   6. Prepend a new <item> to appcast.xml on the gh-pages branch and push
+#   7. gh release create with the DMG attached
+#
+# Prerequisites (one-time):
+#   - Sparkle SPM dep resolved (run `swift build` once to fetch sign_update)
+#   - EdDSA keypair generated (`generate_keys`); public key in Info.plist
+#   - gh-pages branch exists with appcast.xml; GitHub Pages serving it
+#   - `gh` CLI authenticated
+#   - Optional: RELEASE_NOTES.md at repo root for the release body
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# ── Read version + build number from Info.plist ────────────────────────
 VERSION=$(grep -A1 'CFBundleShortVersionString' BoaNotch/Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>/\1/')
+BUILD_NUMBER=$(grep -A1 'CFBundleVersion' BoaNotch/Info.plist | grep '<string>' | sed 's/.*<string>\(.*\)<\/string>/\1/')
 APP_NAME="notchnotch"
-SPM_TARGET="BoaNotch"   # SPM target name (unchanged to avoid breaking build)
+SPM_TARGET="BoaNotch"
+DMG_NAME="${APP_NAME}-v${VERSION}.dmg"
+TAG="v${VERSION}"
+REPO="KikinaStudio/NotchNotch"
 
-# Try universal binary first (requires Xcode), fall back to current arch
-if xcodebuild -version &>/dev/null; then
-    echo "Building notchnotch v${VERSION} (universal binary: arm64 + x86_64)..."
-    swift build -c release --arch arm64 --arch x86_64 2>&1
-    BINARY=".build/apple/Products/Release/${SPM_TARGET}"
-    UNIVERSAL=1
-else
-    ARCH=$(uname -m)
-    echo "Building notchnotch v${VERSION} (${ARCH} only — install Xcode for universal binary)..."
-    swift build -c release 2>&1
-    BINARY=".build/release/${SPM_TARGET}"
-    UNIVERSAL=0
+# ── Sanity check: Xcode required for universal binary ──────────────────
+if ! xcodebuild -version &>/dev/null; then
+    echo "❌ Xcode is required for a release build (universal arm64+x86_64)."
+    echo "   Install Xcode from the App Store, accept the license, and re-run."
+    exit 1
 fi
 
+# ── Sanity check: tag must not already exist ───────────────────────────
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+    echo "❌ Tag $TAG already exists locally. Bump CFBundleShortVersionString first."
+    exit 1
+fi
+
+# ── Build universal binary ─────────────────────────────────────────────
+echo "Building notchnotch v${VERSION} (universal binary: arm64 + x86_64)..."
+swift build -c release --arch arm64 --arch x86_64
+BINARY=".build/apple/Products/Release/${SPM_TARGET}"
+
+# ── Bundle .app ────────────────────────────────────────────────────────
 APP_DIR=".build/${APP_NAME}.app/Contents"
-DMG_NAME="${APP_NAME}-v${VERSION}.dmg"
-
 rm -rf ".build/${APP_NAME}.app"
-mkdir -p "$APP_DIR/MacOS"
-mkdir -p "$APP_DIR/Resources"
+mkdir -p "$APP_DIR/MacOS" "$APP_DIR/Resources"
 
-# Copy binary (rename from SPM target to app name)
 cp "$BINARY" "$APP_DIR/MacOS/${APP_NAME}"
-
-# Copy Info.plist
 cp BoaNotch/Info.plist "$APP_DIR/Info.plist"
-
-# Copy resources (icons, logo, bundled configs)
 cp BoaNotch/Resources/*.png "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.icns "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.json "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 
-# Note: no SPM resource bundle copy. All resources load via Bundle.main
-# from Contents/Resources. Putting the SPM bundle inside the .app breaks
-# either codesign (bundle root) or Bundle.module resolution (Resources/).
+# Copy Sparkle.framework into the app bundle (Sparkle needs to ship inside Frameworks/)
+SPARKLE_FRAMEWORK=$(find .build/artifacts/sparkle -name "Sparkle.framework" -type d | head -1)
+if [ -z "$SPARKLE_FRAMEWORK" ]; then
+    echo "❌ Sparkle.framework not found. Run 'swift build' once to fetch it."
+    exit 1
+fi
+mkdir -p "$APP_DIR/Frameworks"
+cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Frameworks/"
 
-# Ad-hoc codesign (avoids runtime crashes on macOS 14+)
-echo "Signing ${APP_NAME}.app (ad-hoc)..."
+# ── Codesign app (ad-hoc, deep, hardened runtime) ──────────────────────
+echo "Signing ${APP_NAME}.app (ad-hoc, hardened runtime)..."
 codesign --force --deep --sign - \
     --entitlements BoaNotch/BoaNotch.entitlements \
+    --options runtime \
     ".build/${APP_NAME}.app"
 
-# Verify architectures
+# ── Verify architectures ───────────────────────────────────────────────
 echo ""
 echo "Architecture check:"
 file "$APP_DIR/MacOS/${APP_NAME}"
 echo ""
 
-# Stage DMG contents (app + INSTALL.txt — Applications symlink added by create-dmg)
+# ── Stage DMG contents ─────────────────────────────────────────────────
 STAGING="/tmp/${APP_NAME}-dmg-staging"
 rm -rf "$STAGING"
 mkdir -p "$STAGING"
 cp -R ".build/${APP_NAME}.app" "$STAGING/"
 
-if [ "$UNIVERSAL" = "1" ]; then
-    ARCH_NOTE="works on Apple Silicon and Intel Macs"
-else
-    ARCH_NOTE="this build is Apple Silicon only — Intel Macs need a build made on a machine with Xcode installed"
-fi
-
 cat > "$STAGING/INSTALL.txt" <<EOF
 notchnotch v${VERSION}
 ======================
 
-Three steps to install:
+1. Drag notchnotch.app onto the Applications folder.
+2. First launch: right-click notchnotch.app → Open → Open.
+   (macOS blocks ad-hoc-signed apps by default. The right-click bypass
+    is normal; full guide at github.com/KikinaStudio/NotchNotch/blob/master/docs/GATEKEEPER_FIRST_LAUNCH.md)
+3. Hermes (the AI agent) installs automatically on first launch.
 
-  1. Drag notchnotch.app onto the Applications folder shown next to it.
+Requirements: macOS 14 (Sonoma) or later. Universal binary (Apple
+Silicon + Intel).
 
-  2. Open the Terminal app (Spotlight: Cmd+Space, type "Terminal").
-     Paste this line and press Return:
-
-         xattr -cr /Applications/notchnotch.app
-
-     (This clears macOS's quarantine flag. notchnotch is not signed
-     with an Apple Developer certificate yet, so without this step
-     macOS will say it's "damaged" and refuse to open it.)
-
-  3. Open notchnotch from your Applications folder.
-     On first launch it installs Hermes (the AI agent) automatically.
-     Takes about a minute.
-
-
-Requirements
-------------
-  * macOS 14 (Sonoma) or later
-  * ${ARCH_NOTE}
-
-
-Trouble?
---------
-  * "App is damaged"          → you skipped step 2. Run xattr -cr.
-  * "Can't be opened on Mac"  → you have an Intel Mac and this is an
-                                Apple Silicon-only build. See the
-                                release notes on GitHub.
-  * Hermes won't install      → check the GitHub README for manual
-                                install instructions.
-
-  https://github.com/KikinaStudio/NotchNotch
+Auto-updates: notchnotch checks for updates automatically. When one is
+available, you'll get a prompt — click "Install and Relaunch". Each
+update will require the same first-launch step above.
 EOF
 
-# Create DMG
+# ── Create DMG ─────────────────────────────────────────────────────────
 echo "Creating DMG..."
 rm -f ".build/${DMG_NAME}"
 
@@ -135,7 +127,7 @@ if command -v create-dmg &>/dev/null; then
         ".build/${DMG_NAME}" \
         "$STAGING"
 else
-    echo "create-dmg not found, falling back to hdiutil (no positioned layout)..."
+    echo "create-dmg not found; falling back to hdiutil (no positioned layout)."
     echo "(install with: brew install create-dmg)"
     ln -s /Applications "$STAGING/Applications"
     hdiutil create -volname "notchnotch v${VERSION}" \
@@ -146,22 +138,104 @@ fi
 
 rm -rf "$STAGING"
 
+# ── Codesign DMG (ad-hoc) ──────────────────────────────────────────────
+echo "Signing DMG (ad-hoc)..."
+codesign --force --sign - ".build/${DMG_NAME}"
+
+# ── EdDSA-sign DMG with Sparkle's sign_update ──────────────────────────
+SIGN_UPDATE=$(find .build/artifacts/sparkle -name sign_update -type f -path '*/bin/sign_update' | head -1)
+if [ -z "$SIGN_UPDATE" ]; then
+    echo "❌ Sparkle's sign_update tool not found. Run 'swift build' to fetch it."
+    exit 1
+fi
+
+echo "EdDSA-signing DMG..."
+SIGN_OUTPUT=$("$SIGN_UPDATE" ".build/${DMG_NAME}")
+# sign_update prints e.g.: sparkle:edSignature="..." length="12345"
+ED_SIG=$(echo "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+DMG_SIZE=$(echo "$SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+
+if [ -z "$ED_SIG" ] || [ -z "$DMG_SIZE" ]; then
+    echo "❌ Could not parse sign_update output: $SIGN_OUTPUT"
+    exit 1
+fi
+echo "  edSignature: ${ED_SIG:0:32}..."
+echo "  size: ${DMG_SIZE} bytes"
+
+# ── Update appcast.xml on gh-pages (via worktree) ──────────────────────
+echo ""
+echo "Updating appcast.xml on gh-pages..."
+WORKTREE=".build/gh-pages-release"
+rm -rf "$WORKTREE"
+git worktree add "$WORKTREE" gh-pages
+trap 'rm -rf "$WORKTREE"; git worktree prune' EXIT
+
+export PUB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
+if [ -f RELEASE_NOTES.md ]; then
+    export RELEASE_NOTES_BODY=$(cat RELEASE_NOTES.md)
+else
+    export RELEASE_NOTES_BODY="See https://github.com/${REPO}/releases/tag/${TAG} for release notes."
+fi
+export APPCAST_PATH="${WORKTREE}/appcast.xml"
+export VERSION BUILD_NUMBER REPO TAG DMG_NAME ED_SIG DMG_SIZE
+
+# Prepend new <item> just before </channel>. Python avoids sed-on-XML.
+python3 <<'PYEOF'
+import os, re
+from pathlib import Path
+
+env = os.environ
+notes = env["RELEASE_NOTES_BODY"].replace("]]>", "]]]]><![CDATA[>")
+
+item = f"""    <item>
+      <title>Version {env['VERSION']}</title>
+      <pubDate>{env['PUB_DATE']}</pubDate>
+      <sparkle:version>{env['BUILD_NUMBER']}</sparkle:version>
+      <sparkle:shortVersionString>{env['VERSION']}</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+{notes}
+      ]]></description>
+      <enclosure url="https://github.com/{env['REPO']}/releases/download/{env['TAG']}/{env['DMG_NAME']}"
+                 sparkle:edSignature="{env['ED_SIG']}"
+                 length="{env['DMG_SIZE']}"
+                 type="application/octet-stream"/>
+    </item>
+"""
+
+p = Path(env["APPCAST_PATH"])
+xml = p.read_text()
+new_xml = re.sub(r'(\s*</channel>)', '\n' + item + r'\1', xml, count=1)
+if new_xml == xml:
+    raise SystemExit("Failed to find </channel> in appcast.xml")
+p.write_text(new_xml)
+print("appcast.xml updated.")
+PYEOF
+
+git -C "$WORKTREE" add appcast.xml
+git -C "$WORKTREE" commit -m "appcast: ${TAG}"
+git -C "$WORKTREE" push origin gh-pages
+
+# ── Create GitHub release ──────────────────────────────────────────────
+echo ""
+echo "Creating GitHub release ${TAG}..."
+if [ -f RELEASE_NOTES.md ]; then
+    gh release create "$TAG" ".build/${DMG_NAME}" \
+        --title "notchnotch ${TAG}" \
+        --notes-file RELEASE_NOTES.md
+else
+    gh release create "$TAG" ".build/${DMG_NAME}" \
+        --title "notchnotch ${TAG}" \
+        --generate-notes
+fi
+
+# ── Done ───────────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
-echo "  Release: notchnotch v${VERSION}"
+echo "  Released: notchnotch ${TAG}"
 echo "========================================"
 ls -lh ".build/${DMG_NAME}"
 echo ""
-echo "DMG contents:"
-echo "  - notchnotch.app"
-echo "  - Applications (drop target)"
-echo "  - INSTALL.txt (visible install steps)"
+echo "  Appcast:  https://kikinastudio.github.io/NotchNotch/appcast.xml"
+echo "  Release:  https://github.com/${REPO}/releases/tag/${TAG}"
 echo ""
-echo "Local install:"
-echo "  open .build/${DMG_NAME}"
-echo ""
-if [ "$UNIVERSAL" = "0" ]; then
-    echo "⚠️  This is an Apple Silicon-only build. Intel Macs cannot run it."
-    echo "   For universal: install Xcode and re-run this script."
-    echo ""
-fi

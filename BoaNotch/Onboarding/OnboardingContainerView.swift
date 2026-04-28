@@ -10,7 +10,7 @@ struct OnboardingContainerView: View {
                 case 0: WelcomeStep(onboardingVM: onboardingVM)
                 case 1: PrivacyStep(onboardingVM: onboardingVM)
                 case 2: InstallHermesStep(onboardingVM: onboardingVM)
-                case 3: ChooseModelStep(onboardingVM: onboardingVM)
+                case 3: ConnectProviderStep(onboardingVM: onboardingVM)
                 case 4: TelegramStep(onboardingVM: onboardingVM)
                 case 5: ReadyStep(onboardingVM: onboardingVM)
                 default: ReadyStep(onboardingVM: onboardingVM)

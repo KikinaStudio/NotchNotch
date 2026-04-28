@@ -25,14 +25,28 @@ class OnboardingViewModel: ObservableObject {
     @Published var telegramToken = ""
     @Published var telegramConnected = false
 
-    // MARK: - Model selection
+    // MARK: - Connect-provider step state
 
-    @Published var selectedModel = ""
+    /// Which provider's "paste your own key" panel is currently open in the
+    /// Connect step. nil = nothing selected (only the big OAuth button is
+    /// visible). Defaults to nil at session start; the segmented row reveals
+    /// the API-key field as soon as the user picks a provider.
+    @Published var advancedProvider: String? = nil
+    @Published var advancedAPIKey: String = ""
+    @Published var isConnecting: Bool = false
+    @Published var connectError: String?
+
+    /// Pages where each provider lets you generate / view API keys. Shown as a
+    /// small "Get a key at …" link below the API-key field.
+    static let providerKeyURLs: [String: String] = [
+        "openrouter": "https://openrouter.ai/settings/keys",
+        "openai":     "https://platform.openai.com/api-keys",
+        "anthropic":  "https://console.anthropic.com/settings/keys",
+        "minimax":    "https://www.minimax.io/platform/user-center/basic-information/interface-key",
+    ]
 
     // Reference to notchVM for suppressing auto-close
     weak var notchVM: NotchViewModel?
-    // Reference to hermesConfig for writing model choice
-    weak var hermesConfig: HermesConfig?
 
     private let hermesHome: String
 
@@ -48,7 +62,7 @@ class OnboardingViewModel: ObservableObject {
 
         let step = UserDefaults.standard.integer(forKey: "onboardingStep")
         self.currentStep = step
-        self.selectedProvider = UserDefaults.standard.string(forKey: "selectedProvider") ?? ""
+        self.selectedProvider = UserDefaults.standard.string(forKey: "selectedProvider") ?? "openrouter"
 
         // Determine once at launch whether onboarding is needed
         if UserDefaults.standard.bool(forKey: "onboardingCompleted") {
@@ -76,30 +90,57 @@ class OnboardingViewModel: ObservableObject {
         }
     }
 
-    // MARK: - API key storage (~/.hermes/.env)
+    // MARK: - Connect-provider step actions
 
-    func writeAPIKey(provider: String, key: String) {
-        let envKey: String
-        switch provider {
-        case "openai": envKey = "OPENAI_API_KEY"
-        case "anthropic": envKey = "ANTHROPIC_API_KEY"
-        default: envKey = "OPENROUTER_API_KEY"
+    /// OAuth PKCE flow against OpenRouter. Writes the resulting key into
+    /// ~/.hermes/.env, sets provider/base_url/model.default in config.yaml,
+    /// then advances. User-cancelled errors are swallowed silently.
+    @MainActor
+    func connectOpenRouter() async {
+        isConnecting = true
+        connectError = nil
+        do {
+            _ = try await OpenRouterOAuthService.shared.connect()
+            selectedProvider = "openrouter"
+            isConnecting = false
+            advance()
+        } catch let err as OpenRouterOAuthService.OAuthError {
+            isConnecting = false
+            if case .userCancelled = err { return }
+            connectError = err.localizedDescription
+        } catch {
+            isConnecting = false
+            connectError = error.localizedDescription
         }
+    }
 
-        let dir = hermesHome
-        let envPath = "\(dir)/.env"
+    /// Aborts the in-flight OAuth wait. The OAuth task's `catch` clause sees
+    /// `.userCancelled` and silently flips `isConnecting` back to false.
+    @MainActor
+    func cancelOpenRouterOAuth() {
+        OpenRouterOAuthService.shared.cancelInFlight()
+    }
 
-        // Create directory if needed
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    /// "Paste your own key" path for non-OpenRouter providers. Writes the key
+    /// into .env, points config.yaml at the provider + its default base URL,
+    /// and seeds model.default with the first model in HermesConfig's list.
+    func saveAdvancedKey(provider: String) {
+        let trimmed = advancedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
 
-        // Read existing content (if any) and append
-        var content = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
-        if !content.isEmpty && !content.hasSuffix("\n") {
-            content += "\n"
+        let cfg = HermesConfig.shared
+        cfg.writeAPIKey(provider: provider, key: trimmed)
+        cfg.modelProvider = provider
+        cfg.setImmediate("model.provider", value: provider)
+        if let baseURL = HermesConfig.defaultBaseURL(for: provider) {
+            cfg.setImmediate("model.base_url", value: baseURL)
         }
-        content += "\(envKey)=\(key)\n"
-
-        try? content.write(toFile: envPath, atomically: true, encoding: .utf8)
+        if let firstModel = cfg.availableModels.first {
+            cfg.setImmediate("model.default", value: firstModel.value)
+        }
+        selectedProvider = provider
+        advancedAPIKey = ""
+        advance()
     }
 
     // MARK: - Hermes installation
@@ -195,23 +236,6 @@ class OnboardingViewModel: ObservableObject {
                 isInstalling = false
             }
         }
-    }
-
-    // MARK: - Model choice
-
-    func writeModelChoice() {
-        guard !selectedModel.isEmpty else { return }
-
-        let provider: String
-        switch selectedProvider {
-        case "openai": provider = "openai"
-        case "anthropic": provider = "anthropic"
-        case "openrouter": provider = "openrouter"
-        default: provider = "nous"
-        }
-
-        hermesConfig?.setImmediate("model.default", value: selectedModel)
-        hermesConfig?.setImmediate("model.provider", value: provider)
     }
 
     // MARK: - Telegram

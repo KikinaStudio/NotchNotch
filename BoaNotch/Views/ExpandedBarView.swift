@@ -51,9 +51,8 @@ struct ExpandedBarView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "cpu")
-                        .font(.caption2)
+                HStack(spacing: 4) {
+                    ProviderIcon(providerID: config.modelProvider, size: 6)
                     Text(config.modelDisplayName)
                         .font(.caption2.weight(.medium))
                 }
@@ -145,6 +144,9 @@ struct ExpandedBarView: View {
         if m.contains("gpt-4o") || m.contains("gpt-4.1") { return 128_000 }
         if m.contains("gpt-5") || m.contains("o1") || m.contains("o3") { return 200_000 }
         if m.contains("gemini") { return 1_000_000 }
+        if m.contains("kimi") { return 200_000 }
+        if m.contains("glm") { return 128_000 }
+        if m.contains("mimo") { return 128_000 }
         if m.contains("nemotron") || m.contains("llama") { return 128_000 }
         if m.contains("minimax") { return 200_000 }
         if m.contains("deepseek") { return 128_000 }
