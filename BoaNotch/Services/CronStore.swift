@@ -97,8 +97,11 @@ class CronStore: ObservableObject {
     @Published var jobs: [CronJob] = []
 
     /// Fires when a cron job completes (deliver=local) with a non-[SILENT] response.
-    /// Wired by AppDelegate to present an in-notch toast.
-    var onNewOutput: ((_ jobName: String, _ fullContent: String) -> Void)?
+    /// Wired by AppDelegate to present an in-notch toast. The `jobId` is
+    /// propagated so downstream consumers (ChatMessage.routineId, the
+    /// "Affine" button) can refer back to the originating CronJob without
+    /// a fragile name-lookup.
+    var onNewOutput: ((_ jobId: String, _ jobName: String, _ fullContent: String) -> Void)?
 
     private var fileSource: DispatchSourceFileSystemObject?
     private var debounceTask: Task<Void, Never>?
@@ -165,7 +168,7 @@ class CronStore: ObservableObject {
             guard let response = readLatestOutput(jobId: job.id) else { continue }
             let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !trimmed.uppercased().hasPrefix("[SILENT]") else { continue }
-            onNewOutput?(job.name, trimmed)
+            onNewOutput?(job.id, job.name, trimmed)
         }
     }
 

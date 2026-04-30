@@ -26,6 +26,11 @@ class ChatViewModel: ObservableObject {
     @Published var routineCreationMode: Bool = false
     @Published var editingMessageId: UUID? = nil
     @Published var lastInputTokens: Int = 0
+    /// Regenerated whenever the composer needs to grab focus from a remote
+    /// trigger (e.g. tapping "Affine" on a routine delivery). ChatView
+    /// observes `.onChange` and sets `isInputFocused = true`. UUID rather
+    /// than Bool so re-firing always emits even if focus is already held.
+    @Published var focusComposerTrigger: UUID = UUID()
 
     private let client = HermesClient()
     var audioRecorder: AudioRecorder?
@@ -450,6 +455,22 @@ class ChatViewModel: ObservableObject {
 
     func clearRoutineContext() {
         activeRoutineContext = nil
+    }
+
+    /// Open a refinement turn for a routine: set its context (sticky — the
+    /// user can chain follow-up turns until they close the routineContextTag),
+    /// pre-fill the composer with a neutral primer, and trigger composer
+    /// focus so the cursor lands ready to type. Overwrites any existing
+    /// draft — the primer IS the desired entry state. No-op if the routine
+    /// has been removed since the delivery was injected.
+    func startRefine(routineId: String) {
+        guard let job = cronStore?.jobs.first(where: { $0.id == routineId }) else {
+            print("[notchnotch] startRefine: routine \(routineId) not found")
+            return
+        }
+        activeRoutineContext = job
+        draft = "Pour cette routine, je voudrais que tu… "
+        focusComposerTrigger = UUID()
     }
 
     func editMessage(id: UUID, newContent: String) {

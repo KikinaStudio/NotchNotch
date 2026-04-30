@@ -19,6 +19,11 @@ struct ChatMessage: Identifiable {
     var currentThinkingBlock: String = ""
     var promptTokens: Int? = nil
     var completionTokens: Int? = nil
+    /// When the message is a cron-job delivery injected via the toast tap,
+    /// this is the originating job's id. Drives the "Affine" button in
+    /// MessageBubble. Live-only — not persisted in Hermes state.db, so
+    /// reloads from session history come back as nil.
+    var routineId: String? = nil
 
     var totalTokens: Int? {
         guard let p = promptTokens, let c = completionTokens else { return nil }
@@ -40,7 +45,8 @@ struct ChatMessage: Identifiable {
         subagentActivity: String = "",
         timestamp: Date = Date(),
         attachments: [Attachment] = [],
-        isStreaming: Bool = false
+        isStreaming: Bool = false,
+        routineId: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -51,5 +57,6 @@ struct ChatMessage: Identifiable {
         self.timestamp = timestamp
         self.attachments = attachments
         self.isStreaming = isStreaming
+        self.routineId = routineId
     }
 }

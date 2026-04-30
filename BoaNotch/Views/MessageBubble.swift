@@ -7,6 +7,8 @@ struct MessageBubble: View {
     var onCopy: (() -> Void)? = nil
     var onRetry: (() -> Void)? = nil
     var onEdit: ((ChatMessage) -> Void)? = nil
+    var onRefine: ((String) -> Void)? = nil
+    var isChatStreaming: Bool = false
     private var isUser: Bool { message.role == .user }
 
     @State private var showThinking = false
@@ -14,6 +16,7 @@ struct MessageBubble: View {
     @State private var showCopyConfirm = false
     @State private var isHoveredCopy = false
     @State private var isHoveredRetry = false
+    @State private var isHoveredRefine = false
     @State private var isHovered = false
     @State private var pulseOpacity: Double = 0.3
 
@@ -92,6 +95,23 @@ struct MessageBubble: View {
                             .buttonStyle(.plain)
                             .pointingHandCursor()
                             .onHover { isHoveredRetry = $0 }
+                        }
+
+                        if let routineId = message.routineId, let onRefine {
+                            Button {
+                                onRefine(routineId)
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(DS.Text.caption)
+                                    // TODO(design): 0.28 idle — same as Copy/Retry for consistency
+                                    .foregroundStyle(isHoveredRefine ? AnyShapeStyle(DS.Surface.secondary) : AnyShapeStyle(.white.opacity(0.28)))
+                            }
+                            .buttonStyle(.plain)
+                            .pointingHandCursor()
+                            .onHover { isHoveredRefine = $0 }
+                            .disabled(isChatStreaming)
+                            .opacity(isChatStreaming ? 0.4 : 1.0)
+                            .help(isChatStreaming ? "Hermes répond…" : "Affine cette routine")
                         }
                     }
                     .padding(.top, 2)

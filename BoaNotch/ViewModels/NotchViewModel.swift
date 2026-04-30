@@ -78,7 +78,9 @@ class NotchViewModel: ObservableObject {
 
     /// When set, a tap on the current toast expands the output into chat.
     /// Cleared whenever a new toast replaces it or the chat consumes it.
-    var pendingCronOutput: (jobName: String, fullContent: String)?
+    /// `jobId` is carried through so the injected ChatMessage can carry a
+    /// stable `routineId` (drives the "Affine" button on the bubble).
+    var pendingCronOutput: (jobId: String, jobName: String, fullContent: String)?
 
     var currentWidth: CGFloat {
         if isOpen { return openSize.width }
@@ -162,15 +164,17 @@ class NotchViewModel: ObservableObject {
     }
 
     /// Present a cron-job completion toast. Stores the full content so a tap
-    /// can expand it into chat before the auto-dismiss fires.
-    func showCronToast(jobName: String, fullContent: String) {
+    /// can expand it into chat before the auto-dismiss fires. The `jobId`
+    /// rides through end-to-end so the eventual ChatMessage carries a stable
+    /// `routineId` (drives the "Affine" button on the bubble).
+    func showCronToast(jobId: String, jobName: String, fullContent: String) {
         let firstLine = fullContent
             .split(separator: "\n", maxSplits: 1)
             .first.map(String.init) ?? ""
         let preview = "⚙️ \(jobName): \(firstLine)"
         showToast(preview, kind: .cron)
         // showToast clears pendingCronOutput; reassign after so the tap-to-expand works.
-        pendingCronOutput = (jobName, fullContent)
+        pendingCronOutput = (jobId, jobName, fullContent)
     }
 
     func openRoutines() {

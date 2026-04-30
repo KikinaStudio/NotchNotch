@@ -73,7 +73,8 @@ struct NotchView: View {
                                 notchVM.pendingCronOutput = nil
                                 chatVM.messages.append(ChatMessage(
                                     role: .assistant,
-                                    content: "**\(pending.jobName)**\n\n\(pending.fullContent)"
+                                    content: "**\(pending.jobName)**\n\n\(pending.fullContent)",
+                                    routineId: pending.jobId
                                 ))
                             }
                             notchVM.open()

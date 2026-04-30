@@ -32,7 +32,11 @@ struct ChatView: View {
                                             chatVM.editingMessageId = msg.id
                                             chatVM.draft = msg.content
                                         }
-                                        : nil
+                                        : nil,
+                                    onRefine: (message.routineId != nil)
+                                        ? { rid in chatVM.startRefine(routineId: rid) }
+                                        : nil,
+                                    isChatStreaming: chatVM.isStreaming
                                 )
                                 .id(message.id)
                             }
@@ -149,6 +153,9 @@ struct ChatView: View {
                 }
                 return event
             }
+        }
+        .onChange(of: chatVM.focusComposerTrigger) {
+            isInputFocused = true
         }
         .onDisappear {
             if let monitor = pasteMonitor {

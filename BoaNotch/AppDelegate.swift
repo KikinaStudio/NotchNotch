@@ -91,9 +91,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func wireCronOutputToasts() {
-        cronStore.onNewOutput = { [weak self] jobName, content in
+        cronStore.onNewOutput = { [weak self] jobId, jobName, content in
             DispatchQueue.main.async {
-                self?.notchVM.showCronToast(jobName: jobName, fullContent: content)
+                self?.notchVM.showCronToast(jobId: jobId, jobName: jobName, fullContent: content)
             }
         }
     }
