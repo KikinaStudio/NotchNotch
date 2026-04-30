@@ -1,13 +1,17 @@
 import SwiftUI
 
-/// Type sémantique d'un toast. Détermine icône + durée d'affichage.
-/// Le mapping pointe vers les SVG pixelarticons bundlés
+/// Type sémantique d'un toast. Détermine icône, teinte et durée
+/// d'affichage. Le mapping pointe vers les SVG pixelarticons bundlés
 /// (`BoaNotch/Resources/PixelIcons/`). Si une icône est absente du
 /// bundle, le fallback SF Symbol s'affiche.
 enum ToastKind: Equatable {
-    /// Toast générique (showToast par défaut).
+    /// Avis système générique (showToast par défaut). Inclut les
+    /// notifications de service NotchNotch (compression endpoint, etc.).
     case info
-    /// Confirmation (sauvegarde clipper, brain dump OK, etc.).
+    /// Réponse rapide de l'agent quand la notch est fermée — la catégorie
+    /// quotidienne, distincte des alertes système.
+    case chat
+    /// Confirmation (sauvegarde clipper, brain dump, mémoire édifiée).
     case success
     /// Échec (transcription échouée, endpoint injoignable).
     case error
@@ -18,6 +22,7 @@ enum ToastKind: Equatable {
     var iconName: String {
         switch self {
         case .info:    return "notification"
+        case .chat:    return "chat"
         case .success: return "pacman"
         case .error:   return "alert"
         case .cron:    return "clock"
@@ -28,17 +33,31 @@ enum ToastKind: Equatable {
     var fallbackSF: String {
         switch self {
         case .info:    return "bell.fill"
+        case .chat:    return "bubble.left.fill"
         case .success: return "checkmark.circle.fill"
         case .error:   return "exclamationmark.triangle.fill"
         case .cron:    return "clock.fill"
         }
     }
 
+    /// Teinte de l'icône. Sémantique par catégorie : la couleur porte le
+    /// sens autant que la forme du glyph. Calibrée pour rester lisible
+    /// sur le panel noir de la notch sans saturer.
+    var tint: Color {
+        switch self {
+        case .info:    return Color(red: 0.78, green: 0.72, blue: 1.00)  // soft lavender — system notice
+        case .chat:    return AppColors.accent                          // NotchNotch blue — agent voice
+        case .success: return Color(red: 0.50, green: 0.85, blue: 0.55) // green — confirmation
+        case .error:   return Color(red: 0.95, green: 0.45, blue: 0.45) // coral red — failure
+        case .cron:    return Color(red: 0.97, green: 0.70, blue: 0.30) // amber — scheduled event
+        }
+    }
+
     /// Durée d'affichage par défaut, en secondes.
     var displayDuration: TimeInterval {
         switch self {
-        case .info, .success, .error: return 3
-        case .cron:                   return 5
+        case .info, .chat, .success, .error: return 3
+        case .cron:                           return 5
         }
     }
 }
@@ -49,13 +68,13 @@ struct ToastView: View {
     var kind: ToastKind = .info
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             PixelIcon.image(kind.iconName, fallback: kind.fallbackSF)
                 .resizable()
                 .renderingMode(.template)
                 .interpolation(.none)
                 .frame(width: 18, height: 18)
-                .foregroundStyle(AppColors.accent)
+                .foregroundStyle(kind.tint)
 
             Text(cleanForToast(message))
                 .font(.callout)

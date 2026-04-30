@@ -197,7 +197,7 @@ class ChatViewModel: ObservableObject {
 
                 if let notchVM, notchVM.isClosed,
                    let lastMsg = messages.last, lastMsg.role == .assistant {
-                    notchVM.showToast(lastMsg.content)
+                    notchVM.showToast(lastMsg.content, kind: .chat)
                 }
 
                 // After the first exchange of a fresh conversation, ask
