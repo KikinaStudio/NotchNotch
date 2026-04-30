@@ -75,6 +75,12 @@ fi
 mkdir -p "$APP_DIR/Frameworks"
 cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Frameworks/"
 
+# swift build doesn't include @executable_path/../Frameworks in the binary's
+# rpath, so dyld can't find the embedded Sparkle.framework. Add it before
+# codesign — install_name_tool warns about invalidating the signature, but
+# we resign right after.
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/${APP_NAME}"
+
 # ── Codesign app (ad-hoc, deep, hardened runtime) ──────────────────────
 echo "Signing ${APP_NAME}.app (ad-hoc, hardened runtime)..."
 codesign --force --deep --sign - \
