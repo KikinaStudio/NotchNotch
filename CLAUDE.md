@@ -117,6 +117,7 @@ Per Google's Desktop OAuth docs the client secret isn't cryptographically secret
 - `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
 - `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
 - `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
+- `ToastView.swift` + `PixelIcons.swift` — Single unified toast surface. `enum ToastKind ∈ {info, success, error, cron}` carries icon name (resolves to a pixel-art SVG in `Contents/Resources/`, with SF Symbol fallback in `fallbackSF`) and per-kind `displayDuration` (3s for info/success/error, 5s for cron). `NotchState.toast(String, ToastKind)` is the only toast variant — `clipperToast` was collapsed into `success` on 2026-04-30. All call sites go through `NotchViewModel.showToast(_:kind:)` (default `.info`); `showCronToast(jobName:fullContent:)` is a thin wrapper that adds `pendingCronOutput` for tap-to-expand. `PixelIcon.image(_:fallback:)` is the shared loader (also used by `NotchView.callBellImage`/`callBellFillImage`); SVGs live flat in `BoaNotch/Resources/PixelIcons/` (subfolder for source organization, copied flat into `Contents/Resources/` by `run.sh`/`release.sh` so `Bundle.main.url(forResource:withExtension:)` finds them without a subdirectory hint). Vertical padding is **asymmetric** (9pt top / 12pt bottom) to compensate for the pixel glyph sitting low in its 24×24 viewBox + `.callout` text leading; numerically symmetric padding reads as top-heavy. Icons are always tinted `AppColors.accent` — semantic distinction is the *glyph shape*, not the color. Kind-specific icon mapping: `info → notification`, `success → pacman` (actually pixelarticons' `bookmark` glyph renamed; halfmage's free pack has no pacman), `error → alert`, `cron → clock`. Cron toast is wider (`max(notchWidth, 280)`) to fit `⚙️ {jobName}: {firstLine}` previews.
 - `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads config via Yams (`Yams.load(yaml:)` → `[String: Any]` dict navigation); writes via line-level regex replacement to preserve comments. `availableModels` returns `[(value: String, label: String)]` hardcoded per provider (switch on `modelProvider`: nous, openai, anthropic, openrouter, minimax, gemini, huggingface, zai, kimi-coding, xiaomi, custom) — add new models to the relevant case. User-added custom model IDs are merged on top via `userCustomModels: [String: [CustomModel]]` (persisted in UserDefaults under `userCustomModels`, mutated via `addCustomModel` / `removeCustomModel`). `"custom"` is a NotchNotch-only UI label that maps to `model.provider: openai` in config.yaml — Hermes has no `custom` provider id; OpenAI-compatible endpoints (Ollama, vLLM, NIM) use `provider: openai` with `model.base_url` overridden. `switchModel()` writes `model.default`, `model.provider`, and `model.base_url` atomically in a single file write via `Data.write(options: .atomic)`. The old `writeToConfig` method also uses this pattern (NOT tmp+moveItem which fails on macOS). `defaultBaseURL(for:)` is the canonical provider→base URL map (Xiaomi is `api.xiaomimimo.com/v1`, double `mi`; HuggingFace uses `router.huggingface.co/v1`). `writeAPIKey(provider:key:)` maps each provider to its env var name (HuggingFace = `HF_TOKEN`, not `HUGGINGFACE_API_KEY`; Gemini = `GEMINI_API_KEY`; unknown providers early-return — no fallback to `OPENROUTER_API_KEY`). `writeRawEnv(key:value:)` is the underlying idempotent line-replace helper, exposed publicly so `MemoryProviderSection` can write plugin env vars (e.g. `MEM0_API_KEY`, `OPENVIKING_ENDPOINT`) without going through `writeAPIKey`'s LLM-provider switch. Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`. The expanded bar shows a **context window usage gauge** (`Contexte` label + outlined capsule, 120×8pt, fill left→right) driven by `ChatViewModel.lastInputTokens`. Always visible (even at 0 tokens) for discoverability. Fill color: `AppColors.accent` < 70%, `.orange` ≥ 70%, `.red` ≥ 90%. Per-model limits live in `ExpandedBarView.contextWindowLimit` (substring match on `config.modelDefault`: claude/o1/o3/gpt-5/kimi/minimax → 200k, gpt-4o/4.1/llama/nemotron/deepseek/qwen/mistral/glm/mimo → 128k, gemini → 1M, default 128k) — add new providers there when extending `availableModels`. Minimum 5% visible fill when tokens > 0 so low usage still shows a segment. `lastInputTokens` is in-memory only (not persisted) — relaunching mid-conversation shows 0 until the next response. **Compression endpoint probe**: `compressionBaseURL: URL?` exposes `compression.summary_base_url` from config; `probeCompressionEndpoint() async -> EndpointHealth` GETs `{baseURL}/models` with a 2s timeout. `EndpointHealth` is `.notConfigured` / `.reachable` / `.unreachable(reason)`. `AppDelegate.probeCompressionEndpointOnce()` runs the probe once at launch (guarded by `didProbeCompression` flag) and fires `notchVM.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.")` on `.unreachable`. Read-only — NotchNotch never writes the compression section. **`yamlString` NSNull handling**: the helper returns `nil` for YAML `null` values (e.g., `summary_base_url: null`) instead of stringifying them as `"<null>"` — this gates the probe correctly when the key is present but unset.
 - `HermesMemoryConfig.swift` — Read/write Hermes memory provider configuration. `currentProvider` reads `memory.provider` from `~/.hermes/config.yaml`; `switchTo(_:)` writes via `HermesConfig.setImmediate`. `scanInstalledPlugins()` enumerates `~/.hermes/hermes-agent/plugins/memory/<name>/plugin.yaml` (note: `hermes-agent/plugins/memory/`, NOT `~/.hermes/plugins/memory/`) and parses each yaml's `requires_env: [VAR1, VAR2]` list with Yams. `availableProviders` filters `knownProviders` (8-entry static metadata array + built-in) by `installedPluginIDs`, attaching the live `requiresEnv` from the yaml so the UI prompts for the correct env var per plugin. `hasRequiredEnv(for:)` regex-matches `~/.hermes/.env` to decide whether to switch immediately or open the inline API-key form. See "Documented exception — memory provider direct config write".
 - `ProviderIcon.swift` — Renders the LLM provider's brand icon at a configurable point size. `ProviderIconCatalog.slug(for:)` maps NotchNotch provider id → lobehub SVG slug; `sfSymbol(for:)` maps the rest to SF Symbols (`xiaomi` → `cpu`, `custom` → `globe`). The view loads `Bundle.main.resourceURL?.appendingPathComponent("provider_<slug>.svg")` via `NSImage(contentsOf:)`, sets `isTemplate = true`, and renders with `.renderingMode(.template)` so the surrounding `foregroundStyle` tints it (same pattern as `NotchView.callBellImage` for the Phosphor `call_bell` SVGs). SVGs are MIT-licensed lobehub mono variants (`fill="currentColor"`, viewBox 0 0 24 24) bundled flat in `BoaNotch/Resources/provider_*.svg`. Refresh via `bash scripts/fetch-provider-icons.sh --force`. Used in `SettingsView.providerPill` (size 11) and `ExpandedBarView` model chip (size 10) — same icon, two locations.
@@ -160,7 +161,7 @@ Do NOT "fix" Hermes to stop emitting `<think>` blocks — the server streams wha
 Triple-tap the Control (⌃) key to start recording. A toast appears below the closed notch with a pulsing red dot and two buttons:
 
 1. **Talk** — stops recording, transcribes via `SpeechTranscriber` (macOS `SFSpeechRecognizer`, French locale), opens notch, sends transcript as chat message
-2. **Brain Dump** — stops recording, transcribes, saves transcript to Hermes memory via `saveToBrain()`, shows pacman toast "Note archivée 🧠"
+2. **Brain Dump** — stops recording, transcribes, saves transcript to Hermes memory via `saveToBrain()`, shows `kind: .success` toast "Note archivée 🧠" (pacman pixel icon)
 3. **Triple-tap ⌃ again** while recording — cancels, discards audio
 
 The triple-tap detection uses `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` gated on `event.keyCode == kVK_Control || kVK_RightControl` with down→up transition tracking. 0.5s sliding window, 3 releases to trigger. No Carbon hotkeys — all keyboard shortcuts were removed to avoid global key hijacking (Enter, Escape).
@@ -175,7 +176,7 @@ The drop zone "Save to brain", voice notes, and the Clipper extension all use th
 2. `HermesClient.sendCompletion(messages:)` sends `POST /v1/responses` with `store: false`, checks HTTP 200, discards body
 3. Toast shown via `notchVM.showToast()`
 
-The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a pacman toast in the notch.
+The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a `kind: .success` toast (pacman pixel icon) in the notch.
 
 ### Brain edit/delete pattern
 
@@ -302,7 +303,7 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. The burger m
 4. Hermes's `[SILENT]` marker is written to the file *before* its suppression kicks in (`scheduler.py:951` saves, `:960` silently skips delivery), so the watcher filters `[SILENT]` client-side (case-insensitive prefix)
 5. Surviving outputs fire `onNewOutput(jobName, content)` — wired in `AppDelegate.wireCronOutputToasts()` to `NotchViewModel.showCronToast(jobName:fullContent:)`
 
-The toast shows `⚙️ {jobName}: {firstLine}` (5s auto-dismiss) and stores the full content in `NotchViewModel.pendingCronOutput`. Tapping the toast (`NotchView.swift` `.onTapGesture`) injects `**{jobName}**\n\n{fullContent}` as an assistant `ChatMessage` and opens the notch. `pendingCronOutput` is cleared on consumption and also reset at the start of `showToast`/`showClipperToast` so stale cron output can't hijack a regular toast tap.
+The toast shows `⚙️ {jobName}: {firstLine}` (5s auto-dismiss, `kind: .cron` with the clock pixel icon) and stores the full content in `NotchViewModel.pendingCronOutput`. Tapping the toast (`NotchView.swift` `.onTapGesture`) injects `**{jobName}**\n\n{fullContent}` as an assistant `ChatMessage` and opens the notch. `pendingCronOutput` is cleared on consumption and also reset at the start of every `showToast` call so stale cron output can't hijack a regular toast tap.
 
 ### Conversation history
 
@@ -341,7 +342,7 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - **Bundle.module is forbidden — use `Bundle.main.resourceURL`**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Putting the bundle at the app root breaks codesign ("unsealed contents present in the bundle root"); leaving it in `Contents/Resources/` makes `Bundle.module`'s lazy static call `fatalError` on first access — which shipped as a crash-on-launch in v1.0.1 (friend's machine: `could not load resource bundle: from /Applications/NotchNotch.app/BoaNotch_BoaNotch.bundle or /Users/leon/NotchNotch/.build/...`). Fix: load all resources via `Bundle.main.resourceURL?.appendingPathComponent(...)` (files are copied to `Contents/Resources/` by `release.sh`/`run.sh`). Never reintroduce `Bundle.module` — even behind a fallback, the lazy static evaluates first and crashes before the fallback runs.
 - **Ad-hoc signed**: Triggers Gatekeeper. Users need `xattr -cr` or right-click > Open.
 - **SPM target name**: Still `BoaNotch` in Package.swift (renamed to `notchnotch` only at the app bundle level).
-- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum (`closed`, `open`, `toast`, `clipperToast`) requires updating the switch in `NotchWindowController.swift` (line ~61) or the build fails.
+- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum (`closed`, `open`, `toast(String, ToastKind)`) requires updating the switch in `NotchWindowController.swift` (line ~133) or the build fails.
 - **Chrome extension local path**: The extension is loaded from `~/NotchNotch Extension/` on the dev machine, NOT from the git repo clone. Changes to the repo must be copied there and the extension reloaded in Chrome.
 - **Hermes has no `config_set` tool**: the agent's available tools include `terminal`, `cronjob`, `memory`, `skill_manage`, `skills_list`, `skill_view`, `write_file`, `patch`, and others — but no `config_set`. To change a Hermes config key via chat, the prompt must instruct Hermes to run `hermes config set <key> <value>` via the `terminal` tool. A bare "set X to Y" prompt will fail with "Tool 'config_set' does not exist".
 - **`cronjob action=run` does NOT execute immediately**: it advances `next_run_at` to just after "now" but the actual execution still waits for the scheduler's tick. `last_run_at` and `last_status` stay null until the scheduler picks it up. To force-test a cron job's prompt, send that prompt directly via `/v1/responses` — don't rely on `action=run` for E2E verification.
@@ -360,7 +361,7 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 2. Extension extracts page content (title, URL, text/selection)
 3. Extension calls the Hermes API directly (`POST /v1/responses` to `localhost:8642`) with a save-to-memory prompt
 4. On success, extension POSTs `{"title": "...", "url": "..."}` to `localhost:19944/clip`
-5. `ClipperListener.swift` receives the POST, triggers `notchVM.showClipperToast(title)` — pacman animation + page title
+5. `ClipperListener.swift` receives the POST, `AppDelegate` calls `notchVM.showToast(title, kind: .success)` — pacman pixel icon + page title
 
 **How clipped content appears in NotchNotch Brain panel:**
 - Hermes processes the save prompt and writes to `~/.hermes/memories/MEMORY.md` as a `§`-separated block
@@ -371,7 +372,7 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - Hermes API: `localhost:8642` (health check: `GET /health`)
 - ClipperListener: `localhost:19944` — only accepts `POST /clip` with JSON `{"title": String, "url": String}`
 - ClipperListener response: HTTP 200 with `{"status":"ok"}` on success
-- The toast uses the pacman icon (purple animated circle) and auto-dismisses after 4 seconds
+- The toast uses `kind: .success` (pacman pixel icon, `AppColors.accent` tint) and auto-dismisses after 3 seconds
 
 **Local dev path:** Extension is loaded from `~/NotchNotch Extension/` (NOT the git repo clone). Changes to the repo must be copied there and the extension reloaded in `chrome://extensions`.
 
@@ -381,9 +382,8 @@ Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purp
 - UI: SwiftUI with AppKit (NSPanel, NSStatusItem, NSEvent global monitors)
 - Dependencies: Yams (SPM) for YAML parsing; otherwise standard frameworks (Network.framework for ClipperListener)
 - French locale for speech transcription
-- Accent color: `AppColors.accent` = light blue `Color(red: 0.6, green: 0.87, blue: 1.0)`. The pacman toast is separately tinted purple.
-- Pacman icon for clipper toasts (animated purple circle, 
-Canvas + TimelineView)
+- Accent color: `AppColors.accent` = light blue `Color(red: 0.6, green: 0.87, blue: 1.0)`. All toast icons (info / success / error / cron) are tinted with `AppColors.accent` — semantic distinction is carried by the *glyph shape*, not by color.
+- Toast icons are pixel-art SVGs from [halfmage/pixelarticons](https://github.com/halfmage/pixelarticons) (MIT) bundled in `BoaNotch/Resources/PixelIcons/`. `pacman.svg` is actually the pixelarticons `bookmark` glyph renamed (the free pack has no pacman); SF Symbol fallbacks live in `ToastKind.fallbackSF`.
 
 ### Design language — NOT Material Design
 NotchNotch deliberately avoids MD3-ish patterns. When adding or changing 
@@ -426,8 +426,8 @@ UI, follow these rules:
   10.5pt, `.white.opacity(0.45)`. See `BrainView.tabIntro`.
 - **Accent usage**: reserved for signature moments (the serif `§` mark 
   in MemoryCards, uppercase-mono category prefix in skill rows, active 
-  state dots, pacman toast). Never on heading/title text, never as a 
-  pill fill.
+  state dots, every toast icon — info/success/error/cron). Never on 
+  heading/title text, never as a pill fill.
 - **Icon sizing**: top flanking overlay icons (`NotchView` — burger 
   glyph, new conversation, close, panel resize) and the bottom input 
   bar (`ChatView` — attach, mic) are 14pt (`.system(size: 14, weight: .medium)`) 

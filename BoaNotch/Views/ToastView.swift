@@ -65,8 +65,12 @@ struct ToastView: View {
                 .multilineTextAlignment(.leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        // Asymmetric vertical padding: pixelarticons glyphs sit slightly low
+        // in their 24×24 viewBox, and `.callout` text has cap-height empty
+        // space at the top of its line box — both make a numerically
+        // symmetric 12/12 padding read as top-heavy. 9pt on top compensates
+        // visually so the icon + text appear vertically centered.
+        .padding(EdgeInsets(top: 9, leading: 14, bottom: 12, trailing: 14))
         .frame(width: kind == .cron ? max(notchWidth, 280) : notchWidth)
         .nnGlass(in: RoundedRectangle(cornerRadius: 12))
     }
