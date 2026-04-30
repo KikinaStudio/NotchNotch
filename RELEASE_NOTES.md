@@ -1,8 +1,8 @@
 # notchnotch v1.2.1
 
-## Auto-update is here
+## First auto-update build 🎉
 
-notchnotch now updates itself via Sparkle. New releases land in the menu — click **Install and Relaunch** and you're on the latest version. No more manual DMG hunts.
+This is the first universal (arm64 + x86_64), Sparkle-enabled build of notchnotch. From 1.2.1 onwards, new versions install themselves with one click — no more manual DMG hunts. New releases land in the menu — click **Install and Relaunch** and you're on the latest version.
 
 We're still ad-hoc-signed (no Apple Developer account yet), so each new version triggers macOS's Gatekeeper warning the same way the first install did. notchnotch shows you a one-click guide right after the relaunch — full walkthrough at [docs/GATEKEEPER_FIRST_LAUNCH.md](https://github.com/KikinaStudio/NotchNotch/blob/master/docs/GATEKEEPER_FIRST_LAUNCH.md).
 

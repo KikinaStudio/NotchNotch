@@ -99,6 +99,8 @@ xattr -cr /Applications/notchnotch.app
 
 This clears the macOS quarantine flag (the app is not signed with an Apple Developer certificate yet). If macOS still blocks the app, see [docs/GATEKEEPER_FIRST_LAUNCH.md](docs/GATEKEEPER_FIRST_LAUNCH.md) for the right-click and System Settings workarounds — the same guide applies after every Sparkle auto-update.
 
+**Updates from 1.2.1 onwards:** notchnotch self-updates via Sparkle. When a new release is out, the app shows a prompt with release notes — click **Install and Relaunch**. Each new version re-triggers macOS's Gatekeeper warning (we're still ad-hoc-signed); the app shows a one-click guide right after the relaunch. See [docs/GATEKEEPER_FIRST_LAUNCH.md](docs/GATEKEEPER_FIRST_LAUNCH.md).
+
 **Or build from source:**
 
 ```bash
@@ -185,7 +187,7 @@ macOS will prompt for:
 - [x] Memory provider selection UI (built-in, hindsight, mem0, supermemory, honcho, retaindb, openviking, byterover, holographic)
 - [ ] Dynamic notch height (auto-grow with content, drag handle)
 - [x] Auto-update via Sparkle (EdDSA-signed, ad-hoc release)
-- [ ] Universal binary (requires Xcode)
+- [x] Universal binary (arm64 + x86_64)
 - [ ] Apple Developer signing + notarization
 - [ ] Telegram Mini App (cron jobs, system monitoring, full mobile UI)
 
