@@ -3,8 +3,7 @@ import SwiftUI
 enum NotchState: Equatable {
     case closed
     case open
-    case toast(String)
-    case clipperToast(String)  // brain dump toast with pacman icon
+    case toast(String, ToastKind)
 }
 
 enum DropZone {
@@ -47,22 +46,18 @@ class NotchViewModel: ObservableObject {
     var isClosed: Bool { state == .closed }
 
     var isToastVisible: Bool {
-        switch state {
-        case .toast, .clipperToast: return true
-        default: return false
-        }
+        if case .toast = state { return true }
+        return false
     }
 
     var toastMessage: String? {
-        switch state {
-        case .toast(let msg), .clipperToast(let msg): return msg
-        default: return nil
-        }
+        if case .toast(let msg, _) = state { return msg }
+        return nil
     }
 
-    var isClipperToast: Bool {
-        if case .clipperToast = state { return true }
-        return false
+    var toastKind: ToastKind? {
+        if case .toast(_, let kind) = state { return kind }
+        return nil
     }
 
     // MARK: - Current animated size
@@ -146,17 +141,18 @@ class NotchViewModel: ObservableObject {
         onStateChange?(.closed)
     }
 
-    func showToast(_ message: String) {
+    func showToast(_ message: String, kind: ToastKind = .info) {
         toastTask?.cancel()
         pendingCronOutput = nil
         let truncated = String(message.prefix(100))
+        let next: NotchState = .toast(truncated, kind)
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            state = .toast(truncated)
+            state = next
         }
-        onStateChange?(.toast(truncated))
+        onStateChange?(next)
 
         toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(kind.displayDuration))
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 self.state = .closed
@@ -168,26 +164,13 @@ class NotchViewModel: ObservableObject {
     /// Present a cron-job completion toast. Stores the full content so a tap
     /// can expand it into chat before the auto-dismiss fires.
     func showCronToast(jobName: String, fullContent: String) {
-        toastTask?.cancel()
-        pendingCronOutput = (jobName, fullContent)
         let firstLine = fullContent
             .split(separator: "\n", maxSplits: 1)
             .first.map(String.init) ?? ""
         let preview = "⚙️ \(jobName): \(firstLine)"
-        let truncated = String(preview.prefix(100))
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            state = .toast(truncated)
-        }
-        onStateChange?(.toast(truncated))
-
-        toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                self.state = .closed
-            }
-            self.onStateChange?(.closed)
-        }
+        showToast(preview, kind: .cron)
+        // showToast clears pendingCronOutput; reassign after so the tap-to-expand works.
+        pendingCronOutput = (jobName, fullContent)
     }
 
     func openRoutines() {
@@ -269,25 +252,6 @@ class NotchViewModel: ObservableObject {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 isMenuExpanded = false
             }
-        }
-    }
-
-    func showClipperToast(_ title: String) {
-        toastTask?.cancel()
-        pendingCronOutput = nil
-        let truncated = String(title.prefix(80))
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            state = .clipperToast(truncated)
-        }
-        onStateChange?(.clipperToast(truncated))
-
-        toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                self.state = .closed
-            }
-            self.onStateChange?(.closed)
         }
     }
 

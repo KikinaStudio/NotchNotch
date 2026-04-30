@@ -62,7 +62,7 @@ struct NotchView: View {
                 }
 
                 if notchVM.isToastVisible, let msg = notchVM.toastMessage {
-                    ToastView(message: msg, notchWidth: notchVM.closedSize.width, isClipperToast: notchVM.isClipperToast)
+                    ToastView(message: msg, notchWidth: notchVM.closedSize.width, kind: notchVM.toastKind ?? .info)
                         .padding(.top, 8)
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity),
@@ -461,17 +461,8 @@ struct NotchView: View {
 
     // Custom-symbol pair loaded from bundled template SVGs (actool needs full Xcode, project ships
     // only Command Line Tools — so we bypass Assets.car and use NSImage isTemplate for tinting).
-    private static let callBellImage: Image = loadTemplateSVG("call.bell")
-    private static let callBellFillImage: Image = loadTemplateSVG("call.bell.fill")
-
-    private static func loadTemplateSVG(_ name: String) -> Image {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "svg"),
-              let nsImage = NSImage(contentsOf: url) else {
-            return Image(systemName: "bell")
-        }
-        nsImage.isTemplate = true
-        return Image(nsImage: nsImage).renderingMode(.template)
-    }
+    private static let callBellImage: Image = PixelIcon.image("call.bell", fallback: "bell")
+    private static let callBellFillImage: Image = PixelIcon.image("call.bell.fill", fallback: "bell.fill")
 
     // MARK: - Settings top bar spacer (buttons moved to flanking overlay)
 

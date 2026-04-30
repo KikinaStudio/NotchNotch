@@ -328,10 +328,10 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await client.sendCompletion(messages: messages)
-                notchVM?.showToast("Saved to brain")
+                notchVM?.showToast("Saved to brain", kind: .success)
             } catch {
                 print("[notchnotch] Save to brain error: \(error)")
-                notchVM?.showToast("Brain save failed")
+                notchVM?.showToast("Brain save failed", kind: .error)
             }
         }
     }
@@ -345,10 +345,10 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await client.sendCompletion(messages: messages)
-                notchVM?.showToast("Routine created")
+                notchVM?.showToast("Routine created", kind: .success)
             } catch {
                 print("[notchnotch] Create routine error: \(error)")
-                notchVM?.showToast("Routine creation failed")
+                notchVM?.showToast("Routine creation failed", kind: .error)
             }
         }
     }
@@ -375,10 +375,10 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await client.sendCompletion(messages: messages)
-                notchVM?.showToast("Mémoire mise à jour")
+                notchVM?.showToast("Mémoire mise à jour", kind: .success)
             } catch {
                 print("[notchnotch] Memory update error: \(error)")
-                notchVM?.showToast("Mise à jour échouée")
+                notchVM?.showToast("Mise à jour échouée", kind: .error)
             }
         }
     }
@@ -397,10 +397,10 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await client.sendCompletion(messages: messages)
-                notchVM?.showToast("Mémoire supprimée")
+                notchVM?.showToast("Mémoire supprimée", kind: .success)
             } catch {
                 print("[notchnotch] Memory delete error: \(error)")
-                notchVM?.showToast("Suppression échouée")
+                notchVM?.showToast("Suppression échouée", kind: .error)
             }
         }
     }
@@ -422,7 +422,7 @@ class ChatViewModel: ObservableObject {
             } catch {
                 print("[notchnotch] setRoutinePaused error: \(error)")
                 cronStore?.applyOptimisticPause(jobId: job.id, paused: !paused)
-                notchVM?.showToast("Échec — Hermes injoignable")
+                notchVM?.showToast("Échec — Hermes injoignable", kind: .error)
             }
         }
     }
@@ -436,10 +436,10 @@ class ChatViewModel: ObservableObject {
         Task { @MainActor in
             do {
                 try await client.updateCronJob(id: jobId, patch: patch)
-                notchVM?.showToast("Routine modifiée")
+                notchVM?.showToast("Routine modifiée", kind: .success)
             } catch {
                 print("[notchnotch] updateRoutine error: \(error)")
-                notchVM?.showToast("Échec — Hermes injoignable")
+                notchVM?.showToast("Échec — Hermes injoignable", kind: .error)
             }
         }
     }

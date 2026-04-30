@@ -85,7 +85,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             guard case .unreachable(let reason) = health else { return }
             os_log("Compression endpoint unreachable: %{public}@", type: .info, reason)
             await MainActor.run {
-                vm.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.")
+                vm.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.", kind: .error)
             }
         }
     }
@@ -102,7 +102,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         clipperListener.onClip = { [weak self] title, url in
             guard let self else { return }
             let label = title.isEmpty ? url : title
-            self.notchVM.showClipperToast(label)
+            self.notchVM.showToast(label, kind: .success)
         }
         clipperListener.start()
     }
@@ -214,10 +214,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if let text, !text.isEmpty {
                 print("[notchnotch] Brain dump OK: \(text.prefix(50))…")
                 chatVM.saveToBrain(content: text, fileName: "voice-note")
-                notchVM.showClipperToast("Note archivée 🧠")
+                notchVM.showToast("Note archivée 🧠", kind: .success)
             } else {
                 print("[notchnotch] Brain dump — transcription failed for \(url.lastPathComponent)")
-                notchVM.showToast("Transcription échouée")
+                notchVM.showToast("Transcription échouée", kind: .error)
             }
         }
     }
