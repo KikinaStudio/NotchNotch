@@ -416,7 +416,7 @@ struct NotchView: View {
                 Button {
                     notchVM.expandLeftMenu()
                 } label: {
-                    Image(systemName: "ellipsis.message")
+                    Image(systemName: "message")
                         .font(DS.Icon.topBar)
                         .frame(height: 13)
                         .foregroundStyle(Color.white.opacity(0.20))
