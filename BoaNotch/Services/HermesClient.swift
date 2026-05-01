@@ -253,6 +253,12 @@ class HermesClient {
         // into distinct text / thinking streams so the bubble never shows
         // raw reasoning tags.
         var thinkSplitter = ThinkTagSplitter()
+        // Tracks the OpenAI/Hermes reasoning channel (response.reasoning_text.delta)
+        // so we can bracket those deltas with thinkingStarted / thinkingEnded.
+        // Without bracketing, the deltas arrive without a prior `thinkingStarted`
+        // and are dropped by the consumer (no in-progress thinking event to
+        // append to).
+        var inReasoningChannel = false
 
         for try await event in SSEStream(bytes: bytes) {
             guard let payloadData = event.data.data(using: .utf8),
@@ -264,6 +270,12 @@ class HermesClient {
             switch event.name ?? "" {
             case "response.output_text.delta":
                 if let delta = payload["delta"] as? String, !delta.isEmpty {
+                    // If we were inside the reasoning channel, close it
+                    // before piping actual response text.
+                    if inReasoningChannel {
+                        inReasoningChannel = false
+                        onEvent(.thinkingEnded)
+                    }
                     let routed = thinkSplitter.feed(delta)
                     for tagEvent in routed.events {
                         switch tagEvent {
@@ -284,11 +296,22 @@ class HermesClient {
             case "response.reasoning_text.delta",
                  "response.reasoning_summary_text.delta":
                 if let delta = payload["delta"] as? String, !delta.isEmpty {
+                    if !inReasoningChannel {
+                        inReasoningChannel = true
+                        onEvent(.thinkingStarted)
+                    }
                     thinkingContent += delta
                     onEvent(.thinkingDelta(delta))
                 }
 
             case "response.output_item.added":
+                // Tool call starting — close any active reasoning block
+                // first so the thinking event reaches a terminal state
+                // before the tool event takes over.
+                if inReasoningChannel {
+                    inReasoningChannel = false
+                    onEvent(.thinkingEnded)
+                }
                 guard let item = payload["item"] as? [String: Any],
                       let type = item["type"] as? String else { break }
                 switch type {
@@ -318,6 +341,10 @@ class HermesClient {
                 if !flushed.text.isEmpty { content += flushed.text; onEvent(.textDelta(flushed.text)) }
                 if !flushed.thinking.isEmpty { thinkingContent += flushed.thinking; onEvent(.thinkingDelta(flushed.thinking)) }
                 if thinkSplitter.insideThink { onEvent(.thinkingEnded) }
+                if inReasoningChannel {
+                    inReasoningChannel = false
+                    onEvent(.thinkingEnded)
+                }
 
                 if let responseObj = payload["response"] as? [String: Any] {
                     if let usage = responseObj["usage"] as? [String: Any] {

@@ -115,7 +115,6 @@ class ChatViewModel: ObservableObject {
         connectionError = nil
 
         streamTask = Task { @MainActor in
-            let startTime = Date()
             do {
                 var systemContext: String? = nil
                 if let routine = activeRoutineContext {
@@ -142,35 +141,74 @@ class ChatViewModel: ObservableObject {
                         switch event {
                         case .textDelta(let d):
                             self.messages[lastIndex].content.append(d)
+
                         case .thinkingDelta(let d):
-                            self.messages[lastIndex].thinkingContent.append(d)
-                            if self.messages[lastIndex].isCurrentlyThinking {
-                                self.messages[lastIndex].currentThinkingBlock.append(d)
-                            }
+                            // Append to the last in-progress thinking event.
+                            // If none, drop silently (orphan delta — never
+                            // create a phantom event from a stray chunk).
+                            guard let evIdx = self.messages[lastIndex].events.lastIndex(where: {
+                                if case .thinking = $0.kind, case .inProgress = $0.status { return true }
+                                return false
+                            }) else { break }
+                            self.messages[lastIndex].events[evIdx].detail.append(d)
+
                         case .thinkingStarted:
-                            self.messages[lastIndex].isCurrentlyThinking = true
-                            self.messages[lastIndex].currentThinkingBlock = ""
+                            self.messages[lastIndex].events.append(AgentEvent(
+                                id: UUID().uuidString,
+                                kind: .thinking,
+                                status: .inProgress,
+                                startedAt: Date(),
+                                endedAt: nil,
+                                detail: ""
+                            ))
+
                         case .thinkingEnded:
-                            self.messages[lastIndex].isCurrentlyThinking = false
-                            self.messages[lastIndex].currentThinkingBlock = ""
-                        case .toolCallStarted(_, let name, let preview):
-                            let line = preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
-                            if name == "delegate_task" || line.contains("🤖") {
-                                self.messages[lastIndex].subagentActivity.append(line)
-                            } else {
-                                self.messages[lastIndex].toolCallContent.append(line)
+                            // Close the most recent in-progress thinking
+                            // event. Drop silently if none — an orphaned
+                            // close event shouldn't synthesize one.
+                            guard let evIdx = self.messages[lastIndex].events.lastIndex(where: {
+                                if case .thinking = $0.kind, case .inProgress = $0.status { return true }
+                                return false
+                            }) else { break }
+                            self.messages[lastIndex].events[evIdx].status = .completed
+                            self.messages[lastIndex].events[evIdx].endedAt = Date()
+
+                        case .toolCallStarted(let id, let name, let preview):
+                            self.messages[lastIndex].events.append(AgentEvent(
+                                id: id,
+                                kind: .tool(name: name, argsPreview: preview),
+                                status: .inProgress,
+                                startedAt: Date(),
+                                endedAt: nil,
+                                detail: preview
+                            ))
+
+                        case .toolCallCompleted(let id, _, let resultPreview):
+                            // Match by call_id (stable across started/completed
+                            // per Hermes contract). If no match, drop — never
+                            // fabricate a synthetic completed event.
+                            guard let evIdx = self.messages[lastIndex].events.firstIndex(where: { $0.id == id }) else { break }
+                            self.messages[lastIndex].events[evIdx].status = .completed
+                            self.messages[lastIndex].events[evIdx].endedAt = Date()
+                            if !resultPreview.isEmpty {
+                                let sep = self.messages[lastIndex].events[evIdx].detail.isEmpty ? "" : "\n→ "
+                                self.messages[lastIndex].events[evIdx].detail.append(sep + resultPreview)
                             }
-                        case .toolCallCompleted(_, let name, _):
-                            let line = "✓ \(name)\n"
-                            if name == "delegate_task" {
-                                self.messages[lastIndex].subagentActivity.append(line)
-                            } else {
-                                self.messages[lastIndex].toolCallContent.append(line)
-                            }
+
                         case .completed(let pt, _):
                             if let pt { self.lastInputTokens = pt }
-                        case .failed:
-                            break
+
+                        case .failed(let reason):
+                            // Mark every still-in-progress event as failed
+                            // with the stream-level reason. Imprecise (we
+                            // don't know which one actually broke) but
+                            // honest — partial detail text is preserved.
+                            for i in self.messages[lastIndex].events.indices {
+                                if case .inProgress = self.messages[lastIndex].events[i].status {
+                                    self.messages[lastIndex].events[i].status = .failed(reason)
+                                    self.messages[lastIndex].events[i].endedAt = Date()
+                                }
+                            }
                         }
                     }
                 }
@@ -178,25 +216,29 @@ class ChatViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 guard let lastIndex = messages.indices.last else { return }
 
-                // Reconcile from the authoritative ResponseResult — protects
-                // against dropped deltas, out-of-order Task execution, or a
-                // non-SSE fallback path where we emitted no live events.
+                // Reconcile content from the authoritative ResponseResult.
+                // Events array is the source of truth for the timeline (built
+                // incrementally), so we only sync `content` here — events
+                // were already finalized as deltas arrived.
                 messages[lastIndex].content = result.content
-                messages[lastIndex].thinkingContent = result.thinkingContent
-                let (filteredTools, subagent) = Self.splitSubagentContent(result.toolCalls)
-                messages[lastIndex].toolCallContent = filteredTools
-                messages[lastIndex].subagentActivity = subagent
                 messages[lastIndex].promptTokens = result.promptTokens
                 messages[lastIndex].completionTokens = result.completionTokens
                 if let p = result.promptTokens {
                     lastInputTokens = p
                 }
-                if !result.thinkingContent.isEmpty {
-                    messages[lastIndex].thinkingDuration = Date().timeIntervalSince(startTime)
+
+                // Safety net: any event still flagged inProgress at this
+                // point (e.g. dropped close event) gets force-completed so
+                // the UI never shows a perpetual spinner.
+                let now = Date()
+                for i in messages[lastIndex].events.indices {
+                    if case .inProgress = messages[lastIndex].events[i].status {
+                        messages[lastIndex].events[i].status = .completed
+                        messages[lastIndex].events[i].endedAt = now
+                    }
                 }
+
                 messages[lastIndex].isStreaming = false
-                messages[lastIndex].isCurrentlyThinking = false
-                messages[lastIndex].currentThinkingBlock = ""
                 isStreaming = false
                 connectionError = nil
 
@@ -230,10 +272,19 @@ class ChatViewModel: ObservableObject {
                         connectionError = "Unexpected error: \(desc)"
                     }
                     if let lastIndex = messages.indices.last {
+                        // Mark any in-progress events as failed so the UI
+                        // doesn't keep spinning. Use the connectionError
+                        // text as the reason if available, else a generic.
+                        let reason = connectionError ?? "Stream interrupted"
+                        let now = Date()
+                        for i in messages[lastIndex].events.indices {
+                            if case .inProgress = messages[lastIndex].events[i].status {
+                                messages[lastIndex].events[i].status = .failed(reason)
+                                messages[lastIndex].events[i].endedAt = now
+                            }
+                        }
                         messages[lastIndex].isStreaming = false
-                        messages[lastIndex].isCurrentlyThinking = false
-                        messages[lastIndex].currentThinkingBlock = ""
-                        if messages[lastIndex].content.isEmpty {
+                        if messages[lastIndex].content.isEmpty && messages[lastIndex].events.isEmpty {
                             messages.removeLast()
                         }
                     }
@@ -284,9 +335,16 @@ class ChatViewModel: ObservableObject {
         streamTask?.cancel()
         streamTask = nil
         if let lastIndex = messages.indices.last, messages[lastIndex].isStreaming {
+            // Force-close any in-progress events so the UI doesn't keep
+            // spinning post-cancel.
+            let now = Date()
+            for i in messages[lastIndex].events.indices {
+                if case .inProgress = messages[lastIndex].events[i].status {
+                    messages[lastIndex].events[i].status = .failed("Cancelled")
+                    messages[lastIndex].events[i].endedAt = now
+                }
+            }
             messages[lastIndex].isStreaming = false
-            messages[lastIndex].isCurrentlyThinking = false
-            messages[lastIndex].currentThinkingBlock = ""
         }
         isStreaming = false
     }
@@ -534,18 +592,4 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    private static func splitSubagentContent(_ toolCalls: String) -> (toolCalls: String, subagent: String) {
-        guard toolCalls.contains("🤖") else { return (toolCalls, "") }
-        let lines = toolCalls.components(separatedBy: "\n")
-        var tools: [String] = []
-        var subagent: [String] = []
-        for line in lines {
-            if line.contains("🤖") || line.contains("delegate_task") {
-                subagent.append(line)
-            } else {
-                tools.append(line)
-            }
-        }
-        return (tools.joined(separator: "\n"), subagent.joined(separator: "\n"))
-    }
 }

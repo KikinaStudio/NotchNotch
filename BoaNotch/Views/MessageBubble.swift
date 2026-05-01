@@ -11,14 +11,11 @@ struct MessageBubble: View {
     var isChatStreaming: Bool = false
     private var isUser: Bool { message.role == .user }
 
-    @State private var showThinking = false
-    @State private var showToolCalls = false
     @State private var showCopyConfirm = false
     @State private var isHoveredCopy = false
     @State private var isHoveredRetry = false
     @State private var isHoveredRefine = false
     @State private var isHovered = false
-    @State private var pulseOpacity: Double = 0.3
 
     @EnvironmentObject var appearanceSettings: AppearanceSettings
 
@@ -34,33 +31,16 @@ struct MessageBubble: View {
                     }
                 }
 
-                // Thinking: live rolling preview while we're inside a
-                // `<think>` block, collapsed toggle once the model has
-                // finished reasoning.
-                if message.isCurrentlyThinking {
-                    liveThinkingPreview
-                } else if !message.thinkingContent.isEmpty {
-                    thinkingToggle
-                }
-
-                // Subagent indicator
-                if !message.subagentActivity.isEmpty {
-                    subagentIndicator
-                }
-
-                // Live tool-call preview (during streaming) or collapsed toggle (after)
-                if !message.toolCallContent.isEmpty {
-                    if message.isStreaming {
-                        liveToolCalls
-                    } else {
-                        toolCallToggle
-                    }
-                }
+                // Unified agent activity timeline: thinking + tool calls
+                // surface as a single live line during streaming and a
+                // synthetic recap once finished. Self-contained: hides
+                // itself when there's nothing to show.
+                EventTimeline(message: message)
 
                 // Message content with clickable file paths (final response only)
                 if !displayContent.isEmpty {
                     filePathAwareContent
-                        .padding(.top, (!message.thinkingContent.isEmpty || !message.toolCallContent.isEmpty) ? 4 : 0)
+                        .padding(.top, message.hasEvents ? 4 : 0)
                 }
 
                 // Action buttons for completed assistant messages
@@ -161,170 +141,6 @@ struct MessageBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-    }
-
-    // MARK: - Live thinking preview (streaming, inside <think>)
-
-    private var liveThinkingPreview: some View {
-        HStack(alignment: .top, spacing: 6) {
-            Circle()
-                // TODO(design): animated opacity, not a static design token
-                .fill(.white.opacity(pulseOpacity))
-                .frame(width: 4, height: 4)
-                .padding(.top, 6)
-            Text(currentThinkingText)
-                .font(DS.Text.caption)
-                .italic()
-                .foregroundStyle(DS.Surface.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-        .transition(.opacity)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                pulseOpacity = 0.85
-            }
-        }
-    }
-
-    private var currentThinkingText: String {
-        let trimmed = message.currentThinkingBlock.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Réflexion…" : trimmed
-    }
-
-    // MARK: - Thinking toggle
-
-    private var thinkingToggle: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { showThinking.toggle() }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: showThinking ? "chevron.down" : "chevron.right")
-                        .font(DS.Icon.chevronBold)
-                    if message.isStreaming && message.content.isEmpty {
-                        Text("Thinking...")
-                            .italic()
-                    } else {
-                        let duration = Int(message.thinkingDuration ?? 0)
-                        Text("Thought for \(duration)s")
-                    }
-                }
-                .font(DS.Text.caption)
-                .foregroundStyle(DS.Surface.tertiary)
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-
-            if showThinking {
-                Text(message.thinkingContent)
-                    .font(DS.Text.captionMono)
-                    .foregroundStyle(DS.Surface.quaternary)
-                    .textSelection(.enabled)
-                    .padding(.top, 4)
-                    .padding(.leading, 13)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    // MARK: - Tool call toggle
-
-    private var toolCallToggle: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { showToolCalls.toggle() }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: showToolCalls ? "chevron.down" : "chevron.right")
-                        .font(DS.Icon.chevronBold)
-                    Image(systemName: "wrench.and.screwdriver")
-                        .font(DS.Text.micro)
-                    if message.isStreaming && message.content.isEmpty {
-                        Text("Using tools...")
-                            .italic()
-                    } else {
-                        Text("Used tools")
-                    }
-                }
-                .font(DS.Text.caption)
-                .foregroundStyle(DS.Surface.tertiary)
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-
-            if showToolCalls {
-                Text(message.toolCallContent)
-                    .font(DS.Text.captionMono)
-                    .foregroundStyle(DS.Surface.quaternary)
-                    .textSelection(.enabled)
-                    .padding(.top, 4)
-                    .padding(.leading, 13)
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    // MARK: - Live tool-call preview (streaming)
-
-    private var liveToolCalls: some View {
-        let lines = message.toolCallContent
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map(String.init)
-        let tail = Array(lines.suffix(3))
-
-        return VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(tail.enumerated()), id: \.offset) { idx, line in
-                let isLast = idx == tail.count - 1
-                let inProgress = isLast && line.hasPrefix("→")
-                HStack(spacing: 5) {
-                    if inProgress {
-                        Circle()
-                            // TODO(design): animated opacity, not a static design token
-                            .fill(.white.opacity(pulseOpacity))
-                            .frame(width: 4, height: 4)
-                    }
-                    Text(line)
-                        .font(DS.Text.captionMono)
-                        .foregroundStyle(DS.Surface.tertiary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
-            }
-        }
-        .padding(.vertical, 2)
-        .transition(.opacity)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                pulseOpacity = 0.85
-            }
-        }
-    }
-
-    // MARK: - Subagent indicator
-
-    private var subagentLabel: String {
-        let parts = message.subagentActivity.components(separatedBy: "🤖").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        if parts.count > 1 {
-            return "\(parts.count) sub-tasks delegated"
-        }
-        if let desc = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
-            return "Delegated: \(desc)"
-        }
-        return "Working with a sub-agent..."
-    }
-
-    private var subagentIndicator: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "person.2.fill")
-                .font(DS.Text.nano)
-            Text(subagentLabel)
-                .font(DS.Text.caption)
-        }
-        .foregroundStyle(AppColors.accent.opacity(0.6))
-        .padding(.vertical, 2)
     }
 
     // MARK: - Content with clickable file paths
@@ -748,4 +564,374 @@ struct MessageBubble: View {
         return result
     }
 
+}
+
+// MARK: - Agent activity timeline
+//
+// Single-line surface for the message's `events` array. While streaming
+// shows the most recent in-progress event with a spinner; once done shows
+// a synthetic recap (`brain Thought for 3s and called 4 tools`). Tap the
+// chevron to reveal the full ordered timeline. Each row in the expansion
+// has its own per-event chevron to drill into the raw detail (tool args
+// + result, or thinking text — clamped to 600 chars).
+//
+// Hides itself entirely when `message.events` is empty.
+
+private struct EventTimeline: View {
+    let message: ChatMessage
+    @State private var isExpanded = false
+    @State private var pulseOpacity: Double = 0.3
+
+    var body: some View {
+        if !message.hasEvents && !message.isStreaming {
+            EmptyView()
+        } else if !message.hasEvents && message.isStreaming {
+            // Pre-first-event grace state: a fresh assistant message with
+            // no events yet (e.g. the model is still warming up before
+            // emitting any thinking or tool call). Show a soft "Thinking…"
+            // pulse so the bubble isn't blank.
+            HStack(spacing: 5) {
+                Image(systemName: "brain")
+                    .font(DS.Text.micro)
+                Text("Thinking")
+                    .italic()
+                Text("…")
+                    .opacity(pulseOpacity)
+            }
+            .font(DS.Text.caption)
+            .foregroundStyle(DS.Surface.tertiary)
+            .padding(.vertical, 2)
+            .onAppear { startPulse() }
+        } else if message.isStreaming && message.currentEvent == nil {
+            // Between events (a thinking block just closed and the next
+            // tool / reasoning block hasn't started yet, or text is rolling
+            // out). The "Thought for Ns" recap belongs to the post-stream
+            // state, not here — but the user is still waiting, so show a
+            // soft "Thinking…" placeholder rather than letting the timeline
+            // flicker in and out.
+            HStack(spacing: 5) {
+                Text("Thinking")
+                    .italic()
+                Text("…")
+                    .opacity(pulseOpacity)
+            }
+            .font(DS.Text.caption)
+            .foregroundStyle(DS.Surface.tertiary)
+            .padding(.vertical, 2)
+            .onAppear { startPulse() }
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(DS.Motion.standard) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(DS.Icon.chevronBold)
+                        headerContent
+                    }
+                    .font(DS.Text.caption)
+                    .foregroundStyle(DS.Surface.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+
+                if isExpanded {
+                    expandedList
+                        .padding(.top, 4)
+                        .padding(.leading, 13)
+                }
+            }
+            .padding(.vertical, 2)
+            .onAppear { startPulse() }
+        }
+    }
+
+    // MARK: header (single live line OR recap)
+
+    @ViewBuilder
+    private var headerContent: some View {
+        if message.isStreaming, let current = message.currentEvent {
+            inProgressLine(current)
+        } else {
+            recapLine
+        }
+    }
+
+    @ViewBuilder
+    private func inProgressLine(_ event: AgentEvent) -> some View {
+        switch event.kind {
+        case .thinking:
+            // Live thinking: show the streaming content itself, not just
+            // a "Thinking…" placeholder. Pulsing dot signals liveness;
+            // text wraps across lines so the user actually reads what
+            // the model is reasoning about.
+            if event.detail.isEmpty {
+                HStack(spacing: 5) {
+                    Image(systemName: "brain")
+                        .font(DS.Text.micro)
+                    Text("Thinking")
+                        .italic()
+                    Text("…")
+                        .opacity(pulseOpacity)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 6) {
+                    Circle()
+                        .fill(DS.Surface.tertiary)
+                        .frame(width: 4, height: 4)
+                        .padding(.top, 5)
+                        .opacity(pulseOpacity)
+                    Text(event.detail)
+                        .italic()
+                        .lineSpacing(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        case .tool(let name, let argsPreview):
+            HStack(spacing: 5) {
+                let mapping = AgentEventStyle.verbMapping(toolName: name)
+                Image(systemName: mapping.icon)
+                    .font(DS.Text.micro)
+                Text(mapping.present)
+                    .italic()
+                if !argsPreview.isEmpty {
+                    Text(AgentEventStyle.truncate(argsPreview, max: 50))
+                        .font(DS.Text.captionMono)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 6)
+                BrailleSpinner(size: 9, color: .white.opacity(0.5))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var recapLine: some View {
+        let toolCount = message.toolCallCount
+        let thinkingDuration = message.thinkingTotalDuration
+        let hasThinking = thinkingDuration >= 0.5
+        let hasTools = toolCount > 0
+        let icon = hasThinking ? "brain" : "wrench.and.screwdriver"
+        let durationLabel = "\(max(1, Int(thinkingDuration.rounded())))s"
+        let toolsLabel = "\(toolCount) tool\(toolCount == 1 ? "" : "s")"
+
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(DS.Text.micro)
+            if hasThinking && hasTools {
+                Text("Thought for \(durationLabel) and called \(toolsLabel)")
+            } else if hasThinking {
+                Text("Thought for \(durationLabel)")
+            } else if hasTools {
+                Text("Called \(toolsLabel)")
+            } else {
+                // Events exist but nothing surfaceable (e.g. only failed
+                // before any duration was captured). Fall back to a count.
+                Text("\(message.events.count) event\(message.events.count == 1 ? "" : "s")")
+            }
+        }
+    }
+
+    // MARK: expanded list
+
+    @ViewBuilder
+    private var expandedList: some View {
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(message.events) { event in
+                    EventLine(event: event)
+                        .id(event.id)
+                }
+            }
+            .onChange(of: message.events.count) { _, _ in
+                guard let last = message.events.last else { return }
+                withAnimation(DS.Motion.standard) {
+                    proxy.scrollTo(last.id, anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private func startPulse() {
+        withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+            pulseOpacity = 0.85
+        }
+    }
+}
+
+private struct EventLine: View {
+    let event: AgentEvent
+    @State private var isExpanded = false
+
+    private var isThinking: Bool {
+        if case .thinking = event.kind { return true }
+        return false
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if isThinking {
+                // Thinking events skip both the toggle and the "Thought"
+                // header label: when the parent timeline is expanded the
+                // user wants to read the reasoning, not click through a
+                // second container. Render the content directly.
+                if !event.detail.isEmpty {
+                    detailBody
+                }
+            } else {
+                Button {
+                    withAnimation(DS.Motion.standard) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(DS.Icon.chevronBold)
+                        Image(systemName: AgentEventStyle.iconName(for: event))
+                            .font(DS.Text.micro)
+                        headerLabel
+                        Spacer(minLength: 6)
+                        durationLabel
+                        statusIcon
+                    }
+                    .font(DS.Text.caption)
+                    .foregroundStyle(rowForeground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+
+                if isExpanded {
+                    detailBody
+                }
+            }
+        }
+    }
+
+    private var rowForeground: AnyShapeStyle {
+        if case .failed = event.status {
+            return AnyShapeStyle(Color.red.opacity(0.85))
+        }
+        return DS.Surface.tertiary
+    }
+
+    @ViewBuilder
+    private var headerLabel: some View {
+        switch event.kind {
+        case .thinking:
+            Text("Thought")
+                .lineLimit(1)
+        case .tool(let name, let argsPreview):
+            HStack(spacing: 4) {
+                Text(AgentEventStyle.verbMapping(toolName: name).past)
+                if !argsPreview.isEmpty {
+                    Text(AgentEventStyle.truncate(argsPreview, max: 50))
+                        .font(DS.Text.captionMono)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var durationLabel: some View {
+        switch event.status {
+        case .completed, .failed:
+            Text(AgentEventStyle.formatDuration(event.duration))
+                .font(DS.Text.captionMono)
+                .foregroundStyle(DS.Surface.quaternary)
+        case .inProgress:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder
+    private var statusIcon: some View {
+        switch event.status {
+        case .completed:
+            Image(systemName: "checkmark")
+                .font(DS.Text.nano)
+                .foregroundStyle(.green.opacity(0.9))
+        case .failed:
+            Image(systemName: "xmark.octagon.fill")
+                .font(DS.Text.nano)
+                .foregroundStyle(.red.opacity(0.9))
+        case .inProgress:
+            BrailleSpinner(size: 9, color: .white.opacity(0.5))
+        }
+    }
+
+    @ViewBuilder
+    private var detailBody: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Rectangle()
+                .fill(DS.Stroke.hairline)
+                .frame(width: DS.Hairline.standard)
+            VStack(alignment: .leading, spacing: 4) {
+                if case .failed(let reason) = event.status, !reason.isEmpty {
+                    Text(reason)
+                        .font(DS.Text.micro)
+                        .italic()
+                        .foregroundStyle(.red.opacity(0.85))
+                        .textSelection(.enabled)
+                }
+                if !event.detail.isEmpty {
+                    let truncated = event.detail.count > 600
+                        ? String(event.detail.prefix(600)) + "…"
+                        : event.detail
+                    Text(truncated)
+                        .font(DS.Text.captionMono)
+                        .foregroundStyle(DS.Surface.quaternary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
+        .padding(.leading, 13)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
+    }
+}
+
+// MARK: - Verb / icon / format helpers (timeline-only)
+
+private enum AgentEventStyle {
+    /// Mapping from Hermes tool name → SF Symbol + present/past verbs.
+    /// Fallback for unknown tool names is `wrench.and.screwdriver` /
+    /// "Using" / "Used". `delegate_task` is included as a regular tool —
+    /// no special UI for subagent activity (that distinction was the
+    /// pre-refactor `subagentIndicator`, intentionally collapsed here).
+    static func verbMapping(toolName: String) -> (icon: String, present: String, past: String) {
+        switch toolName {
+        case "terminal":      return ("terminal",               "Running",    "Ran")
+        case "view":          return ("doc.text",               "Viewing",    "Viewed")
+        case "str_replace":   return ("pencil",                 "Editing",    "Edited")
+        case "create_file":   return ("doc.badge.plus",         "Creating",   "Created")
+        case "web_search":    return ("magnifyingglass",        "Searching",  "Searched")
+        case "web_fetch":     return ("globe",                  "Fetching",   "Fetched")
+        case "delegate_task": return ("person.2",               "Delegating", "Delegated")
+        default:              return ("wrench.and.screwdriver", "Using",      "Used")
+        }
+    }
+
+    static func iconName(for event: AgentEvent) -> String {
+        switch event.kind {
+        case .thinking:                return "brain"
+        case .tool(let name, _):       return verbMapping(toolName: name).icon
+        }
+    }
+
+    static func truncate(_ s: String, max: Int) -> String {
+        guard s.count > max else { return s }
+        return String(s.prefix(max)) + "…"
+    }
+
+    /// Sub-second durations are rendered as `<1s` rather than `0s` so the
+    /// fast tool calls don't read as "didn't run". Anything ≥1s rounds.
+    static func formatDuration(_ d: TimeInterval) -> String {
+        if d < 1.0 { return "<1s" }
+        return "\(Int(d.rounded()))s"
+    }
 }

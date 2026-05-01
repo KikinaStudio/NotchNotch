@@ -338,6 +338,7 @@ struct NotchView: View {
                         } label: {
                             Image(systemName: isDeployed ? "xmark" : "line.3.horizontal")
                                 .font(DS.Icon.secondary)
+                                .frame(height: 14)
                                 .foregroundStyle(isDeployed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                                 .contentTransition(.symbolEffect(.replace))
                         }
@@ -352,6 +353,7 @@ struct NotchView: View {
                                   ? "arrow.up.left.and.arrow.down.right"
                                   : "arrow.down.right.and.arrow.up.left")
                                 .font(DS.Icon.secondary)
+                                .frame(height: 14)
                                 .foregroundStyle(hoverResize ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                         }
                         .buttonStyle(.plain)
