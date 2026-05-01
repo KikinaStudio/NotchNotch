@@ -400,7 +400,7 @@ struct NotchView: View {
                         notchVM.collapseLeftMenu()
                     }
                 }
-                menuButton("plus.bubble", active: false) {
+                menuButton("plus.message", active: false) {
                     chatVM.startNewConversation()
                     notchVM.collapseLeftMenu()
                 }
@@ -416,7 +416,7 @@ struct NotchView: View {
                 Button {
                     notchVM.expandLeftMenu()
                 } label: {
-                    Image(systemName: "rectangle.3.group.bubble")
+                    Image(systemName: "ellipsis.message")
                         .font(DS.Icon.topBar)
                         .frame(height: 13)
                         .foregroundStyle(Color.white.opacity(0.20))

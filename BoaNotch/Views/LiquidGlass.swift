@@ -86,30 +86,37 @@ extension View {
     }
 
     @ViewBuilder
-    func nnGlass(interactive: Bool = false) -> some View {
+    func nnGlass(interactive: Bool = false, tint: Color? = nil) -> some View {
         if #available(macOS 26.0, *) {
-            if interactive {
-                self.glassEffect(.regular.interactive())
-            } else {
-                self.glassEffect(.regular)
+            // Tint goes through .glassEffect(.regular.tint(...)) so it integrates
+            // with refraction instead of blocking translucency (Apple's pattern).
+            switch (interactive, tint) {
+            case (true, let t?):  self.glassEffect(.regular.tint(t).interactive())
+            case (true, nil):     self.glassEffect(.regular.interactive())
+            case (false, let t?): self.glassEffect(.regular.tint(t))
+            case (false, nil):    self.glassEffect(.regular)
             }
         } else {
+            // Fallback: contrast layer + material on top. Tint preserves contrast
+            // on bright wallpapers where .ultraThinMaterial alone would wash out.
             self.background(
                 Capsule()
                     .fill(.ultraThinMaterial)
                     // TODO(design): glass material stroke (0.15), not a generic UI hairline — kept literal intentionally.
                     .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: DS.Hairline.standard))
             )
+            .background(tint.map { Capsule().fill($0) })
         }
     }
 
     @ViewBuilder
-    func nnGlass<S: Shape>(in shape: S, interactive: Bool = false) -> some View {
+    func nnGlass<S: Shape>(in shape: S, interactive: Bool = false, tint: Color? = nil) -> some View {
         if #available(macOS 26.0, *) {
-            if interactive {
-                self.glassEffect(.regular.interactive(), in: shape)
-            } else {
-                self.glassEffect(.regular, in: shape)
+            switch (interactive, tint) {
+            case (true, let t?):  self.glassEffect(.regular.tint(t).interactive(), in: shape)
+            case (true, nil):     self.glassEffect(.regular.interactive(), in: shape)
+            case (false, let t?): self.glassEffect(.regular.tint(t), in: shape)
+            case (false, nil):    self.glassEffect(.regular, in: shape)
             }
         } else {
             self.background(
@@ -118,6 +125,7 @@ extension View {
                     // TODO(design): glass material stroke (0.15), not a generic UI hairline — kept literal intentionally.
                     .overlay(shape.stroke(.white.opacity(0.15), lineWidth: DS.Hairline.standard))
             )
+            .background(tint.map { shape.fill($0) })
         }
     }
 }

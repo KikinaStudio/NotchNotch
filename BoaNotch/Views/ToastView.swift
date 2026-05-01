@@ -68,7 +68,7 @@ struct ToastView: View {
     var kind: ToastKind = .info
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             PixelIcon.image(kind.iconName, fallback: kind.fallbackSF)
                 .resizable()
                 .renderingMode(.template)
@@ -89,7 +89,10 @@ struct ToastView: View {
         // 2-line content grows in the middle; icon stays centered via HStack.
         .padding(EdgeInsets(top: 11, leading: 14, bottom: 11, trailing: 14))
         .frame(width: kind == .cron ? max(notchWidth, 280) : notchWidth)
-        .nnGlass(in: RoundedRectangle(cornerRadius: 12))
+        // Tint integrates with the glass refraction (Apple pattern) instead of
+        // sitting as an opaque layer behind it. Guarantees text contrast on any
+        // wallpaper without breaking translucency.
+        .nnGlass(in: RoundedRectangle(cornerRadius: 12), tint: Color.black.opacity(0.55))
     }
 
     /// Strip markdown syntax for clean toast display
