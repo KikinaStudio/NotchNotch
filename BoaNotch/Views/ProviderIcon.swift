@@ -2,8 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Maps a NotchNotch LLM provider id to a lobehub icon slug or an SF Symbol fallback.
-/// SVG files live flat at BoaNotch/Resources/provider_<slug>.svg — same pattern as
-/// the existing call_bell.svg Phosphor icons. Refresh via
+/// SVG files live flat at BoaNotch/Resources/provider_<slug>.svg. Refresh via
 /// `bash scripts/fetch-provider-icons.sh --force`.
 enum ProviderIconCatalog {
     /// Returns the SVG slug if a bundled lobehub icon exists for this provider.
@@ -33,8 +32,7 @@ enum ProviderIconCatalog {
 }
 
 /// Renders the provider's brand icon at the requested point size.
-/// Tints to the inherited foregroundStyle via NSImage.isTemplate (same pattern
-/// as NotchView.callBellImage).
+/// Tints to the inherited foregroundStyle via NSImage.isTemplate.
 struct ProviderIcon: View {
     let providerID: String
     var size: CGFloat = 13

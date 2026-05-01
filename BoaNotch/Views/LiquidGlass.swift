@@ -4,7 +4,87 @@ import SwiftUI
 // Reserve for floating/navigation chrome that sits over the desktop —
 // never apply to content rows. See skills/liquid-glass-design.
 
+/// Plays SF Symbols 7 "draw on" animation when the icon's view transitions
+/// in or out of the SwiftUI hierarchy (e.g. burger deploys / collapses).
+/// Fires only when the parent inserts/removes the view via a conditional
+/// inside an `.animation(...)` context — always-visible icons get no
+/// animation, which is intentional.
+/// macOS 14/15/25 → no-op, the icon appears instantly.
+struct DrawOnAppearModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.transition(.symbolEffect(.drawOn))
+        } else {
+            content
+        }
+    }
+}
+
+/// Background for the notch panel: solid black when closed (camouflages the
+/// hardware notch), top-down gradient from black to Liquid Glass when open
+/// on macOS 26+, solid black fallback on older systems.
+struct NotchPanelBackgroundModifier: ViewModifier {
+    let topCornerRadius: CGFloat
+    let bottomCornerRadius: CGFloat
+    let isOpen: Bool
+
+    func body(content: Content) -> some View {
+        if isOpen, #available(macOS 26.0, *) {
+            content
+                .background {
+                    ZStack {
+                        Color.clear
+                            .glassEffect(.regular, in: NotchShape(
+                                topCornerRadius: topCornerRadius,
+                                bottomCornerRadius: bottomCornerRadius
+                            ))
+                        NotchShape(
+                            topCornerRadius: topCornerRadius,
+                            bottomCornerRadius: bottomCornerRadius
+                        )
+                        .fill(LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0.0),
+                                .init(color: .black, location: 0.45),
+                                .init(color: .black.opacity(0.0), location: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ))
+                    }
+                }
+        } else {
+            content
+                .background {
+                    NotchShape(
+                        topCornerRadius: topCornerRadius,
+                        bottomCornerRadius: bottomCornerRadius
+                    )
+                    .fill(Color.black)
+                }
+        }
+    }
+}
+
 extension View {
+    /// Applique l'effet "draw on" SF Symbols 7 à l'apparition du symbole.
+    /// macOS 14/15/25 : no-op (l'icône apparaît instantanément).
+    func drawOnAppear() -> some View {
+        modifier(DrawOnAppearModifier())
+    }
+
+    /// Habille le panneau du notch : noir solide quand fermé, gradient
+    /// noir → Liquid Glass quand ouvert sur macOS 26+ (fallback noir solide
+    /// avant). Le clipping à la silhouette NotchShape doit être appliqué
+    /// séparément par le call site.
+    func notchPanelBackground(top: CGFloat, bottom: CGFloat, isOpen: Bool) -> some View {
+        modifier(NotchPanelBackgroundModifier(
+            topCornerRadius: top,
+            bottomCornerRadius: bottom,
+            isOpen: isOpen
+        ))
+    }
+
     @ViewBuilder
     func nnGlass(interactive: Bool = false) -> some View {
         if #available(macOS 26.0, *) {

@@ -103,7 +103,7 @@ struct MessageBubble: View {
             .background {
                 if isUser {
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(red: 19/255.0, green: 19/255.0, blue: 19/255.0))
+                        .fill(Color.white.opacity(0.08))
                 }
             }
 
@@ -112,7 +112,7 @@ struct MessageBubble: View {
                 HStack(spacing: 12) {
                     if let onEdit {
                         Button { onEdit(message) } label: {
-                            Image(systemName: "pencil")
+                            Image(systemName: "square.and.pencil")
                                 .font(DS.Text.captionMedium)
                                 // TODO(design): 0.28 idle — picked between quaternary (0.22) and tertiary (0.30) for icon visibility
                                 .foregroundStyle(isHovered ? AnyShapeStyle(DS.Surface.secondary) : AnyShapeStyle(.white.opacity(0.28)))

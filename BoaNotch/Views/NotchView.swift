@@ -123,16 +123,26 @@ struct NotchView: View {
 
     private var notchBody: some View {
         ZStack {
-            NotchShape(
-                topCornerRadius: notchVM.topCornerRadius,
-                bottomCornerRadius: notchVM.bottomCornerRadius
-            )
-            .fill(Color.black)
-            .shadow(
-                color: .black.opacity(notchVM.isOpen ? 0.5 : 0),
-                radius: notchVM.isOpen ? 20 : 0,
-                x: 0, y: notchVM.isOpen ? 6 : 0
-            )
+            // Closed = solid black (camouflages hardware notch).
+            // Open on macOS 26+ = top-down gradient from black to Liquid Glass.
+            // Open on macOS 14/15/25 = solid black (fallback identical to closed).
+            Color.clear
+                .notchPanelBackground(
+                    top: notchVM.topCornerRadius,
+                    bottom: notchVM.bottomCornerRadius,
+                    isOpen: notchVM.isOpen
+                )
+                .clipShape(
+                    NotchShape(
+                        topCornerRadius: notchVM.topCornerRadius,
+                        bottomCornerRadius: notchVM.bottomCornerRadius
+                    )
+                )
+                .shadow(
+                    color: .black.opacity(notchVM.isOpen ? 0.5 : 0),
+                    radius: notchVM.isOpen ? 20 : 0,
+                    x: 0, y: notchVM.isOpen ? 6 : 0
+                )
 
             // nothing here — glow applied outside clip
 
@@ -178,7 +188,7 @@ struct NotchView: View {
                                 .padding(.bottom, 18)
                                 .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                 .padding(.horizontal, 42)
-                                .padding(.bottom, 18)
+                                .padding(.bottom, 25)
                                 .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
                                 ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)
@@ -187,7 +197,7 @@ struct NotchView: View {
                                     .padding(.bottom, 18)
                                     .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                     .padding(.horizontal, 42)
-                                    .padding(.bottom, 18)
+                                    .padding(.bottom, 25)
                                     .transition(.opacity)
                             } else if notchVM.isBrainOpen {
                                 BrainView(
@@ -211,7 +221,7 @@ struct NotchView: View {
                                     .padding(.bottom, 18)
                                     .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
                                     .padding(.horizontal, 42)
-                                    .padding(.bottom, 18)
+                                    .padding(.bottom, 25)
                                     .transition(.opacity)
                             } else {
                                 ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
@@ -287,7 +297,7 @@ struct NotchView: View {
                         notchVM.collapseMenu()
                     }
                 }
-                menuButton("books.vertical", active: notchVM.isBrainOpen && activeTab == .brain) {
+                menuButton("person", active: notchVM.isBrainOpen && activeTab == .brain) {
                     if notchVM.isBrainOpen && activeTab == .brain {
                         notchVM.closeAllPanels()
                     } else {
@@ -296,7 +306,9 @@ struct NotchView: View {
                         notchVM.collapseMenu()
                     }
                 }
-                menuButton("hammer", active: notchVM.isBrainOpen && activeTab == .tools) {
+                // +2pt visual-balance: this glyph packs 4 sub-shapes inside a square and reads ~2pt
+                // smaller than its 14pt peers (book / gearshape / checkmark.rectangle.stack).
+                menuButton("xmark.triangle.circle.square", active: notchVM.isBrainOpen && activeTab == .tools, sizeBoost: 2) {
                     if notchVM.isBrainOpen && activeTab == .tools {
                         notchVM.closeAllPanels()
                     } else {
@@ -305,7 +317,7 @@ struct NotchView: View {
                         notchVM.collapseMenu()
                     }
                 }
-                menuButton("call.bell", active: notchVM.isBrainOpen && activeTab == .tasks) {
+                menuButton("checkmark.rectangle.stack", active: notchVM.isBrainOpen && activeTab == .tasks) {
                     if notchVM.isBrainOpen && activeTab == .tasks {
                         notchVM.closeAllPanels()
                     } else {
@@ -326,11 +338,12 @@ struct NotchView: View {
                     notchVM.expandMenu()
                 }
             } label: {
-                Image(systemName: showX ? "xmark" : "line.3.horizontal")
-                    .font(DS.Icon.secondary)
-                    .frame(height: 14)
+                Image(systemName: showX ? "xmark" : "ellipsis")
+                    .font(DS.Icon.topBar)
+                    .frame(height: 13)
                     .foregroundStyle(showX ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
                     .contentTransition(.symbolEffect(.replace))
+                    .drawOnAppear()
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
@@ -342,9 +355,10 @@ struct NotchView: View {
                 Image(systemName: panelSizeStore.size == .standard
                       ? "arrow.up.left.and.arrow.down.right"
                       : "arrow.down.right.and.arrow.up.left")
-                    .font(DS.Icon.secondary)
-                    .frame(height: 14)
+                    .font(DS.Icon.topBar)
+                    .frame(height: 13)
                     .foregroundStyle(hoverResize ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
+                    .drawOnAppear()
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
@@ -369,44 +383,15 @@ struct NotchView: View {
 
     @ViewBuilder
     private var leftCluster: some View {
-        // The left burger never shows an X — closing panels is owned by the
-        // right burger (see CLAUDE.md). The chat-icon stays visible while the
-        // menu deploys icons rightward on hover.
+        // The trio (search · new · history) REPLACES the burger glyph on hover —
+        // they never coexist, so the leftmost trio icon can't be misclicked into
+        // the burger. Hover-out collapses after 0.6s; the right burger still owns
+        // the X (see CLAUDE.md).
         let isDeployed = notchVM.isLeftMenuExpanded
 
         HStack(spacing: 8) {
-            // Chat-icon (leftmost slot, fan opens rightward toward center).
-            // Click toggles the menu; hover-out collapses after 0.6s.
-            Button {
-                if notchVM.isLeftMenuExpanded {
-                    notchVM.collapseLeftMenu()
-                } else {
-                    notchVM.expandLeftMenu()
-                }
-            } label: {
-                Image(systemName: "bubble.left")
-                    .font(DS.Icon.secondary)
-                    .frame(height: 14)
-                    .foregroundStyle(isDeployed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-
             if isDeployed {
-                // Order left -> right: new conv, history, search. Mirror of the
-                // right cluster's settings/Brain/Tools/Tasks.
-                menuButton("plus.bubble", active: false) {
-                    chatVM.startNewConversation()
-                    notchVM.collapseLeftMenu()
-                }
-                menuButton("bubble.left.and.bubble.right", active: notchVM.isHistoryOpen) {
-                    if notchVM.isHistoryOpen {
-                        notchVM.closeAllPanels()
-                    } else {
-                        notchVM.openHistory()
-                        notchVM.collapseLeftMenu()
-                    }
-                }
+                // Search leads (user choice 2026-05-02). Order: search · new · history.
                 menuButton("magnifyingglass", active: notchVM.isSearchOpen) {
                     if notchVM.isSearchOpen {
                         notchVM.closeAllPanels()
@@ -415,6 +400,30 @@ struct NotchView: View {
                         notchVM.collapseLeftMenu()
                     }
                 }
+                menuButton("plus.bubble", active: false) {
+                    chatVM.startNewConversation()
+                    notchVM.collapseLeftMenu()
+                }
+                menuButton("clock.arrow.trianglehead.2.counterclockwise.rotate.90", active: notchVM.isHistoryOpen) {
+                    if notchVM.isHistoryOpen {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openHistory()
+                        notchVM.collapseLeftMenu()
+                    }
+                }
+            } else {
+                Button {
+                    notchVM.expandLeftMenu()
+                } label: {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(DS.Icon.topBar)
+                        .frame(height: 13)
+                        .foregroundStyle(Color.white.opacity(0.20))
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .drawOnAppear()
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isDeployed)
@@ -435,14 +444,13 @@ struct NotchView: View {
         if notchVM.isHistoryOpen { return "Conversations" }
         if notchVM.isSettingsOpen { return "Settings" }
         if notchVM.isSearchOpen { return "Search" }
+        if notchVM.isBrainOpen { return brainVM.activeTab.rawValue }
         return nil
     }
 
     @ViewBuilder
     private var leftSlot: some View {
-        if notchVM.isBrainOpen {
-            brainTabsBar
-        } else if let title = panelTitle {
+        if let title = panelTitle {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(.primary)
@@ -452,73 +460,23 @@ struct NotchView: View {
         }
     }
 
-    private var brainTabsBar: some View {
-        HStack(spacing: 16) {
-            brainTabButton(.brain, icon: "books.vertical")
-            brainTabButton(.tools, icon: "hammer")
-            brainTabButton(.tasks, icon: "call.bell")
-        }
-    }
-
-    private func brainTabButton(_ tab: BrainTab, icon: String) -> some View {
-        let isActive = brainVM.activeTab == tab
-        return Button {
-            brainVM.activeTab = tab
-        } label: {
-            HStack(spacing: 6) {
-                if icon == "call.bell" {
-                    // Bundled SVG (Phosphor Icons, MIT) — outline + filled pair
-                    // mirrors SF Symbol .symbolVariant for the call.bell glyph.
-                    (isActive ? Self.callBellFillImage : Self.callBellImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 17, height: 17)
-                        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-                } else {
-                    Image(systemName: icon)
-                        .symbolVariant(isActive ? .fill : .none)
-                        .font(.system(size: 13, weight: isActive ? .semibold : .medium))
-                        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-                }
-                Text(tab.rawValue)
-                    .font(.headline)
-                    .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-            }
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-    }
-
     // MARK: - Burger menu icon button
 
-    private func menuButton(_ icon: String, active: Bool = false, action: @escaping () -> Void) -> some View {
-        let size: CGFloat = 13
+    private func menuButton(_ icon: String, active: Bool = false, sizeBoost: CGFloat = 0, action: @escaping () -> Void) -> some View {
+        // Base aligned on DS.Icon.topBar (13pt) so action icons match the burger glyphs and resize.
+        // sizeBoost is a per-icon visual-balance override — not a new design tier.
+        let size: CGFloat = 13 + sizeBoost
         return Button(action: action) {
-            Group {
-                if icon == "call.bell" {
-                    // Bundled SVG (Phosphor Icons, MIT) — outline + filled pair to mimic SF Symbol .symbolVariant.
-                    // Frame is bumped 1.35× because the SVG viewBox has more padding than SF Symbol metrics at 14pt.
-                    (active ? Self.callBellFillImage : Self.callBellImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: size * 1.35, height: size * 1.35)
-                } else {
-                    Image(systemName: icon)
-                        .symbolVariant(active ? .fill : .none)
-                        // TODO(design): poids conditionnel actif=semibold/inactif=medium ; DS.Icon.secondary fixe medium, on garde le ternaire pour l'affordance d'état
-                        .font(.system(size: size, weight: active ? .semibold : .medium))
-                }
-            }
-            .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
+            Image(systemName: icon)
+                .symbolVariant(active ? .fill : .none)
+                // TODO(design): poids conditionnel actif=semibold/inactif=medium ; DS.Icon.secondary fixe medium, on garde le ternaire pour l'affordance d'état
+                .font(.system(size: size, weight: active ? .semibold : .medium))
+                .foregroundStyle(active ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.secondary))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
+        .drawOnAppear()
     }
-
-    // Custom-symbol pair loaded from bundled template SVGs (actool needs full Xcode, project ships
-    // only Command Line Tools — so we bypass Assets.car and use NSImage isTemplate for tinting).
-    private static let callBellImage: Image = PixelIcon.image("call.bell", fallback: "bell")
-    private static let callBellFillImage: Image = PixelIcon.image("call.bell.fill", fallback: "bell.fill")
 
     // MARK: - Settings top bar spacer (buttons moved to flanking overlay)
 

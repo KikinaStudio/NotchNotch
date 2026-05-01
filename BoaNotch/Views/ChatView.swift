@@ -12,71 +12,64 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Messages — bottom-anchored, with fade overlay
-            ZStack {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Spacer(minLength: 0)
-                                .frame(maxHeight: .infinity)
+            // Messages — bottom-anchored, with alpha-mask fade at top + bottom.
+            // Mask (not paint overlay) so the fade is to *transparency*, letting
+            // the panel's solid black or Liquid Glass background show through.
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Spacer(minLength: 0)
+                            .frame(maxHeight: .infinity)
 
-                            ForEach(chatVM.messages) { message in
-                                MessageBubble(
-                                    message: message,
-                                    searchQuery: searchVM.query,
-                                    onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
-                                        ? { chatVM.retryLastAssistant() }
-                                        : nil,
-                                    onEdit: (message.role == .user && !chatVM.isStreaming)
-                                        ? { msg in
-                                            chatVM.editingMessageId = msg.id
-                                            chatVM.draft = msg.content
-                                        }
-                                        : nil,
-                                    onRefine: (message.routineId != nil)
-                                        ? { rid in chatVM.startRefine(routineId: rid) }
-                                        : nil,
-                                    isChatStreaming: chatVM.isStreaming
-                                )
-                                .id(message.id)
-                            }
+                        ForEach(chatVM.messages) { message in
+                            MessageBubble(
+                                message: message,
+                                searchQuery: searchVM.query,
+                                onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
+                                    ? { chatVM.retryLastAssistant() }
+                                    : nil,
+                                onEdit: (message.role == .user && !chatVM.isStreaming)
+                                    ? { msg in
+                                        chatVM.editingMessageId = msg.id
+                                        chatVM.draft = msg.content
+                                    }
+                                    : nil,
+                                onRefine: (message.routineId != nil)
+                                    ? { rid in chatVM.startRefine(routineId: rid) }
+                                    : nil,
+                                isChatStreaming: chatVM.isStreaming
+                            )
+                            .id(message.id)
                         }
-                        .padding(.horizontal, 2)
-                        .padding(.bottom, 14)
-                        .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
                     }
-                    .scrollIndicators(.hidden)
-                    .defaultScrollAnchor(.bottom)
-                    .onChange(of: chatVM.messages.count) { scrollToBottom(proxy) }
-                    .onChange(of: chatVM.messages.last?.content) { scrollToBottom(proxy) }
-                    .onChange(of: searchVM.currentMatchIndex) { scrollToSearch(proxy) }
-                    .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
+                    .padding(.horizontal, 2)
+                    .padding(.bottom, 14)
+                    .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
                 }
-
-                // Fade to black at the top of the scroll area
-                VStack {
-                    LinearGradient(
-                        colors: [.black, .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 20)
-                    .allowsHitTesting(false)
-                    Spacer()
-                }
-
-                // Fade to black at the bottom of the scroll area
-                VStack {
-                    Spacer()
+                .scrollIndicators(.hidden)
+                .defaultScrollAnchor(.bottom)
+                .onChange(of: chatVM.messages.count) { scrollToBottom(proxy) }
+                .onChange(of: chatVM.messages.last?.content) { scrollToBottom(proxy) }
+                .onChange(of: searchVM.currentMatchIndex) { scrollToSearch(proxy) }
+                .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
+            }
+            .mask(
+                VStack(spacing: 0) {
                     LinearGradient(
                         colors: [.clear, .black],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                     .frame(height: 20)
-                    .allowsHitTesting(false)
+                    Rectangle().fill(.black)
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 23)
                 }
-            }
+            )
 
             // Connection error banner
             if let errorMessage = chatVM.connectionError {
@@ -221,7 +214,7 @@ struct ChatView: View {
                     .onSubmit { sendAndCloseBar() }
 
                 Button { openFilePicker() } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "paperclip")
                         .font(DS.Icon.secondary)
                         .foregroundStyle(DS.Surface.secondary)
                 }

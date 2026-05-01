@@ -2,11 +2,6 @@
 
 NotchNotch bundles the following MIT-licensed assets:
 
-## Phosphor Icons (MIT)
-- Files: `BoaNotch/Resources/call_bell.svg`, `call_bell_fill.svg`
-- Source: https://github.com/phosphor-icons/core
-- Copyright (c) 2020 Phosphor Icons
-
 ## Lobe Icons (MIT)
 - Files: `BoaNotch/Resources/provider_*.svg`
 - Source: https://github.com/lobehub/lobe-icons

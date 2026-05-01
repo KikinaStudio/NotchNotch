@@ -2,7 +2,8 @@
 # scripts/fetch-provider-icons.sh
 # Downloads lobehub mono SVG icons for the LLM providers we expose in NotchNotch.
 # Files are written flat into BoaNotch/Resources/ as provider_<slug>.svg —
-# matches the existing call_bell.svg pattern picked up by run.sh / release.sh.
+# the build scripts (run.sh / release.sh) copy every *.svg in this dir flat
+# into Contents/Resources/.
 # Idempotent: skip files that already exist unless --force.
 set -euo pipefail
 
@@ -24,7 +25,7 @@ for slug in "${SLUGS[@]}"; do
   curl -sSL --fail "$BASE/${slug}.svg" -o "$out"
   # NSImage(contentsOf:) cannot resolve `width="1em"` to a pixel size, so the
   # icon renders invisibly. Rewrite to `width="24" height="24"` (matching the
-  # viewBox) — same convention as the bundled call.bell.svg.
+  # viewBox).
   /usr/bin/sed -i '' -E 's/width="1em"/width="24"/; s/height="1em"/height="24"/' "$out"
 done
 

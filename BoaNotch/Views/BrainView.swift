@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum BrainTab: String, CaseIterable {
-    case brain = "Brain"
+    case brain = "Memory"
     case tools = "Tools"
     case tasks = "Tasks"
 }
@@ -414,7 +414,7 @@ struct BrainView: View {
                 LazyHStack(spacing: 8) {
                     ForEach(CuratedSkillCatalog.all) { curated in
                         curatedSkillCard(curated)
-                            .frame(width: cardWidth)
+                            .frame(width: cardWidth, height: 130)
                     }
                 }
             }
@@ -487,8 +487,48 @@ struct BrainView: View {
 
     private var tasksTab: some View {
         VStack(alignment: .leading, spacing: 0) {
-            tabIntro("Ce que ton agent fait pour toi en autonomie.")
+            // Intro is rendered inside RoutinesView's own header so it can sit
+            // on the same row as the [+ New] button (saves vertical space).
             tasksContent()
+        }
+    }
+
+    /// French label for a Hermes skill category — replaces raw English keys
+    /// (e.g. `software-development`, `mlops`) with neophyte-friendly text.
+    /// Unknown categories fall back to a Title-cased version of the raw key.
+    private func labelForSkillCategory(_ category: String) -> String {
+        switch category.lowercased() {
+        case "media": return "Médias"
+        case "productivity": return "Productivité"
+        case "creative": return "Création"
+        case "devops": return "DevOps & Serveurs"
+        case "note-taking": return "Prise de notes"
+        case "research": return "Recherche"
+        case "social-media": return "Réseaux sociaux"
+        case "email": return "E-mail"
+        case "github": return "Code & GitHub"
+        case "data-science": return "Données"
+        case "diagramming": return "Schémas"
+        case "domain": return "Noms de domaine"
+        case "leisure": return "Loisirs"
+        case "music-creation": return "Création musicale"
+        case "smart-home": return "Maison connectée"
+        case "software-development": return "Développement logiciel"
+        case "feeds": return "Flux RSS"
+        case "gaming": return "Jeu vidéo"
+        case "gifs": return "GIFs"
+        case "mlops": return "Machine learning"
+        case "red-teaming": return "Sécurité offensive"
+        case "apple": return "Apple"
+        case "dogfood": return "Dogfood"
+        case "inference-sh": return "Inference.sh"
+        case "mcp": return "MCP"
+        case "autonomous-ai-agents": return "Agents IA"
+        default:
+            return category
+                .replacingOccurrences(of: "-", with: " ")
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
         }
     }
 
@@ -545,7 +585,7 @@ struct BrainView: View {
                 Image(systemName: iconForSkillCategory(group.name))
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.tertiary)
-                Text(group.name.capitalized)
+                Text(labelForSkillCategory(group.name))
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.primary)
                 Text("\(group.skills.count)")
@@ -557,7 +597,7 @@ struct BrainView: View {
                 LazyHStack(spacing: 8) {
                     ForEach(group.skills) { skill in
                         skillCardCompact(skill)
-                            .frame(width: cardWidth)
+                            .frame(width: cardWidth, height: 130)
                     }
                 }
             }

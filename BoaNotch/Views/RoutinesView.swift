@@ -59,6 +59,33 @@ struct RoutinesView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if !showingCustomForm {
+                HStack {
+                    Text("Ce que ton agent fait pour toi en autonomie.")
+                        .font(DS.Text.caption)
+                        .foregroundStyle(AppColors.accent)
+                    Spacer()
+                    if !cronStore.sortedJobs.isEmpty && !showingBrowser {
+                        Button {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                resetForm()
+                                showingCustomForm = true
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "plus")
+                                    .font(.footnote.weight(.semibold))
+                                Text("New")
+                                    .font(.callout.weight(.medium))
+                            }
+                            .foregroundStyle(AppColors.accent)
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                    }
+                }
+            }
+
             if showingCustomForm {
                 customForm
                     .transition(.opacity)
@@ -103,7 +130,6 @@ struct RoutinesView: View {
             }
         }
         .padding(.top, 8)
-        .padding(.horizontal, 42)
         .padding(.bottom, 18)
     }
 
@@ -174,7 +200,7 @@ struct RoutinesView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
             .background(cardShape.fill(.quaternary.opacity(0.6)))
             .overlay(
                 cardShape
@@ -381,7 +407,7 @@ struct RoutinesView: View {
     }
 
     // Matches the approximate height of a populated jobCard so the grid stays aligned.
-    private var addCardHeight: CGFloat { 96 }
+    private var addCardHeight: CGFloat { 120 }
 
     // MARK: - Custom form
 

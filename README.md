@@ -201,7 +201,8 @@ MIT
 
 ## Acknowledgements
 
-- Routines icon: `call-bell` from [Phosphor Icons](https://phosphoricons.com/), licensed under MIT.
+- Provider icons: monochrome variants from [Lobe Icons](https://github.com/lobehub/lobe-icons), licensed under MIT.
+- Toast pixel icons: from [pixelarticons](https://github.com/halfmage/pixelarticons), licensed under MIT.
 
 ---
 
