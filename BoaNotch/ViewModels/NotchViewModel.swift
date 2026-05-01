@@ -17,10 +17,10 @@ class NotchViewModel: ObservableObject {
     @Published var isRecording = false
     @Published var isSettingsOpen = false
     @Published var isSearchOpen = false
-    @Published var isRoutinesOpen = false
     @Published var isExpandedBarOpen = false
     @Published var suppressAutoClose = false
     @Published var isMenuExpanded: Bool = false
+    @Published var isLeftMenuExpanded: Bool = false
 
     /// The exact hardware notch dimensions, set by NotchWindowController at launch
     @Published var closedSize: CGSize = CGSize(width: 185, height: 32)
@@ -41,6 +41,7 @@ class NotchViewModel: ObservableObject {
     private var hoverTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
     private var menuCollapseTask: Task<Void, Never>?
+    private var leftMenuCollapseTask: Task<Void, Never>?
 
     var isOpen: Bool { state == .open }
     var isClosed: Bool { state == .closed }
@@ -71,7 +72,19 @@ class NotchViewModel: ObservableObject {
     @Published var isBrainOpen = false
 
     var isAnyPanelOpen: Bool {
-        isSettingsOpen || isSearchOpen || isRoutinesOpen || isHistoryOpen || isBrainOpen
+        isSettingsOpen || isSearchOpen || isHistoryOpen || isBrainOpen
+    }
+
+    /// Panels reachable from the right-side burger (settings + Brain panel
+    /// with its Brain/Tools/Tasks tabs). Used to render the right-side X.
+    var isRightPanelOpen: Bool {
+        isSettingsOpen || isBrainOpen
+    }
+
+    /// Panels reachable from the left-side burger (history + search). Used
+    /// to render the left-side X.
+    var isLeftPanelOpen: Bool {
+        isHistoryOpen || isSearchOpen
     }
 
     @Published var isStreaming = false
@@ -136,7 +149,9 @@ class NotchViewModel: ObservableObject {
     func close() {
         isDragTargeted = false
         isMenuExpanded = false
+        isLeftMenuExpanded = false
         menuCollapseTask?.cancel()
+        leftMenuCollapseTask?.cancel()
         withAnimation(.interactiveSpring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)) {
             state = .closed
         }
@@ -177,19 +192,10 @@ class NotchViewModel: ObservableObject {
         pendingCronOutput = (jobId, jobName, fullContent)
     }
 
-    func openRoutines() {
-        isRoutinesOpen = true
-        isSettingsOpen = false
-        isSearchOpen = false
-        isHistoryOpen = false
-        isBrainOpen = false
-    }
-
     func openHistory() {
         isHistoryOpen = true
         isSettingsOpen = false
         isSearchOpen = false
-        isRoutinesOpen = false
         isBrainOpen = false
     }
 
@@ -197,14 +203,12 @@ class NotchViewModel: ObservableObject {
         isBrainOpen = true
         isSettingsOpen = false
         isSearchOpen = false
-        isRoutinesOpen = false
         isHistoryOpen = false
     }
 
     func openSearch() {
         isSearchOpen = true
         isSettingsOpen = false
-        isRoutinesOpen = false
         isHistoryOpen = false
         isBrainOpen = false
     }
@@ -212,7 +216,6 @@ class NotchViewModel: ObservableObject {
     func openSettings() {
         isSettingsOpen = true
         isSearchOpen = false
-        isRoutinesOpen = false
         isHistoryOpen = false
         isBrainOpen = false
     }
@@ -220,14 +223,10 @@ class NotchViewModel: ObservableObject {
     func closeAllPanels() {
         isSettingsOpen = false
         isSearchOpen = false
-        isRoutinesOpen = false
         isHistoryOpen = false
         isBrainOpen = false
         collapseMenu()
-    }
-
-    func closeRoutines() {
-        isRoutinesOpen = false
+        collapseLeftMenu()
     }
 
     func expandMenu() {
@@ -255,6 +254,33 @@ class NotchViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 isMenuExpanded = false
+            }
+        }
+    }
+
+    // MARK: - Left burger menu (mirror of right)
+
+    func expandLeftMenu() {
+        isLeftMenuExpanded = true
+        scheduleLeftMenuCollapse(after: 3.0)
+    }
+
+    func collapseLeftMenu() {
+        leftMenuCollapseTask?.cancel()
+        isLeftMenuExpanded = false
+    }
+
+    func cancelLeftMenuCollapse() {
+        leftMenuCollapseTask?.cancel()
+    }
+
+    func scheduleLeftMenuCollapse(after seconds: Double = 3.0) {
+        leftMenuCollapseTask?.cancel()
+        leftMenuCollapseTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                isLeftMenuExpanded = false
             }
         }
     }

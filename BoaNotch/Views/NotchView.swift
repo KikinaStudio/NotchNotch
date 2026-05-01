@@ -18,7 +18,6 @@ struct NotchView: View {
     @AppStorage("hasCompletedBrainOnboarding") private var hasCompletedBrainOnboarding = false
     @State private var didEvaluateBrainOnboarding = false
     @State private var showBrainOnboarding = false
-    @State private var hoverNewConvo = false
     @State private var hoverResize = false
 
     var body: some View {
@@ -165,8 +164,6 @@ struct NotchView: View {
                                 searchVM.close()
                                 notchVM.isSearchOpen = false
                             }
-                        } else if notchVM.isRoutinesOpen {
-                            settingsTopBar
                         } else if notchVM.isBrainOpen {
                             settingsTopBar
                         } else {
@@ -183,42 +180,6 @@ struct NotchView: View {
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
                                 .transition(.opacity)
-                            } else if notchVM.isRoutinesOpen {
-                                RoutinesView(cronStore: cronStore, panelSize: panelSizeStore.size, onSelectJob: { job in
-                                    chatVM.setRoutineContext(job)
-                                    notchVM.isRoutinesOpen = false
-                                }, onSelectTemplate: { draft in
-                                    chatVM.draft = draft
-                                    notchVM.isRoutinesOpen = false
-                                }, onCreateOwn: {
-                                    chatVM.draft = "Schedule a new routine: "
-                                    notchVM.isRoutinesOpen = false
-                                }, onDropFile: { providers in
-                                    for provider in providers {
-                                        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
-                                            guard let data = data as? Data,
-                                                  let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
-                                            let attachment = DocumentExtractor.extract(from: url)
-                                            DispatchQueue.main.async {
-                                                chatVM.pendingAttachments.append(attachment)
-                                                chatVM.draft = "What routine would make sense for this file?"
-                                                chatVM.routineCreationMode = true
-                                                notchVM.isRoutinesOpen = false
-                                            }
-                                        }
-                                    }
-                                }, onDraftAction: { draft, autoSend in
-                                    chatVM.draft = draft
-                                    notchVM.isRoutinesOpen = false
-                                    if autoSend { chatVM.send() }
-                                }, onCreateCustomRoutine: { draft in
-                                    chatVM.createRoutine(draft: draft)
-                                }, onSetPaused: { job, paused in
-                                    chatVM.setRoutinePaused(job, paused: paused)
-                                }, onUpdateRoutine: { id, patch in
-                                    chatVM.updateRoutine(jobId: id, patch: patch)
-                                })
-                                .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
                                 ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)
                                     .padding(.top, 14)
@@ -229,11 +190,22 @@ struct NotchView: View {
                                     .padding(.bottom, 18)
                                     .transition(.opacity)
                             } else if notchVM.isBrainOpen {
-                                BrainView(brainVM: brainVM, chatVM: chatVM, notchVM: notchVM, onSendToChat: { message in
-                                    chatVM.draft = message
-                                    notchVM.isBrainOpen = false
-                                    chatVM.send()
-                                })
+                                BrainView(
+                                    brainVM: brainVM,
+                                    chatVM: chatVM,
+                                    notchVM: notchVM,
+                                    onSendToChat: { message in
+                                        chatVM.draft = message
+                                        notchVM.isBrainOpen = false
+                                        chatVM.send()
+                                    },
+                                    onPrefillChat: { message in
+                                        chatVM.draft = message
+                                        notchVM.isBrainOpen = false
+                                        chatVM.focusComposerTrigger = UUID()
+                                    },
+                                    tasksContent: { AnyView(routinesEmbedded) }
+                                )
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
@@ -273,108 +245,13 @@ struct NotchView: View {
         .overlay(alignment: .top) {
             // Flanking buttons — persistent top bar beside the hardware notch
             if notchVM.isOpen && !onboardingVM.needsOnboarding {
-                let isDeployed = notchVM.isMenuExpanded || notchVM.isAnyPanelOpen
-
                 HStack(spacing: 10) {
-                    // Left slot — context-dependent: brain tabs / panel title / new conversation
+                    // Left slot — context-dependent: brain tabs / panel title / left burger
                     leftSlot
 
                     Spacer(minLength: 8)
 
-                    // Right cluster: action icons (when deployed) + burger/X + resize
-                    HStack(spacing: 8) {
-                        if isDeployed {
-                            menuButton("bubble.left.and.bubble.right", active: notchVM.isHistoryOpen) {
-                                if notchVM.isHistoryOpen {
-                                    notchVM.closeAllPanels()
-                                } else {
-                                    notchVM.openHistory()
-                                    notchVM.collapseMenu()
-                                }
-                            }
-                            menuButton("magnifyingglass", active: notchVM.isSearchOpen) {
-                                if notchVM.isSearchOpen {
-                                    notchVM.closeAllPanels()
-                                } else {
-                                    notchVM.openSearch()
-                                    notchVM.collapseMenu()
-                                }
-                            }
-                            menuButton("call.bell", active: notchVM.isRoutinesOpen) {
-                                if notchVM.isRoutinesOpen {
-                                    notchVM.closeAllPanels()
-                                } else {
-                                    notchVM.openRoutines()
-                                    notchVM.collapseMenu()
-                                }
-                            }
-                            menuButton("books.vertical", active: notchVM.isBrainOpen) {
-                                if notchVM.isBrainOpen {
-                                    notchVM.closeAllPanels()
-                                } else {
-                                    notchVM.openBrain()
-                                    notchVM.collapseMenu()
-                                }
-                            }
-                            menuButton("gearshape", active: notchVM.isSettingsOpen) {
-                                if notchVM.isSettingsOpen {
-                                    notchVM.closeAllPanels()
-                                } else {
-                                    notchVM.openSettings()
-                                    notchVM.collapseMenu()
-                                }
-                            }
-                        }
-
-                        // Burger ↔ X morph (same slot)
-                        Button {
-                            if notchVM.isAnyPanelOpen {
-                                notchVM.closeAllPanels()
-                            } else if notchVM.isMenuExpanded {
-                                notchVM.collapseMenu()
-                            } else {
-                                notchVM.expandMenu()
-                            }
-                        } label: {
-                            Image(systemName: isDeployed ? "xmark" : "line.3.horizontal")
-                                .font(DS.Icon.secondary)
-                                .frame(height: 14)
-                                .foregroundStyle(isDeployed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
-                                .contentTransition(.symbolEffect(.replace))
-                        }
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
-
-                        // Resize panel size (always visible)
-                        Button {
-                            panelSizeStore.size = (panelSizeStore.size == .standard) ? .large : .standard
-                        } label: {
-                            Image(systemName: panelSizeStore.size == .standard
-                                  ? "arrow.up.left.and.arrow.down.right"
-                                  : "arrow.down.right.and.arrow.up.left")
-                                .font(DS.Icon.secondary)
-                                .frame(height: 14)
-                                .foregroundStyle(hoverResize ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
-                        }
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
-                        .onHover { hoverResize = $0 }
-                    }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isDeployed)
-                    .onHover { hovering in
-                        // Only auto-expand/collapse the menu when no panel is open.
-                        // When a panel is open, icons stay visible regardless of hover.
-                        guard !notchVM.isAnyPanelOpen else { return }
-                        if hovering {
-                            if notchVM.isMenuExpanded {
-                                notchVM.cancelMenuCollapse()
-                            } else {
-                                notchVM.expandMenu()
-                            }
-                        } else {
-                            notchVM.scheduleMenuCollapse(after: 0.6)
-                        }
-                    }
+                    rightCluster
                 }
                 .padding(.horizontal, 42)
                 .padding(.top, 10)
@@ -384,9 +261,178 @@ struct NotchView: View {
         }
     }
 
+    // MARK: - Right cluster (Settings + Brain/Tools/Tasks burger + resize)
+
+    @ViewBuilder
+    private var rightCluster: some View {
+        // Fan icons appear when the menu is hovered open OR when a right-side
+        // panel is open (so the user can switch tabs without re-hovering).
+        let iconsVisible = notchVM.isMenuExpanded || notchVM.isRightPanelOpen
+        // The X morph is the only way to close ANY panel (left or right) —
+        // see "Right burger owns the X" in CLAUDE.md.
+        let showX = notchVM.isAnyPanelOpen || notchVM.isMenuExpanded
+        // Read once so the closures below capture the current activeTab value.
+        let activeTab = brainVM.activeTab
+
+        HStack(spacing: 8) {
+            if iconsVisible {
+                // Order left -> right: settings, Brain, Tools, Tasks.
+                // Burger/X sits at the rightmost edge so the fan opens leftward
+                // toward the center of the top bar.
+                menuButton("gearshape", active: notchVM.isSettingsOpen) {
+                    if notchVM.isSettingsOpen {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openSettings()
+                        notchVM.collapseMenu()
+                    }
+                }
+                menuButton("books.vertical", active: notchVM.isBrainOpen && activeTab == .brain) {
+                    if notchVM.isBrainOpen && activeTab == .brain {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openBrain()
+                        brainVM.activeTab = .brain
+                        notchVM.collapseMenu()
+                    }
+                }
+                menuButton("hammer", active: notchVM.isBrainOpen && activeTab == .tools) {
+                    if notchVM.isBrainOpen && activeTab == .tools {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openBrain()
+                        brainVM.activeTab = .tools
+                        notchVM.collapseMenu()
+                    }
+                }
+                menuButton("call.bell", active: notchVM.isBrainOpen && activeTab == .tasks) {
+                    if notchVM.isBrainOpen && activeTab == .tasks {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openBrain()
+                        brainVM.activeTab = .tasks
+                        notchVM.collapseMenu()
+                    }
+                }
+            }
+
+            // Burger ↔ X morph (same slot)
+            Button {
+                if notchVM.isAnyPanelOpen {
+                    notchVM.closeAllPanels()
+                } else if notchVM.isMenuExpanded {
+                    notchVM.collapseMenu()
+                } else {
+                    notchVM.expandMenu()
+                }
+            } label: {
+                Image(systemName: showX ? "xmark" : "line.3.horizontal")
+                    .font(DS.Icon.secondary)
+                    .frame(height: 14)
+                    .foregroundStyle(showX ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            // Resize panel size (always visible)
+            Button {
+                panelSizeStore.size = (panelSizeStore.size == .standard) ? .large : .standard
+            } label: {
+                Image(systemName: panelSizeStore.size == .standard
+                      ? "arrow.up.left.and.arrow.down.right"
+                      : "arrow.down.right.and.arrow.up.left")
+                    .font(DS.Icon.secondary)
+                    .frame(height: 14)
+                    .foregroundStyle(hoverResize ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+            .onHover { hoverResize = $0 }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: iconsVisible)
+        .onHover { hovering in
+            guard !notchVM.isRightPanelOpen else { return }
+            if hovering {
+                if notchVM.isMenuExpanded {
+                    notchVM.cancelMenuCollapse()
+                } else {
+                    notchVM.expandMenu()
+                }
+            } else {
+                notchVM.scheduleMenuCollapse(after: 0.6)
+            }
+        }
+    }
+
+    // MARK: - Left cluster (chat-icon burger: new convo + history + search)
+
+    @ViewBuilder
+    private var leftCluster: some View {
+        // The left burger never shows an X — closing panels is owned by the
+        // right burger (see CLAUDE.md). The chat-icon stays visible while the
+        // menu deploys icons rightward on hover.
+        let isDeployed = notchVM.isLeftMenuExpanded
+
+        HStack(spacing: 8) {
+            // Chat-icon (leftmost slot, fan opens rightward toward center).
+            // Click toggles the menu; hover-out collapses after 0.6s.
+            Button {
+                if notchVM.isLeftMenuExpanded {
+                    notchVM.collapseLeftMenu()
+                } else {
+                    notchVM.expandLeftMenu()
+                }
+            } label: {
+                Image(systemName: "bubble.left")
+                    .font(DS.Icon.secondary)
+                    .frame(height: 14)
+                    .foregroundStyle(isDeployed ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            if isDeployed {
+                // Order left -> right: new conv, history, search. Mirror of the
+                // right cluster's settings/Brain/Tools/Tasks.
+                menuButton("plus.bubble", active: false) {
+                    chatVM.startNewConversation()
+                    notchVM.collapseLeftMenu()
+                }
+                menuButton("bubble.left.and.bubble.right", active: notchVM.isHistoryOpen) {
+                    if notchVM.isHistoryOpen {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openHistory()
+                        notchVM.collapseLeftMenu()
+                    }
+                }
+                menuButton("magnifyingglass", active: notchVM.isSearchOpen) {
+                    if notchVM.isSearchOpen {
+                        notchVM.closeAllPanels()
+                    } else {
+                        notchVM.openSearch()
+                        notchVM.collapseLeftMenu()
+                    }
+                }
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isDeployed)
+        .onHover { hovering in
+            if hovering {
+                if notchVM.isLeftMenuExpanded {
+                    notchVM.cancelLeftMenuCollapse()
+                } else {
+                    notchVM.expandLeftMenu()
+                }
+            } else {
+                notchVM.scheduleLeftMenuCollapse(after: 0.6)
+            }
+        }
+    }
+
     private var panelTitle: String? {
         if notchVM.isHistoryOpen { return "Conversations" }
-        if notchVM.isRoutinesOpen { return "Routines" }
         if notchVM.isSettingsOpen { return "Settings" }
         if notchVM.isSearchOpen { return "Search" }
         return nil
@@ -402,35 +448,42 @@ struct NotchView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
         } else {
-            Button {
-                chatVM.startNewConversation()
-            } label: {
-                Image(systemName: "plus.bubble")
-                    .font(DS.Icon.secondary)
-                    .foregroundStyle(hoverNewConvo ? AnyShapeStyle(.secondary) : AnyShapeStyle(Color.white.opacity(0.20)))
-            }
-            .buttonStyle(.plain)
-            .pointingHandCursor()
-            .onHover { hoverNewConvo = $0 }
+            leftCluster
         }
     }
 
     private var brainTabsBar: some View {
         HStack(spacing: 16) {
-            brainTabButton(.memory)
-            brainTabButton(.skills)
-            if brainVM.hasWiki { brainTabButton(.wiki) }
+            brainTabButton(.brain, icon: "books.vertical")
+            brainTabButton(.tools, icon: "hammer")
+            brainTabButton(.tasks, icon: "call.bell")
         }
     }
 
-    private func brainTabButton(_ tab: BrainTab) -> some View {
+    private func brainTabButton(_ tab: BrainTab, icon: String) -> some View {
         let isActive = brainVM.activeTab == tab
         return Button {
             brainVM.activeTab = tab
         } label: {
-            Text(tab.rawValue)
-                .font(.headline)
-                .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            HStack(spacing: 6) {
+                if icon == "call.bell" {
+                    // Bundled SVG (Phosphor Icons, MIT) — outline + filled pair
+                    // mirrors SF Symbol .symbolVariant for the call.bell glyph.
+                    (isActive ? Self.callBellFillImage : Self.callBellImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 17, height: 17)
+                        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                } else {
+                    Image(systemName: icon)
+                        .symbolVariant(isActive ? .fill : .none)
+                        .font(.system(size: 13, weight: isActive ? .semibold : .medium))
+                        .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                }
+                Text(tab.rawValue)
+                    .font(.headline)
+                    .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+            }
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
@@ -481,6 +534,58 @@ struct NotchView: View {
         Color.clear
             .frame(height: 32)
             .padding(.top, 4)
+    }
+
+    // MARK: - Routines embedded inside Brain panel's Tasks tab
+
+    /// `RoutinesView` wired with callbacks that close the Brain panel after
+    /// a selection (replaces the deprecated standalone Routines panel).
+    private var routinesEmbedded: some View {
+        RoutinesView(
+            cronStore: cronStore,
+            panelSize: panelSizeStore.size,
+            onSelectJob: { job in
+                chatVM.setRoutineContext(job)
+                notchVM.isBrainOpen = false
+            },
+            onSelectTemplate: { draft in
+                chatVM.draft = draft
+                notchVM.isBrainOpen = false
+            },
+            onCreateOwn: {
+                chatVM.draft = "Schedule a new routine: "
+                notchVM.isBrainOpen = false
+            },
+            onDropFile: { providers in
+                for provider in providers {
+                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                        guard let data = data as? Data,
+                              let url = URL(dataRepresentation: data, relativeTo: nil, isAbsolute: true) else { return }
+                        let attachment = DocumentExtractor.extract(from: url)
+                        DispatchQueue.main.async {
+                            chatVM.pendingAttachments.append(attachment)
+                            chatVM.draft = "What routine would make sense for this file?"
+                            chatVM.routineCreationMode = true
+                            notchVM.isBrainOpen = false
+                        }
+                    }
+                }
+            },
+            onDraftAction: { draft, autoSend in
+                chatVM.draft = draft
+                notchVM.isBrainOpen = false
+                if autoSend { chatVM.send() }
+            },
+            onCreateCustomRoutine: { draft in
+                chatVM.createRoutine(draft: draft)
+            },
+            onSetPaused: { job, paused in
+                chatVM.setRoutinePaused(job, paused: paused)
+            },
+            onUpdateRoutine: { id, patch in
+                chatVM.updateRoutine(jobId: id, patch: patch)
+            }
+        )
     }
 
 }

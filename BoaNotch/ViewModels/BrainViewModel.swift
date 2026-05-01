@@ -44,13 +44,20 @@ class BrainViewModel: ObservableObject {
     @Published var userBlocks: [MemoryBlock] = []
     @Published var allMemoryBlocks: [MemoryBlock] = []
     @Published var skills: [SkillInfo] = []
+    @Published var curatedSkillStates: [String: CuratedSkillState] = [:]
     @Published var wikiArticles: [WikiArticle] = []
     @Published var hasWiki = false
     @Published var wikiLastUpdated: Date?
     @Published var pendingRawCount: Int = 0
     @Published var isIngesting: Bool = false
     @Published var hasLoaded = false
-    @Published var activeTab: BrainTab = .memory
+    @Published var activeTab: BrainTab = .brain
+
+    /// Hermes skills not represented by a curated card. Drives zone 2 of the
+    /// Skills tab.
+    var technicalSkills: [SkillInfo] {
+        skills.filter { !CuratedSkillCatalog.mappedSkillIDs.contains($0.id) }
+    }
 
     var memoryCategories: [MemoryCategoryGroup] {
         let grouped = Dictionary(grouping: allMemoryBlocks, by: \.category)
@@ -84,6 +91,82 @@ class BrainViewModel: ObservableObject {
     func refreshLightMetrics() {
         pendingRawCount = countPendingRawFiles()
         wikiLastUpdated = computeWikiLastUpdated()
+        resolveCuratedStates()
+    }
+
+    // MARK: - Curated skill detection
+
+    /// Recompute the connection state of every entry in `CuratedSkillCatalog`
+    /// against on-disk Hermes state. Cheap to call (small file reads, no
+    /// network), safe on the 60s `refreshLightMetrics` cadence.
+    func resolveCuratedStates() {
+        var states: [String: CuratedSkillState] = [:]
+        let envValues = readEnvFile()
+        let googleScopes = readGoogleScopes()
+        let googleEmail = UserDefaults.standard.string(forKey: "googleConnectedEmail")
+        let hermesProviders = readHermesAuthProviders()
+
+        for skill in CuratedSkillCatalog.all {
+            switch skill.detection {
+            case .envVar(let name):
+                let value = envValues[name] ?? ""
+                states[skill.id] = value.isEmpty ? .available : .connected(detail: nil)
+            case .googleScope(let scope):
+                let connected = googleScopes.contains { $0.contains(scope) }
+                states[skill.id] = connected
+                    ? .connected(detail: googleEmail)
+                    : .available
+            case .hermesAuthProvider(let id):
+                states[skill.id] = hermesProviders.contains(id)
+                    ? .connected(detail: nil)
+                    : .available
+            }
+        }
+        curatedSkillStates = states
+    }
+
+    private func readEnvFile() -> [String: String] {
+        let envPath = (hermesHome as NSString).appendingPathComponent(".env")
+        guard let raw = readFileIfExists(envPath) else { return [:] }
+        var result: [String: String] = [:]
+        for line in raw.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            guard let eq = trimmed.firstIndex(of: "=") else { continue }
+            let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            if value.hasPrefix("\"") && value.hasSuffix("\"") && value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            }
+            if value.hasPrefix("'") && value.hasSuffix("'") && value.count >= 2 {
+                value = String(value.dropFirst().dropLast())
+            }
+            result[key] = value
+        }
+        return result
+    }
+
+    private func readGoogleScopes() -> [String] {
+        let path = (hermesHome as NSString).appendingPathComponent("google_token.json")
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let scopes = json["scopes"] as? [String]
+        else { return [] }
+        return scopes
+    }
+
+    private func readHermesAuthProviders() -> Set<String> {
+        let path = (hermesHome as NSString).appendingPathComponent("auth.json")
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let providers = json["providers"] as? [String: Any]
+        else { return [] }
+        // Treat any non-null provider entry as connected.
+        var ids: Set<String> = []
+        for (key, value) in providers {
+            if !(value is NSNull) { ids.insert(key) }
+        }
+        return ids
     }
 
     // MARK: - Memory
