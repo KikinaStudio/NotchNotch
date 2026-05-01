@@ -186,7 +186,7 @@ struct NotchView: View {
                                 .padding(.top, 14)
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 18)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
                                 .padding(.horizontal, 42)
                                 .padding(.bottom, 25)
                                 .transition(.opacity)
@@ -195,7 +195,7 @@ struct NotchView: View {
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 25)
                                     .transition(.opacity)
@@ -219,7 +219,7 @@ struct NotchView: View {
                                     .padding(.top, 14)
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 18)
-                                    .background(RoundedRectangle(cornerRadius: 8).fill(.quinary))
+                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 25)
                                     .transition(.opacity)
@@ -404,7 +404,7 @@ struct NotchView: View {
                     chatVM.startNewConversation()
                     notchVM.collapseLeftMenu()
                 }
-                menuButton("clock.arrow.trianglehead.2.counterclockwise.rotate.90", active: notchVM.isHistoryOpen) {
+                menuButton("book", active: notchVM.isHistoryOpen) {
                     if notchVM.isHistoryOpen {
                         notchVM.closeAllPanels()
                     } else {
@@ -416,7 +416,7 @@ struct NotchView: View {
                 Button {
                     notchVM.expandLeftMenu()
                 } label: {
-                    Image(systemName: "bubble.left.and.bubble.right")
+                    Image(systemName: "rectangle.3.group.bubble")
                         .font(DS.Icon.topBar)
                         .frame(height: 13)
                         .foregroundStyle(Color.white.opacity(0.20))
