@@ -43,7 +43,10 @@ struct TemplateBrowserView: View {
                 createOwnRow
                     .padding(.top, 4)
             }
-            .padding(.bottom, 8)
+            // 28pt > FadingScrollView's 24pt fadeHeight so no LazyHStack row
+            // ever lands inside the bottom mask gradient (which was clipping
+            // the cards' bottom corners visually).
+            .padding(.bottom, 28)
         }
     }
 

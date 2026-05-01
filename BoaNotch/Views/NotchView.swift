@@ -130,7 +130,8 @@ struct NotchView: View {
                 .notchPanelBackground(
                     top: notchVM.topCornerRadius,
                     bottom: notchVM.bottomCornerRadius,
-                    isOpen: notchVM.isOpen
+                    isOpen: notchVM.isOpen,
+                    inSection: notchVM.isSettingsOpen || notchVM.isHistoryOpen || notchVM.isBrainOpen
                 )
                 .clipShape(
                     NotchShape(
@@ -183,19 +184,13 @@ struct NotchView: View {
                         Group {
                             if notchVM.isSettingsOpen {
                                 SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
-                                .padding(.top, 14)
-                                .padding(.horizontal, 42)
-                                .padding(.bottom, 18)
-                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
-                                .padding(.horizontal, 42)
-                                .padding(.bottom, 25)
-                                .transition(.opacity)
+                                    .padding(.top, 14)
+                                    .padding(.horizontal, 42)
+                                    .padding(.bottom, 25)
+                                    .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
                                 ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)
                                     .padding(.top, 14)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 18)
-                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 25)
                                     .transition(.opacity)
@@ -217,9 +212,6 @@ struct NotchView: View {
                                     tasksContent: { AnyView(routinesEmbedded) }
                                 )
                                     .padding(.top, 14)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 18)
-                                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.45)))
                                     .padding(.horizontal, 42)
                                     .padding(.bottom, 25)
                                     .transition(.opacity)

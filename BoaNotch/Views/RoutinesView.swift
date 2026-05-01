@@ -180,6 +180,11 @@ struct RoutinesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                // Push the footer to the bottom so cards sharing a LazyVGrid
+                // row keep their pill+schedule+dot at the same vertical line
+                // regardless of description length (1 vs 2 wrapped lines).
+                Spacer(minLength: 0)
+
                 // Row 3: failure pill + contextual info line + on/off dot
                 HStack(spacing: 8) {
                     StatusPill(status: job.routineStatus)
@@ -200,7 +205,7 @@ struct RoutinesView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: 120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity, alignment: .topLeading)
             .background(cardShape.fill(.quaternary.opacity(0.6)))
             .overlay(
                 cardShape

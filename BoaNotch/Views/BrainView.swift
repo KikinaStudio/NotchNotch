@@ -410,6 +410,9 @@ struct BrainView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            // Bleed the scroll viewport edge-to-edge of the .quinary card by
+            // negating the parent's 42pt inner padding. The LazyHStack re-adds
+            // 42pt internally so the first card stays aligned with the title.
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 8) {
                     ForEach(CuratedSkillCatalog.all) { curated in
@@ -417,8 +420,10 @@ struct BrainView: View {
                             .frame(width: cardWidth, height: 130)
                     }
                 }
+                .padding(.horizontal, 42)
             }
-            .scrollClipDisabled()
+            .padding(.horizontal, -42)
+            .frame(height: 130)
         }
     }
 
@@ -455,7 +460,9 @@ struct BrainView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // maxHeight: .infinity so the background fills the 130pt slot
+            // allocated at the call site — no whitespace above/below the card.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(cardShape.fill(.quaternary.opacity(0.6)))
             .overlay(
                 cardShape
@@ -593,6 +600,7 @@ struct BrainView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            // Edge-to-edge scroll viewport (see appsCarouselSection rationale).
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 8) {
                     ForEach(group.skills) { skill in
@@ -600,14 +608,22 @@ struct BrainView: View {
                             .frame(width: cardWidth, height: 130)
                     }
                 }
+                .padding(.horizontal, 42)
             }
-            .scrollClipDisabled()
+            .padding(.horizontal, -42)
+            .frame(height: 130)
         }
     }
 
     private func skillCardCompact(_ skill: SkillInfo) -> some View {
         let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 8) {
+            // Category glyph — monochrome, anchors the card visually so it
+            // doesn't read as half-empty next to brand-icon Apps cards.
+            Image(systemName: iconForSkillCategory(skill.category))
+                .font(.system(size: 22, weight: .regular))
+                .foregroundStyle(.secondary)
+
             Text(skill.name)
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.primary)
@@ -618,7 +634,7 @@ struct BrainView: View {
                 Text(skill.description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -626,7 +642,10 @@ struct BrainView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        // maxHeight: .infinity so the background fills the 130pt slot allocated
+        // at the call site — keeps title→card distance consistent across
+        // sections regardless of natural content height.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(cardShape.fill(.quaternary.opacity(0.6)))
         .overlay(
             cardShape

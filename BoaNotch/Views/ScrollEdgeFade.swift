@@ -29,6 +29,10 @@ struct FadingScrollView<Content: View>: View {
             content()
                 .padding(.bottom, fadeHeight)
         }
+        // Allow nested horizontal carousels (or any child) to extend beyond
+        // the vertical scroll's bounds via negative padding — needed for the
+        // edge-to-edge Netflix-style scroll in BrainView's Tools tab.
+        .scrollClipDisabled()
         .mask(
             VStack(spacing: 0) {
                 Rectangle().fill(.black)
@@ -39,6 +43,10 @@ struct FadingScrollView<Content: View>: View {
                 )
                 .frame(height: fadeHeight)
             }
+            // Extend mask horizontally by exactly the inner ScrollView's
+            // negative padding (-42pt on each side) so edge-to-edge carousels
+            // in BrainView render fully without spilling beyond.
+            .padding(.horizontal, -42)
         )
     }
 }

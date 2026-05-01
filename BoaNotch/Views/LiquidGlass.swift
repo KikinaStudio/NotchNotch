@@ -22,14 +22,21 @@ struct DrawOnAppearModifier: ViewModifier {
 
 /// Background for the notch panel: solid black when closed (camouflages the
 /// hardware notch), top-down gradient from black to Liquid Glass when open
-/// on macOS 26+, solid black fallback on older systems.
+/// on macOS 26+, solid black fallback on older systems. When `inSection` is
+/// true (Settings / Brain / History panel open), the gradient bottom darkens
+/// to ~70% black so the surface signals "I'm in a content section" — replaces
+/// the old `.quinary` rectangle-in-rectangle pattern.
 struct NotchPanelBackgroundModifier: ViewModifier {
     let topCornerRadius: CGFloat
     let bottomCornerRadius: CGFloat
     let isOpen: Bool
+    let inSection: Bool
 
     func body(content: Content) -> some View {
         if isOpen, #available(macOS 26.0, *) {
+            // Bottom stop opacity: 0 = full glass bleed (chat/closed), 0.7 =
+            // mostly black with a hint of glass refraction (in a section).
+            let bottomOpacity: Double = inSection ? 0.7 : 0.0
             content
                 .background {
                     ZStack {
@@ -46,7 +53,7 @@ struct NotchPanelBackgroundModifier: ViewModifier {
                             stops: [
                                 .init(color: .black, location: 0.0),
                                 .init(color: .black, location: 0.45),
-                                .init(color: .black.opacity(0.0), location: 1.0)
+                                .init(color: .black.opacity(bottomOpacity), location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
@@ -75,13 +82,16 @@ extension View {
 
     /// Habille le panneau du notch : noir solide quand fermé, gradient
     /// noir → Liquid Glass quand ouvert sur macOS 26+ (fallback noir solide
-    /// avant). Le clipping à la silhouette NotchShape doit être appliqué
-    /// séparément par le call site.
-    func notchPanelBackground(top: CGFloat, bottom: CGFloat, isOpen: Bool) -> some View {
+    /// avant). Quand `inSection` est vrai, le bas du gradient s'assombrit
+    /// (~70% noir) pour signaler qu'on est dans un panneau de section
+    /// (Settings / Brain / History). Le clipping à la silhouette NotchShape
+    /// doit être appliqué séparément par le call site.
+    func notchPanelBackground(top: CGFloat, bottom: CGFloat, isOpen: Bool, inSection: Bool = false) -> some View {
         modifier(NotchPanelBackgroundModifier(
             topCornerRadius: top,
             bottomCornerRadius: bottom,
-            isOpen: isOpen
+            isOpen: isOpen,
+            inSection: inSection
         ))
     }
 
