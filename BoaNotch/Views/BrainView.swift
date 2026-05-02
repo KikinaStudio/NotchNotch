@@ -29,7 +29,15 @@ struct BrainView: View {
     @State private var hoveredCuratedId: String?
     @State private var syncPulseScale: CGFloat = 1.0
 
-    private let cardWidth: CGFloat = 220
+    /// Shared namespace for the brand-icon morph between Zone 1 (Actifs) and
+    /// Zone 2 (À connecter) when a curated skill flips state.
+    @Namespace private var toolsTransitionNS
+
+    /// Categories of `brainVM.technicalSkills` whose row list is collapsed.
+    /// First category is expanded by default (initialized lazily on first
+    /// non-empty load via `initializeZone3CollapseIfNeeded()`).
+    @State private var collapsedTechnicalCategories: Set<String> = []
+    @State private var didInitializeZone3Collapse = false
 
     private let lightMetricsTimer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
 
@@ -377,95 +385,156 @@ struct BrainView: View {
         Divider().padding(.leading, 14)
     }
 
-    // MARK: - Tools tab (Apps carousel + technical skills carousels)
+    // MARK: - Tools tab (état-driven: Actifs · À connecter · Installées)
+
+    /// Curated skills currently `.connected`. Drives Zone 1 (compact tiles).
+    private var connectedCuratedSkills: [CuratedSkill] {
+        CuratedSkillCatalog.all.filter {
+            if case .connected = brainVM.curatedSkillStates[$0.id] { return true }
+            return false
+        }
+    }
+
+    /// Curated skills not yet connected (or with an unresolved state — treated
+    /// as available so the user can see the connect path). Drives Zone 2.
+    private var availableCuratedSkills: [CuratedSkill] {
+        CuratedSkillCatalog.all.filter {
+            if case .connected = brainVM.curatedSkillStates[$0.id] { return false }
+            return true
+        }
+    }
 
     private var toolsTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             tabIntro("Ce que ton agent peut faire pour toi.")
 
             FadingScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    appsCarouselSection
+                // Liquid Glass language inside an opaque panel: surfaces are
+                // continuous, separated by space rather than dividers. Each
+                // zone has its own internal rhythm; the 24pt gap below each
+                // zone (top-padding on the next) carries the boundary.
+                VStack(alignment: .leading, spacing: 0) {
+                    if !connectedCuratedSkills.isEmpty {
+                        zoneActifs
+                    }
 
-                    ForEach(technicalSkillCategories, id: \.name) { group in
-                        skillCategorySection(group)
+                    if !availableCuratedSkills.isEmpty {
+                        zoneAConnecter
+                            .padding(.top, connectedCuratedSkills.isEmpty ? 0 : 24)
+                    }
+
+                    if !brainVM.technicalSkills.isEmpty {
+                        zoneInstallees
+                            .padding(.top,
+                                     (connectedCuratedSkills.isEmpty
+                                      && availableCuratedSkills.isEmpty) ? 0 : 24)
                     }
                 }
                 .padding(.bottom, 8)
+                // Drives the brand-icon morph between Zone 1 and Zone 2 when
+                // a curated skill flips state. The matchedGeometryEffect on
+                // the BrandIconView nodes does the heavy lifting; this just
+                // ensures SwiftUI animates the diff.
+                .animation(.spring(response: 0.4, dampingFraction: 0.85),
+                           value: brainVM.curatedSkillStates)
             }
+        }
+        .onAppear {
+            initializeZone3CollapseIfNeeded()
+        }
+        .onChange(of: brainVM.technicalSkills.count) { _, _ in
+            initializeZone3CollapseIfNeeded()
         }
     }
 
-    private var appsCarouselSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.tertiary)
-                Text("Apps")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("\(CuratedSkillCatalog.all.count)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
+    /// On first non-empty load, collapse every category except the first.
+    /// 85+ skills fully expanded is overwhelming; one expanded category
+    /// teaches the pattern (chevron + tap to expand) without a wall of text.
+    private func initializeZone3CollapseIfNeeded() {
+        guard !didInitializeZone3Collapse else { return }
+        let categories = technicalSkillCategories
+        guard !categories.isEmpty else { return }
+        let allNames = Set(categories.map(\.name))
+        let firstName = categories.first?.name
+        collapsedTechnicalCategories = allNames.subtracting([firstName].compactMap { $0 })
+        didInitializeZone3Collapse = true
+    }
 
-            // Bleed the scroll viewport edge-to-edge of the .quinary card by
-            // negating the parent's 42pt inner padding. The LazyHStack re-adds
-            // 42pt internally so the first card stays aligned with the title.
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) {
-                    ForEach(CuratedSkillCatalog.all) { curated in
-                        curatedSkillCard(curated)
-                            .frame(width: cardWidth, height: 130)
-                    }
+    /// Header shared by all three zones. Distinct from category sub-headers
+    /// in Zone 3 (which use `DS.Text.sectionHead` mono-bold) — this one is
+    /// heavier (`.callout`) to mark the top-level state grouping.
+    private func zoneHeader(icon: String, label: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.tertiary)
+            Text(label)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.primary)
+            Spacer(minLength: 8)
+            Text("\(count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    // MARK: Zone 1 — Actifs (curated, connected)
+
+    private var zoneActifs: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            zoneHeader(icon: "checkmark.circle.fill",
+                       label: "Actifs",
+                       count: connectedCuratedSkills.count)
+
+            // Adaptive flow: ~4 chips per row on standard panel, more on large.
+            // Each chip hugs its content via fixedSize but the grid clamps to
+            // a reasonable max so a long name doesn't dominate.
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 130, maximum: 200),
+                                   spacing: 8,
+                                   alignment: .leading)],
+                alignment: .leading,
+                spacing: 8
+            ) {
+                ForEach(connectedCuratedSkills) { skill in
+                    connectedChip(skill)
                 }
-                .padding(.horizontal, 42)
             }
-            .padding(.horizontal, -42)
-            .frame(height: 130)
         }
     }
 
-    private func curatedSkillCard(_ skill: CuratedSkill) -> some View {
-        let state = brainVM.curatedSkillStates[skill.id] ?? .available
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+    /// Compact capsule chip — concentric with Zone 2 cards (both rounded
+    /// continuous shapes) but slimmer to read as "inventory" rather than
+    /// "primary action surface". Hovers add a hairline overlay matching the
+    /// Liquid Glass micro-reaction language.
+    private func connectedChip(_ skill: CuratedSkill) -> some View {
+        let shape = Capsule(style: .continuous)
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 selectedCuratedSkill = skill
             }
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top) {
-                    BrandIconView(kind: skill.icon, size: 24)
-                    Spacer()
-                    stateIndicator(for: state)
-                }
-
+            HStack(spacing: 8) {
+                BrandIconView(kind: skill.icon, size: 18)
+                    .matchedGeometryEffect(id: skill.id, in: toolsTransitionNS)
                 Text(skill.displayName)
-                    .font(.callout.weight(.medium))
+                    .font(DS.Text.caption)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-
-                if !skill.descriptionFR.isEmpty {
-                    Text(skill.descriptionFR)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                Spacer(minLength: 4)
+                // Inline status dot — same visual as `stateIndicator(.connected)`
+                // but sized for the chip footprint.
+                Circle()
+                    .fill(Color.green.opacity(0.85))
+                    .frame(width: 6, height: 6)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 16)
-            // maxHeight: .infinity so the background fills the 130pt slot
-            // allocated at the call site — no whitespace above/below the card.
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(cardShape.fill(.quaternary.opacity(0.6)))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(shape.fill(.quaternary.opacity(0.4)))
             .overlay(
-                cardShape
+                shape
                     .fill(hoveredCuratedId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
                     .allowsHitTesting(false)
             )
@@ -474,6 +543,205 @@ struct BrainView: View {
         .pointingHandCursor()
         .onHover { over in hoveredCuratedId = over ? skill.id : nil }
         .animation(.easeInOut(duration: 0.15), value: hoveredCuratedId == skill.id)
+    }
+
+    // MARK: Zone 2 — À connecter (curated, available)
+
+    private var zoneAConnecter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            zoneHeader(icon: "link.badge.plus",
+                       label: "À connecter",
+                       count: availableCuratedSkills.count)
+
+            // Adaptive: 2 cards on standard panel, 3 on large — uses the
+            // extra horizontal space rather than just stretching 2 cards
+            // wider.
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 240, maximum: 360),
+                                   spacing: 10,
+                                   alignment: .top)],
+                alignment: .leading,
+                spacing: 10
+            ) {
+                ForEach(availableCuratedSkills) { skill in
+                    availableSkillCard(skill)
+                }
+            }
+        }
+    }
+
+    private func availableSkillCard(_ skill: CuratedSkill) -> some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                selectedCuratedSkill = skill
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                BrandIconView(kind: skill.icon, size: 24)
+                    .matchedGeometryEffect(id: skill.id, in: toolsTransitionNS)
+
+                Text(skill.displayName)
+                    .font(DS.Text.bodySmall.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Text(skill.descriptionFR)
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2, reservesSpace: true)
+                    .truncationMode(.tail)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer(minLength: 4)
+
+                HStack(spacing: 4) {
+                    Text("Connecter")
+                        .font(DS.Text.captionMedium)
+                    Image(systemName: "chevron.right")
+                        .font(DS.Icon.glyph)
+                }
+                .foregroundStyle(AppColors.accent)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(shape.fill(.quaternary.opacity(0.6)))
+            .overlay(
+                shape
+                    .fill(hoveredCuratedId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
+                    .allowsHitTesting(false)
+            )
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .frame(height: 130)
+        .onHover { over in hoveredCuratedId = over ? skill.id : nil }
+        .animation(.easeInOut(duration: 0.15), value: hoveredCuratedId == skill.id)
+    }
+
+    // MARK: Zone 3 — Installées (technical Hermes skills, grouped by category)
+
+    private var zoneInstallees: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            zoneHeader(icon: "wrench.adjustable",
+                       label: "Installées",
+                       count: brainVM.technicalSkills.count)
+
+            LazyVStack(alignment: .leading, spacing: 4) {
+                ForEach(technicalSkillCategories, id: \.name) { group in
+                    technicalCategoryBlock(group)
+                }
+            }
+        }
+    }
+
+    private func technicalCategoryBlock(_ group: SkillCategoryGroup) -> some View {
+        let isExpanded = !collapsedTechnicalCategories.contains(group.name)
+        return VStack(alignment: .leading, spacing: 0) {
+            // Sub-header is itself the toggle — full row tappable, chevron
+            // rotates 90° when expanded.
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    if isExpanded {
+                        collapsedTechnicalCategories.insert(group.name)
+                    } else {
+                        collapsedTechnicalCategories.remove(group.name)
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: iconForSkillCategory(group.name))
+                        .font(DS.Text.sectionHead)
+                        .foregroundStyle(Color.white.opacity(0.28))
+                    Text(labelForSkillCategory(group.name))
+                        .font(DS.Text.sectionHead)
+                        .tracking(1.5)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.white.opacity(0.28))
+                    Spacer(minLength: 8)
+                    Text("\(group.skills.count)")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.right")
+                        .font(DS.Icon.chevronBold)
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(group.skills.enumerated()), id: \.element.id) { index, skill in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(DS.Stroke.hairline)
+                                .frame(height: DS.Hairline.standard)
+                        }
+                        skillRow(skill)
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .move(edge: .top)),
+                    removal: .opacity
+                ))
+            }
+        }
+    }
+
+    private func skillRow(_ skill: SkillInfo) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                selectedSkill = skill
+            }
+        } label: {
+            HStack(spacing: 10) {
+                // Per-skill SF Symbol from SkillIconCatalog (e.g. apple-notes →
+                // note.text), with category fallback for skills not yet mapped.
+                Image(systemName: SkillIconCatalog.icon(for: skill, fallback: iconForSkillCategory))
+                    .font(DS.Icon.inline)
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 18, alignment: .center)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(skill.name)
+                        .font(DS.Text.caption)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    if !skill.description.isEmpty {
+                        Text(skill.description)
+                            .font(DS.Text.nano)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
+                // Affordance only on hover — keeps the row visually quiet
+                // when not active.
+                Image(systemName: "chevron.right")
+                    .font(DS.Icon.chevron)
+                    .foregroundStyle(.tertiary)
+                    .opacity(hoveredSkillId == skill.id ? 1 : 0)
+            }
+            .padding(.vertical, DS.Spacing.row)
+            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .onHover { over in hoveredSkillId = over ? skill.id : nil }
+        .animation(.easeInOut(duration: 0.12), value: hoveredSkillId == skill.id)
     }
 
     @ViewBuilder
@@ -584,83 +852,6 @@ struct BrainView: View {
         return grouped
             .map { SkillCategoryGroup(name: $0.key, skills: $0.value) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
-    private func skillCategorySection(_ group: SkillCategoryGroup) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: iconForSkillCategory(group.name))
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.tertiary)
-                Text(labelForSkillCategory(group.name))
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.primary)
-                Text("\(group.skills.count)")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-
-            // Edge-to-edge scroll viewport (see appsCarouselSection rationale).
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) {
-                    ForEach(group.skills) { skill in
-                        skillCardCompact(skill)
-                            .frame(width: cardWidth, height: 130)
-                    }
-                }
-                .padding(.horizontal, 42)
-            }
-            .padding(.horizontal, -42)
-            .frame(height: 130)
-        }
-    }
-
-    private func skillCardCompact(_ skill: SkillInfo) -> some View {
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        return VStack(alignment: .leading, spacing: 8) {
-            // Category glyph — monochrome, anchors the card visually so it
-            // doesn't read as half-empty next to brand-icon Apps cards.
-            Image(systemName: iconForSkillCategory(skill.category))
-                .font(.system(size: 22, weight: .regular))
-                .foregroundStyle(.secondary)
-
-            Text(skill.name)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            if !skill.description.isEmpty {
-                Text(skill.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 16)
-        // maxHeight: .infinity so the background fills the 130pt slot allocated
-        // at the call site — keeps title→card distance consistent across
-        // sections regardless of natural content height.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(cardShape.fill(.quaternary.opacity(0.6)))
-        .overlay(
-            cardShape
-                .fill(hoveredSkillId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
-                .allowsHitTesting(false)
-        )
-        .contentShape(Rectangle())
-        .onHover { over in hoveredSkillId = over ? skill.id : nil }
-        .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedSkill = skill
-            }
-        }
-        .pointingHandCursor()
-        .animation(.easeInOut(duration: 0.15), value: hoveredSkillId == skill.id)
     }
 
     // MARK: - Wiki empty state (used by `wikiSection` inside `brainTab`)
@@ -793,22 +984,18 @@ struct BrainView: View {
             .padding(.bottom, 10)
 
             FadingScrollView {
-                markdownText(content)
+                let rendered = (try? AttributedString(markdown: content, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                    ?? AttributedString(content)
+                Text(rendered)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     // MARK: - Shared components
-
-    private func markdownText(_ text: String) -> some View {
-        let rendered = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(text)
-        return Text(rendered)
-            .font(.callout)
-            .foregroundStyle(.primary)
-            .textSelection(.enabled)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
 
     private func emptyState(_ message: String) -> some View {
         Text(message)
