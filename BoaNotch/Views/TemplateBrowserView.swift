@@ -358,6 +358,7 @@ struct TemplateBrowserView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        panel.presentAboveNotch()
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             DispatchQueue.main.async {

@@ -331,6 +331,7 @@ struct ChatView: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
+        panel.presentAboveNotch()
         panel.begin { response in
             guard response == .OK else { return }
             for url in panel.urls {

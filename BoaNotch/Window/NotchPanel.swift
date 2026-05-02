@@ -36,3 +36,12 @@ class NotchPanel: NSPanel {
         return false
     }
 }
+
+extension NSOpenPanel {
+    /// Configures this panel to float above NotchPanel and activates the app
+    /// so the picker receives keyboard focus. Call before `.begin { ... }`.
+    func presentAboveNotch() {
+        level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 4)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
