@@ -3,7 +3,7 @@ import SwiftUI
 enum BrainTab: String, CaseIterable {
     case brain = "Memory"
     case tools = "Tools"
-    case tasks = "Tasks"
+    case tasks = "Missions"
 }
 
 struct BrainView: View {
