@@ -113,6 +113,18 @@ enum DS {
         static let separator  = AnyShapeStyle(.separator)
     }
 
+    // MARK: - Status
+    /// Couleurs sémantiques pour pastilles d'état (succès / échec).
+    /// Wrappées en AnyShapeStyle pour composer avec .foregroundStyle / .fill
+    /// dans les ternaires conditionnels. Doctrine : aucune vue ne hardcode
+    /// `.green` / `.red` ; passer par ces tokens.
+    enum Status {
+        /// Vert ~85% — completed dot, succès non bruyant.
+        static let success = AnyShapeStyle(Color.green.opacity(0.85))
+        /// Rouge ~85% — failed dot, erreurs.
+        static let failure = AnyShapeStyle(Color.red.opacity(0.85))
+    }
+
     // MARK: - Stroke (hairlines)
     /// Pour bordures et stroke d'overlay où on a besoin de contrôle fin sur l'opacité.
     /// Préférer DS.Surface.separator quand un ShapeStyle natif suffit.

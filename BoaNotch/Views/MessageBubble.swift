@@ -580,6 +580,7 @@ struct MessageBubble: View {
 private struct EventTimeline: View {
     let message: ChatMessage
     @State private var isExpanded = false
+    @State private var isOuterHovered = false
     @State private var pulseOpacity: Double = 0.3
 
     var body: some View {
@@ -631,10 +632,16 @@ private struct EventTimeline: View {
                     }
                     .font(DS.Text.caption)
                     .foregroundStyle(DS.Surface.tertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(outerHoverBackground)
+                    .animation(.easeInOut(duration: 0.12), value: isOuterHovered)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
+                .onHover { isOuterHovered = $0 }
 
                 if isExpanded {
                     expandedList
@@ -690,20 +697,25 @@ private struct EventTimeline: View {
                 }
             }
         case .tool(let name, let argsPreview):
-            HStack(spacing: 5) {
-                let mapping = AgentEventStyle.verbMapping(toolName: name)
+            let mapping = AgentEventStyle.verbMapping(toolName: name)
+            HStack(spacing: 6) {
+                BrailleSpinner(size: 9, color: .white.opacity(0.5))
+                    .frame(width: 9)
                 Image(systemName: mapping.icon)
-                    .font(DS.Text.micro)
+                    .font(DS.Text.nano)
+                    .foregroundStyle(DS.Surface.tertiary)
                 Text(mapping.present)
+                    .font(DS.Text.captionMedium)
+                    .foregroundStyle(DS.Surface.secondary)
                     .italic()
                 if !argsPreview.isEmpty {
                     Text(AgentEventStyle.truncate(argsPreview, max: 50))
                         .font(DS.Text.captionMono)
+                        .foregroundStyle(DS.Surface.tertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
                 Spacer(minLength: 6)
-                BrailleSpinner(size: 9, color: .white.opacity(0.5))
             }
         }
     }
@@ -732,6 +744,23 @@ private struct EventTimeline: View {
                 // before any duration was captured). Fall back to a count.
                 Text("\(message.events.count) event\(message.events.count == 1 ? "" : "s")")
             }
+        }
+    }
+
+    /// Hover lift sur le header outer du timeline (même pattern que
+    /// `EventLine.rowHoverBackground` — Liquid Glass macOS 26+, hairline
+    /// fallback sinon).
+    @ViewBuilder
+    private var outerHoverBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous)
+        if isOuterHovered {
+            if #available(macOS 26.0, *) {
+                Color.clear.nnGlass(in: shape)
+            } else {
+                shape.fill(DS.Stroke.hairline)
+            }
+        } else {
+            Color.clear
         }
     }
 
@@ -765,6 +794,7 @@ private struct EventTimeline: View {
 private struct EventLine: View {
     let event: AgentEvent
     @State private var isExpanded = false
+    @State private var isHovered = false
 
     private var isThinking: Bool {
         if case .thinking = event.kind { return true }
@@ -785,22 +815,26 @@ private struct EventLine: View {
                 Button {
                     withAnimation(DS.Motion.standard) { isExpanded.toggle() }
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(DS.Icon.chevronBold)
-                        Image(systemName: AgentEventStyle.iconName(for: event))
-                            .font(DS.Text.micro)
+                    HStack(spacing: 8) {
+                        leadingStatusIndicator
                         headerLabel
                         Spacer(minLength: 6)
                         durationLabel
-                        statusIcon
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(DS.Icon.chevronBold)
+                            .foregroundStyle(DS.Surface.quaternary)
                     }
                     .font(DS.Text.caption)
-                    .foregroundStyle(rowForeground)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .background(rowHoverBackground)
+                    .animation(.easeInOut(duration: 0.12), value: isHovered)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
+                .onHover { isHovered = $0 }
 
                 if isExpanded {
                     detailBody
@@ -809,25 +843,51 @@ private struct EventLine: View {
         }
     }
 
-    private var rowForeground: AnyShapeStyle {
-        if case .failed = event.status {
-            return AnyShapeStyle(Color.red.opacity(0.85))
+    @ViewBuilder
+    private var leadingStatusIndicator: some View {
+        Group {
+            switch event.status {
+            case .inProgress:
+                BrailleSpinner(size: 9, color: .white.opacity(0.5))
+            case .completed:
+                Circle()
+                    .fill(DS.Status.success)
+                    .frame(width: 6, height: 6)
+            case .failed:
+                Circle()
+                    .fill(DS.Status.failure)
+                    .frame(width: 6, height: 6)
+            }
         }
-        return DS.Surface.tertiary
+        .frame(width: 9, alignment: .center)
     }
 
     @ViewBuilder
     private var headerLabel: some View {
         switch event.kind {
         case .thinking:
-            Text("Thought")
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Image(systemName: "brain")
+                    .font(DS.Text.nano)
+                    .foregroundStyle(DS.Surface.tertiary)
+                Text("Thought")
+                    .font(DS.Text.captionMedium)
+                    .foregroundStyle(DS.Surface.secondary)
+                    .lineLimit(1)
+            }
         case .tool(let name, let argsPreview):
-            HStack(spacing: 4) {
-                Text(AgentEventStyle.verbMapping(toolName: name).past)
+            let mapping = AgentEventStyle.verbMapping(toolName: name)
+            HStack(spacing: 6) {
+                Image(systemName: mapping.icon)
+                    .font(DS.Text.nano)
+                    .foregroundStyle(DS.Surface.tertiary)
+                Text(mapping.past)
+                    .font(DS.Text.captionMedium)
+                    .foregroundStyle(DS.Surface.secondary)
                 if !argsPreview.isEmpty {
                     Text(AgentEventStyle.truncate(argsPreview, max: 50))
                         .font(DS.Text.captionMono)
+                        .foregroundStyle(DS.Surface.tertiary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -838,28 +898,32 @@ private struct EventLine: View {
     @ViewBuilder
     private var durationLabel: some View {
         switch event.status {
-        case .completed, .failed:
+        case .completed:
             Text(AgentEventStyle.formatDuration(event.duration))
                 .font(DS.Text.captionMono)
                 .foregroundStyle(DS.Surface.quaternary)
+        case .failed:
+            Text(AgentEventStyle.formatDuration(event.duration))
+                .font(DS.Text.captionMono)
+                .foregroundStyle(DS.Status.failure)
         case .inProgress:
             EmptyView()
         }
     }
 
+    /// Hover lift: Liquid Glass on macOS 26+, hairline fallback elsewhere.
+    /// Mirrors `RoutinesView.rowHoverBackground` — same visual language.
     @ViewBuilder
-    private var statusIcon: some View {
-        switch event.status {
-        case .completed:
-            Image(systemName: "checkmark")
-                .font(DS.Text.nano)
-                .foregroundStyle(.green.opacity(0.9))
-        case .failed:
-            Image(systemName: "xmark.octagon.fill")
-                .font(DS.Text.nano)
-                .foregroundStyle(.red.opacity(0.9))
-        case .inProgress:
-            BrailleSpinner(size: 9, color: .white.opacity(0.5))
+    private var rowHoverBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous)
+        if isHovered {
+            if #available(macOS 26.0, *) {
+                Color.clear.nnGlass(in: shape)
+            } else {
+                shape.fill(DS.Stroke.hairline)
+            }
+        } else {
+            Color.clear
         }
     }
 
@@ -874,7 +938,7 @@ private struct EventLine: View {
                     Text(reason)
                         .font(DS.Text.micro)
                         .italic()
-                        .foregroundStyle(.red.opacity(0.85))
+                        .foregroundStyle(DS.Status.failure)
                         .textSelection(.enabled)
                 }
                 if !event.detail.isEmpty {
@@ -903,16 +967,19 @@ private enum AgentEventStyle {
     /// "Using" / "Used". `delegate_task` is included as a regular tool —
     /// no special UI for subagent activity (that distinction was the
     /// pre-refactor `subagentIndicator`, intentionally collapsed here).
+    /// Tools réellement émis par Hermes (cf. HermesClient.swift:318-332).
+    /// Pas d'alias spéculatifs — ajouter un case ici uniquement après
+    /// confirmation du nom exact côté serveur Hermes.
     static func verbMapping(toolName: String) -> (icon: String, present: String, past: String) {
         switch toolName {
-        case "terminal":      return ("terminal",               "Running",    "Ran")
-        case "view":          return ("doc.text",               "Viewing",    "Viewed")
-        case "str_replace":   return ("pencil",                 "Editing",    "Edited")
-        case "create_file":   return ("doc.badge.plus",         "Creating",   "Created")
-        case "web_search":    return ("magnifyingglass",        "Searching",  "Searched")
-        case "web_fetch":     return ("globe",                  "Fetching",   "Fetched")
-        case "delegate_task": return ("person.2",               "Delegating", "Delegated")
-        default:              return ("wrench.and.screwdriver", "Using",      "Used")
+        case "terminal":      return ("terminal",               "Running",           "Ran")
+        case "view":          return ("doc.text",               "Reading",           "Read")
+        case "str_replace":   return ("pencil",                 "Editing",           "Edited")
+        case "create_file":   return ("doc.badge.plus",         "Creating",          "Created")
+        case "web_search":    return ("magnifyingglass",        "Searching the web", "Searched the web")
+        case "web_fetch":     return ("globe",                  "Fetching",          "Fetched")
+        case "delegate_task": return ("person.2",               "Delegating",        "Delegated")
+        default:              return ("wrench.and.screwdriver", "Using",             "Used tool")
         }
     }
 
