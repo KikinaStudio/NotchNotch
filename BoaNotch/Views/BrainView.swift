@@ -10,6 +10,10 @@ struct BrainView: View {
     @ObservedObject var brainVM: BrainViewModel
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var notchVM: NotchViewModel
+    /// Cron job state for the Missions tab activity banner. Sourced from
+    /// `~/.hermes/cron/jobs.json` via `CronStore`'s file watcher — updates
+    /// on every cron tick, no polling.
+    @ObservedObject var cronStore: CronStore
     /// Auto-send callback — used by wiki "Ask" buttons. Sets chatVM.draft and
     /// fires send().
     var onSendToChat: ((String) -> Void)?
@@ -761,10 +765,65 @@ struct BrainView: View {
     // MARK: - Tasks tab (RoutinesView embedded)
 
     private var tasksTab: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 14) {
+            MissionsActivityBanner(
+                cost: brainVM.costThisMonth,
+                forecast: brainVM.costForecastMonth,
+                dailyCounts: brainVM.dailySessionCounts,
+                failures: cronFailures7Days,
+                healthyJobs: cronJobsHealthy7Days
+            )
+
             // Intro is rendered inside RoutinesView's own header so it can sit
             // on the same row as the [+ New] button (saves vertical space).
             tasksContent()
+        }
+    }
+
+    // MARK: - Missions tab — cron health derivation
+
+    /// ISO8601 with microsecond fractional seconds, matching the format
+    /// Hermes writes to `jobs.json` (e.g. `2026-05-03T09:01:03.751106+02:00`).
+    /// `ISO8601DateFormatter` only accepts 3-digit fractions, so we use
+    /// `DateFormatter` with explicit `SSSSSS`. Fallback for jobs whose
+    /// `last_run_at` lacks fractional seconds.
+    private static let cronTimestampFull: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    private static let cronTimestampNoFrac: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssXXXXX"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+
+    private static func parseCronTimestamp(_ s: String) -> Date? {
+        cronTimestampFull.date(from: s) ?? cronTimestampNoFrac.date(from: s)
+    }
+
+    private var cronFailures7Days: Int {
+        let cutoff = Date().addingTimeInterval(-7 * 86_400)
+        return cronStore.jobs.reduce(into: 0) { count, job in
+            guard job.last_status == "error",
+                  let lastRunStr = job.last_run_at,
+                  let date = Self.parseCronTimestamp(lastRunStr),
+                  date >= cutoff else { return }
+            count += 1
+        }
+    }
+
+    private var cronJobsHealthy7Days: Int {
+        let cutoff = Date().addingTimeInterval(-7 * 86_400)
+        return cronStore.jobs.reduce(into: 0) { count, job in
+            guard job.last_status == "ok",
+                  let lastRunStr = job.last_run_at,
+                  let date = Self.parseCronTimestamp(lastRunStr),
+                  date >= cutoff else { return }
+            count += 1
         }
     }
 

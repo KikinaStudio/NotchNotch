@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import SQLite3
 
 struct SkillInfo: Identifiable {
     let id: String
@@ -53,6 +54,22 @@ class BrainViewModel: ObservableObject {
     @Published var hasLoaded = false
     @Published var activeTab: BrainTab = .brain
 
+    /// Aggregate cost (USD) over the last 30 days from `state.db.sessions`,
+    /// using `actual_cost_usd` then falling back to `estimated_cost_usd` per row.
+    /// `nil` when no session in the window has either column populated
+    /// (`cost_status='unknown'` for the whole window) — distinguishes
+    /// "no pricing data" from "0 dépensé". Refreshed every 60s via
+    /// `refreshLightMetrics`.
+    @Published var costThisMonth: Double? = nil
+    /// Linear projection of `costThisMonth` to a full month, computed from
+    /// month-to-date cost divided by the day-of-month. `nil` when fewer than
+    /// 3 days have elapsed in the current month (too noisy) or when no
+    /// pricing data is available.
+    @Published var costForecastMonth: Double? = nil
+    /// Sessions per day over the trailing 7 days, oldest → newest
+    /// (index 0 = D-6, index 6 = today). Drives the sparkline.
+    @Published var dailySessionCounts: [Int] = Array(repeating: 0, count: 7)
+
     /// Hermes skills not represented by a curated card. Drives zone 2 of the
     /// Skills tab.
     var technicalSkills: [SkillInfo] {
@@ -92,6 +109,108 @@ class BrainViewModel: ObservableObject {
         pendingRawCount = countPendingRawFiles()
         wikiLastUpdated = computeWikiLastUpdated()
         resolveCuratedStates()
+        refreshActivityMetrics()
+    }
+
+    // MARK: - Activity metrics (state.db, read-only)
+
+    /// Reads `~/.hermes/state.db` (Hermes-native, read-only) and computes
+    /// 30-day cost, current-month forecast, and 7-day session counts in a
+    /// single SQL pass. Indexed by `idx_sessions_started`, runs in <10ms on
+    /// a typical machine. Hermes stores cost in USD; we keep USD natively
+    /// (no FX conversion = no drift, no network).
+    /// Schema: `actual_cost_usd` populated by the pricing engine when the
+    /// model has a tariff; `estimated_cost_usd` is a fallback. ~65% of
+    /// sessions on free-tier models have neither (`cost_status='unknown'`)
+    /// — those don't count toward the totals, and `costThisMonth=nil`
+    /// when the entire 30-day window lacks pricing data.
+    /// On DB lock or absent file, keeps the previous values silently.
+    private func refreshActivityMetrics() {
+        let dbPath = (hermesHome as NSString).appendingPathComponent("state.db")
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            return
+        }
+        defer { sqlite3_close(db) }
+
+        var stmt: OpaquePointer?
+        let sql = """
+            SELECT
+                date(started_at, 'unixepoch', 'localtime') AS day,
+                COUNT(*) AS sessions,
+                SUM(COALESCE(actual_cost_usd, estimated_cost_usd, 0)) AS cost_sum,
+                SUM(CASE WHEN actual_cost_usd IS NOT NULL OR estimated_cost_usd IS NOT NULL THEN 1 ELSE 0 END) AS sessions_with_cost
+            FROM sessions
+            WHERE started_at > strftime('%s', 'now', '-60 days')
+            GROUP BY day
+            ORDER BY day ASC
+            """
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        var dayMap: [String: (sessions: Int, cost: Double, withCost: Int)] = [:]
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            guard sqlite3_column_type(stmt, 0) != SQLITE_NULL else { continue }
+            let day = String(cString: sqlite3_column_text(stmt, 0))
+            let sessions = Int(sqlite3_column_int64(stmt, 1))
+            let cost = sqlite3_column_double(stmt, 2)
+            let withCost = Int(sqlite3_column_int64(stmt, 3))
+            dayMap[day] = (sessions, cost, withCost)
+        }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        let calendar = Calendar.current
+        let now = Date()
+
+        // 30-day window
+        let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: now) ?? now
+        var totalCost: Double = 0
+        var totalWithCost: Int = 0
+        for (dayStr, value) in dayMap {
+            guard let dayDate = formatter.date(from: dayStr), dayDate >= thirtyDaysAgo else { continue }
+            totalCost += value.cost
+            totalWithCost += value.withCost
+        }
+        let newCost: Double? = (totalWithCost > 0) ? totalCost : nil
+
+        // Forecast: month-to-date / day-of-month × days-in-month.
+        // Only meaningful after at least 3 days of data — otherwise a single
+        // expensive day projects to an absurd monthly figure.
+        var newForecast: Double? = nil
+        let dayOfMonth = calendar.component(.day, from: now)
+        let daysInMonth = calendar.range(of: .day, in: .month, for: now)?.count ?? 30
+        if dayOfMonth >= 3,
+           let monthStart = calendar.date(from: calendar.dateComponents([.year, .month], from: now)) {
+            var monthCost: Double = 0
+            var monthWithCost: Int = 0
+            for (dayStr, value) in dayMap {
+                guard let dayDate = formatter.date(from: dayStr), dayDate >= monthStart else { continue }
+                monthCost += value.cost
+                monthWithCost += value.withCost
+            }
+            if monthWithCost > 0 {
+                newForecast = monthCost / Double(dayOfMonth) * Double(daysInMonth)
+            }
+        }
+
+        // Sessions per day, last 7 days, oldest → newest.
+        var counts: [Int] = []
+        for offset in stride(from: 6, through: 0, by: -1) {
+            guard let dayDate = calendar.date(byAdding: .day, value: -offset, to: now) else {
+                counts.append(0)
+                continue
+            }
+            let dayStr = formatter.string(from: dayDate)
+            counts.append(dayMap[dayStr]?.sessions ?? 0)
+        }
+
+        costThisMonth = newCost
+        costForecastMonth = newForecast
+        dailySessionCounts = counts
     }
 
     // MARK: - Curated skill detection

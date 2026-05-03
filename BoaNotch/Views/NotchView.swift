@@ -199,6 +199,7 @@ struct NotchView: View {
                                     brainVM: brainVM,
                                     chatVM: chatVM,
                                     notchVM: notchVM,
+                                    cronStore: cronStore,
                                     onSendToChat: { message in
                                         chatVM.draft = message
                                         notchVM.isBrainOpen = false
