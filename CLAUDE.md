@@ -298,11 +298,11 @@ Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. **Since 2026
 
 **Template data** — `RoutineTemplates.swift` defines 25 templates across 7 categories (`RoutineCategory.all`). Each `RoutineTemplate` has a `promptTemplate` with `{{placeholder}}` tokens and `[TemplateInput]` describing the form fields. `composeDraft(values:)` substitutes placeholders and prepends `"Schedule a new routine running <schedule>, delivered via <deliver>."` — producing a natural-language string that Hermes parses via its `cronjob(action="create", ...)` tool. *Creation* still composes a natural-language draft for the `cronjob` tool; *edit*, *pause*, and *resume* go through direct REST (see Documented exceptions). *Removal* still goes through chat for now.
 
-**Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the job list with a `[+ New]` button in the top-right header (identical styling to ConversationHistoryView's: accent color, `plus` glyph + "New" label, fires `resetForm()` then opens the inline `customForm`) and a "Browse templates" link at the bottom (toggles `@State showingBrowser`). Horizontal padding lives at the NotchView wrapper (42pt) — `RoutinesView` itself only applies vertical padding so the grid spans the available width without double-padding (fixed 2026-05-02 — earlier double 42pt padding was eating ~140pt of grid width in standard panel mode).
+**Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the task-report list with a `[+ New]` Menu in the top-right header (accent, `plus` glyph + "New" label, opens a native macOS popup with **From a template** / **Blank routine**). When `showingBrowser` is true, the header swaps the menu for a `← Back` button. Horizontal padding lives at the NotchView wrapper (42pt) — `RoutinesView` itself only applies vertical padding so the list spans the available width without double-padding.
 
-**Job list** — when jobs exist, flat cards laid out in a **responsive `LazyVGrid`**: 2 columns when `panelSize == .standard` (680px), 3 columns when `.large` (900px). 8pt spacing both axes. Sorted by enabled status then `next_run_at`. Cards use a flat fill `cardShape.fill(.quaternary.opacity(0.6))` (no `nnGlass`) — matches the conversation history panel aesthetic the user explicitly preferred over bright liquid glass (2026-04-24). `NotchView` passes `panelSize: panelSizeStore.size` into `RoutinesView` — the grid re-lays out automatically when the user toggles panel size. Each card has three rows with `VStack(spacing: 10)` and `padding(.vertical, 16)`: (1) **type glyph leading + title** — SF Symbol from `Self.iconName(for: job.routineType)` (`eye.fill` silent / `calendar` digest / `bell.fill` alert), 13pt hierarchical, tinted `AppColors.accent` (single-color rule — type distinction is carried by the glyph *shape*, not color, per user 2026-04-26); (2) description — 2-line truncated `job.prompt`, only rendered when `job.name` is non-empty (avoids redundancy with the title fallback); (3) footer — `StatusPill` leading + simplified text + `StatusDotButton` trailing. The pill is *always visible* with label `active` / `failed` / `paused` (`Capsule().fill(DS.Surface.quaternary)` + 5pt white dot + `DS.Text.microMedium` label). The middle text is just `humanSchedule(job.schedule_display)` — runs/last/next moved to a multi-line tooltip via `.help(tooltipText(for: job))` applied to the **whole card Button** (not the pill: SwiftUI's `.help()` on a sub-view of a Button label does not attach because the Button's gesture area swallows hover tracking — we tested both `.help` on the pill and a `NSView.toolTip` overlay, neither worked; applying `.help()` on the Button itself is the reliable native path). The trailing `StatusDotButton` is the on/off toggle (state derived from `enabled` + `state` + `last_status`, error variant when `last_status != "ok"`). Hover adds a `DS.Stroke.hairline` overlay (150ms ease). Paused cards at opacity 0.5. **Tapping the card body opens the dual-mode edit form pre-filled with the routine's current state** (see "Add card + custom form / edit mode" below) — this replaced the old "pull into chat as system context" tap behavior on 2026-04-26 because the chat path hid *what* about a routine was actually editable. Right-click context menu: "Talk about this routine" (the old `onSelectJob` path — sets `chatVM.activeRoutineContext` and switches to chat), "Pause"/"Resume" (calls `onSetPaused?` → REST), "Remove" (prefills draft, user confirms — still chat-mediated because deletion warrants confirmation). The toggle dot itself fires `onSetPaused?(job, isActive)` which routes through `ChatViewModel.setRoutinePaused` → `CronStore.applyOptimisticPause` (instant flip) + REST call (no toast on success — the dot flipping IS the confirmation; toast only on failure with rollback).
+**Job list — task-report rows (refactored 2026-05-03 from grid of cards)** — `LazyVStack(spacing: 0)` of single-line rows separated by `DS.Stroke.hairline` 0.5pt dividers (`rowDivider` helper). On `panelSize == .large` the stack is constrained to `DS.Layout.maxWidthRoutines` (720pt) and centered; on `.standard` it's full-width. Sorted by enabled status then `next_run_at`. Identity-of-object rule (cards as exception) is RETIRED for routines — the doctrine now treats them as a true list, in line with Memory/Skills/History. Each `routineRow(_:)` is a 32pt-min `Button` (`DS.Layout.routineRowMinHeight`) with 6pt vertical padding and 14pt horizontal padding (`DS.Layout.routineRowPadH`). Anatomy left → right: (1) **type icon** — SF Symbol from `iconName(for: job.routineType)` (`eye.fill` silent / `calendar` digest / `bell.fill` alert), `DS.Icon.caption` (11pt), white `DS.Surface.primary`, 14pt fixed frame for column alignment; (2) **title** — `DS.Text.bodySmall` (13pt) on `DS.Surface.primary`, `lineLimit(1)` truncating tail; (3) `Spacer(minLength: 12)`; (4) **schedule** — `humanSchedule(job.schedule_display)` in `DS.Text.caption` (11pt) on `DS.Surface.secondary`, `lineLimit(1)`; (5) **clickable `StatusPill`** — always visible, label `active` / `failed` / `paused` (5pt dot colored per status: accent blue / coral red `(0.95, 0.55, 0.55)` / muted gray `Color.white.opacity(0.4)` + label in `DS.Text.microMedium`). The pill IS the toggle — the old leading `StatusDotButton` was removed; clicking the pill fires `onSetPaused?(job, isActive)` (Button-in-Button works because SwiftUI routes taps to the innermost). Run count + last_run_at + next_run_at + error detail live in the native `.help()` tooltip via `tooltipText(for:)` — kept off the row to preserve density. Hover background uses `nnGlass(in: rounded8)` on macOS 26+ (Liquid Glass "lift" moment) and `AppColors.accent.opacity(0.06)` fallback elsewhere — rest state has NO fill (true list, not card). Paused rows at opacity 0.5. **Tap on row body** opens the dual-mode edit form pre-filled. Right-click context menu unchanged: Talk · Pause/Resume · Remove. The list ends with `rowDivider` + `addRoutineRow` — a discreet leading `+` icon + "New routine" in `DS.Surface.secondary` that wraps the same Menu as the header `[+ New]`, so the affordance is identical wherever the user reaches.
 
-**Add card + custom form / edit mode** — the grid's last cell is an `addCard` (dashed-border tile, full `AppColors.accent` `+`, "Create routine" label). The same `customForm` powers both **create** (tapping `addCard` → `resetForm()` → blank form) and **edit** (tapping a routine card → `applyJobToForm(job)` → pre-filled). Mode is driven by a single `editingJob: CronJob?` `@State`. Form layout:
+**Add row + custom form / edit mode** — there is no longer a dashed `addCard` cell. Creation goes through the `+ New` Menu in the header OR the bottom `addRoutineRow` — both invoke `newRoutineMenu(label:tint:)` which exposes "From a template" (sets `showingBrowser = true`) and "Blank routine" (`resetForm()` + `showingCustomForm = true`). The same `customForm` powers both **create** and **edit** (tapping a routine row → `applyJobToForm(job)` → pre-filled). Mode is driven by a single `editingJob: CronJob?` `@State`. Form layout:
 1. Back chevron breadcrumb — "← New routine" or "← Edit routine".
 2. **Notion-style title header** (`titleHeader` view, 2026-04-26) — replaces the old `Name (optional)` formField. A plain `TextField("Name your routine", text: $formName)` styled with `DS.Text.title` (18pt semibold) and `.fixedSize(horizontal: true, vertical: false)` so the field hugs the typed text instead of stretching to full width — followed by a `pencil.line` SF Symbol at `DS.Icon.secondary` (14pt medium, `DS.Surface.tertiary`) sitting 8pt to the right of the text, then a trailing `Spacer(minLength: 0)`. Result: the pencil affordance always sits next to the title regardless of length, never pinned to the trailing edge of the panel. The user explicitly rejected the previous variants (small thin pencil pinned far-right, bordered text field) on 2026-04-26 — preserve this hierarchy.
 3. "What should it do?" — required `TextEditor` for the prompt.
@@ -432,26 +432,23 @@ UI, follow these rules:
   items. Hover may add a very subtle `.white.opacity(0.05)` tint for 
   interactive rows. Vertical padding ~10pt. See `blockDivider` / 
   `rowDivider`.
-- **Routines are the exception**: a cron job is an *object* (state, 
-  periodicity, next run, deliver target), not a list item. Routines 
-  render as true cards (see `RoutinesView.jobCard`) with a **flat** 
-  semi-transparent fill `cardShape.fill(.quaternary.opacity(0.6))` — 
-  NOT `nnGlass`. User explicitly preferred the flat look over bright 
-  liquid glass inside the panel (2026-04-24); the card aesthetic echoes 
-  the conversation history search field's fill. 12pt continuous rounded 
-  rectangle, 8pt vertical gap between cards, 14pt horizontal × 16pt 
-  vertical inner padding, 10pt row spacing, 5pt extra top padding on the 
-  footer row. Each card carries a **type glyph leading the title** 
-  (`eye.fill` silent / `calendar` digest / `bell.fill` alert) — 13pt 
-  hierarchical, all tinted `AppColors.accent` (single-color rule, 
-  user 2026-04-26). The footer is `StatusPill` (always visible, 
-  `active` / `failed` / `paused`) + `humanSchedule()` text + 
-  `StatusDotButton`; runs/last/next are surfaced via `.help()` tooltip 
-  on the whole card. The grid's last cell is 
-  an `addCard` — dashed accent border + big `+` — that opens an inline 
-  parametric `customForm` (see the "Add card + custom form" architecture 
-  note). This card-exception does NOT generalize — Brain / Memory / 
-  Skills / History / Settings keep the dividers-only doctrine.
+- **Routines = task-report list (refactored 2026-05-03 from cards)**: the 
+  prior "routines are the exception" doctrine is RETIRED. Routines now 
+  follow the same dividers-only doctrine as Memory / Skills / History — 
+  single-line rows separated by `DS.Stroke.hairline`, 32pt min-height 
+  (`DS.Layout.routineRowMinHeight`), 6pt vertical padding, no fill at 
+  rest. The list is constrained to `DS.Layout.maxWidthRoutines` (720pt) 
+  centered on `panelSize == .large`, full-width on `.standard`. Anatomy 
+  per row: small white type icon (`eye.fill` / `calendar` / `bell.fill` 
+  at 11pt `DS.Surface.primary`) · title (`DS.Text.bodySmall`) · spacer · 
+  schedule (`DS.Text.caption`) · always-visible clickable `StatusPill` 
+  (the toggle — replaces the old leading `StatusDotButton`). Hover state 
+  is a Liquid Glass moment: `nnGlass(in: rounded8)` on macOS 26+, accent 
+  wash fallback elsewhere. Run count + last/next run + error detail live 
+  in the native `.help()` tooltip via `tooltipText(for:)`. Bottom row is 
+  a discreet `addRoutineRow` (+ icon + "New routine") that wraps the 
+  same Menu as the header `+ New` (From a template / Blank routine) — 
+  no more dashed `addCard` cell.
 - **Section headers**: uppercase monospaced, 9pt bold, 
   `.white.opacity(0.28)`, tracking 1.5. Never accent-tinted.
 - **Tab intros for non-technical users**: one-line French italic at 
@@ -539,8 +536,9 @@ header anymore). The standalone Routines panel title was removed in
 radio-style toggle for any on/off action. Always-visible gray ring 
 (18pt), inner dot (7pt) blue when `.on`, yellow when `.error`, 
 transparent when `.off`. Hit area 24pt. Replaces every SwiftUI `Toggle` 
-in routine cards (the dot IS the pause/resume) and Settings (Stream 
-responses, Launch at login). Two inits: `init(isOn: Bool, ...)` for 
+in Settings (Stream responses, Launch at login). Previously also used 
+in routine cards but was removed 2026-05-03 when routines pivoted to 
+task-report rows — the clickable `StatusPill` now carries the toggle. Two inits: `init(isOn: Bool, ...)` for 
 binary call sites, `init(state: DotState, ...)` for routines that 
 surface error state. Uses Button internally so SwiftUI's button-in-button 
 gesture routing works — required because the routine card itself is 
@@ -632,6 +630,7 @@ Catalog organized as nested enums under `DS`:
 - `DS.Spacing.*` — paddings & gaps (`sm` 8, `row` 10, `section` 16)
 - `DS.Hairline.*` — line widths (`standard` 0.5)
 - `DS.Motion.*` — animations (`standard` 0.2s easeInOut)
+- `DS.Layout.*` — layout constraints (`maxWidthRoutines` 720, `routineRowMinHeight` 32, `routineRowPadH` 14)
 
 **Hard rule for any new or modified UI**: use `DS.*` tokens. Do NOT hardcode
 `.system(size: N)`, `.white.opacity(x)`, `cornerRadius: N`, or ad-hoc paddings

@@ -156,4 +156,19 @@ enum DS {
         /// 0.2s easeInOut — toggle disclosure (thinking, tool calls).
         static let standard = Animation.easeInOut(duration: 0.2)
     }
+
+    // MARK: - Layout
+    /// Contraintes de layout (largeurs max, hauteurs minimales).
+    enum Layout {
+        /// 720pt — largeur max de la liste de routines sur panel large (centrée).
+        /// Sur panel standard (680pt) on reste full-width.
+        static let maxWidthRoutines = CGFloat(720)
+        /// 32pt — hauteur minimale d'une ligne de routine en mode task-report.
+        /// Densité Reminders.app / Things 3 (≈32pt). On sacrifie la cible HIG
+        /// 44pt parce que le toggle (StatusPill) a sa propre hit-area et que
+        /// le row entier est tappable pour l'édition — la densité prime.
+        static let routineRowMinHeight = CGFloat(32)
+        /// 14pt — padding horizontal d'une ligne de routine.
+        static let routineRowPadH = CGFloat(14)
+    }
 }

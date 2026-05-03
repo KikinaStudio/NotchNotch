@@ -18,7 +18,6 @@ struct RoutinesView: View {
     @State private var scheduleEditable: Bool = true
     @State private var rawCronFallback: String = ""
     @State private var hoveredJobId: String?
-    @State private var hoveredAddCard = false
 
     @State private var formName: String = ""
     @State private var formPrompt: String = ""
@@ -51,12 +50,6 @@ struct RoutinesView: View {
         Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? Date()
     }
 
-    private var gridColumns: [GridItem] {
-        // .large panel (900pt wide) → 3 columns, .standard (680pt) → 2 columns
-        let count = panelSize == .large ? 3 : 2
-        return Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: count)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !showingCustomForm {
@@ -65,23 +58,24 @@ struct RoutinesView: View {
                         .font(DS.Text.caption)
                         .foregroundStyle(AppColors.accent)
                     Spacer()
-                    if !cronStore.sortedJobs.isEmpty && !showingBrowser {
+                    if showingBrowser {
                         Button {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                resetForm()
-                                showingCustomForm = true
+                                showingBrowser = false
                             }
                         } label: {
                             HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                    .font(.footnote.weight(.semibold))
-                                Text("New")
+                                Image(systemName: "chevron.left")
+                                    .font(.caption2.weight(.bold))
+                                Text("Back")
                                     .font(.callout.weight(.medium))
                             }
-                            .foregroundStyle(AppColors.accent)
+                            .foregroundStyle(DS.Surface.secondary)
                         }
                         .buttonStyle(.plain)
                         .pointingHandCursor()
+                    } else if !cronStore.sortedJobs.isEmpty {
+                        newRoutineMenu(label: newButtonLabel, tint: AppColors.accent)
                     }
                 }
             }
@@ -97,124 +91,69 @@ struct RoutinesView: View {
                 )
             } else {
                 FadingScrollView {
-                    VStack(spacing: 14) {
-                        LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 8) {
-                            ForEach(cronStore.sortedJobs) { job in
-                                jobCard(job)
+                    LazyVStack(spacing: 0) {
+                        let jobs = cronStore.sortedJobs
+                        ForEach(Array(jobs.enumerated()), id: \.element.id) { index, job in
+                            routineRow(job)
+                            if index < jobs.count - 1 {
+                                rowDivider
                             }
-                            addCard
                         }
-
-                        Button {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                                showingBrowser = true
-                            }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "plus.circle")
-                                Text("Browse templates")
-                            }
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(AppColors.accent.opacity(0.8))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .strokeBorder(AppColors.accent.opacity(0.3), lineWidth: 0.5)
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .pointingHandCursor()
+                        rowDivider
+                        addRoutineRow
                     }
+                    .frame(maxWidth: panelSize == .large ? DS.Layout.maxWidthRoutines : .infinity)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
         }
-        .padding(.top, 8)
         .padding(.bottom, 18)
     }
 
-    private func jobCard(_ job: CronJob) -> some View {
+    /// Single-line task-report row. Dense info, hairline-separated, glass-on-hover.
+    /// Replaces the old `jobCard` grid layout. See CLAUDE.md "Task report rows" doctrine.
+    private func routineRow(_ job: CronJob) -> some View {
         let hasName = !job.name.isEmpty
         let title = hasName ? job.name : String(job.prompt.prefix(40))
         let isPaused = job.state == "paused"
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-
         let isActive = job.enabled && job.state != "paused"
-        let hasError = (job.last_status != nil) && (job.last_status != "ok")
-        let dotState: StatusDotButton.DotState = {
-            if !isActive { return .off }
-            if hasError { return .error }
-            return .on
-        }()
-
-        let routineType = job.routineType
 
         return Button {
             enterEditMode(job)
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                // Row 1: type glyph (silent / digest / alert) + title
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: Self.iconName(for: routineType))
-                        .font(DS.Icon.routineType)
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(AppColors.accent)
-                        .accessibilityLabel(Self.accessibilityLabel(for: routineType))
+            HStack(spacing: 10) {
+                Image(systemName: Self.iconName(for: job.routineType))
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(DS.Surface.primary)
+                    .frame(width: 14, alignment: .center)
+                    .accessibilityLabel(Self.accessibilityLabel(for: job.routineType))
 
-                    Text(title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                Text(title)
+                    .font(DS.Text.bodySmall)
+                    .foregroundStyle(DS.Surface.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                    Spacer(minLength: 0)
+                Spacer(minLength: 12)
+
+                Text(humanSchedule(job.schedule_display))
+                    .font(DS.Text.caption)
+                    .foregroundStyle(DS.Surface.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                StatusPill(status: job.routineStatus) {
+                    onSetPaused?(job, isActive)
                 }
-
-                // Row 2: description (only when title is distinct from prompt)
-                if hasName {
-                    Text(job.prompt)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                // Push the footer to the bottom so cards sharing a LazyVGrid
-                // row keep their pill+schedule+dot at the same vertical line
-                // regardless of description length (1 vs 2 wrapped lines).
-                Spacer(minLength: 0)
-
-                // Row 3: failure pill + contextual info line + on/off dot
-                HStack(spacing: 8) {
-                    StatusPill(status: job.routineStatus)
-
-                    Text(footerText(for: job))
-                        .font(DS.Text.caption)
-                        .foregroundStyle(DS.Surface.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    StatusDotButton(state: dotState) {
-                        onSetPaused?(job, isActive)
-                    }
-                    .accessibilityLabel(isActive ? "Pause \(title)" : "Resume \(title)")
-                }
-                .padding(.top, 5)
+                .accessibilityLabel(isActive ? "Pause \(title)" : "Resume \(title)")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: 120, maxHeight: .infinity, alignment: .topLeading)
-            .background(cardShape.fill(.quaternary.opacity(0.6)))
-            .overlay(
-                cardShape
-                    .fill(hoveredJobId == job.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
-                    .allowsHitTesting(false)
-            )
+            .padding(.horizontal, DS.Layout.routineRowPadH)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: DS.Layout.routineRowMinHeight, alignment: .center)
+            .background(rowHoverBackground(jobId: job.id))
             .contentShape(Rectangle())
             .opacity(isPaused ? 0.5 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: hoveredJobId == job.id)
+            .animation(DS.Motion.standard, value: hoveredJobId == job.id)
         }
         .buttonStyle(.plain)
         .help(tooltipText(for: job))
@@ -246,6 +185,96 @@ struct RoutinesView: View {
         }
     }
 
+    // MARK: - List affordances (divider, add row, dropdown)
+
+    private var rowDivider: some View {
+        Rectangle()
+            .fill(DS.Stroke.hairline)
+            .frame(height: DS.Hairline.standard)
+            .padding(.horizontal, DS.Layout.routineRowPadH)
+    }
+
+    /// Discreet trailing row that mirrors the routine row anatomy. Acts as an
+    /// always-visible entry to create a new routine without forcing the user
+    /// up to the header dropdown.
+    private var addRoutineRow: some View {
+        newRoutineMenu(
+            label: HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(DS.Surface.secondary)
+                    .frame(width: 14, alignment: .center)
+                Text("New routine")
+                    .font(DS.Text.bodySmall)
+                    .foregroundStyle(DS.Surface.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, DS.Layout.routineRowPadH)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, minHeight: DS.Layout.routineRowMinHeight, alignment: .center)
+            .contentShape(Rectangle()),
+            tint: DS.Surface.secondary
+        )
+    }
+
+    /// Header `+ New` button label, kept consistent with the bottom add row.
+    private var newButtonLabel: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "plus")
+                .font(.footnote.weight(.semibold))
+            Text("New")
+                .font(.callout.weight(.medium))
+        }
+        .foregroundStyle(AppColors.accent)
+    }
+
+    /// Native macOS popup menu — "From a template" / "Blank routine".
+    /// Used by both the header `+ New` button and the bottom `+ New routine`
+    /// row so the affordance is identical wherever the user reaches for it.
+    private func newRoutineMenu<L: View, S: ShapeStyle>(label: L, tint: S) -> some View {
+        Menu {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    showingBrowser = true
+                }
+            } label: {
+                Label("From a template", systemImage: "rectangle.stack")
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    resetForm()
+                    showingCustomForm = true
+                }
+            } label: {
+                Label("Blank routine", systemImage: "square.dashed")
+            }
+        } label: {
+            label
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .foregroundStyle(tint)
+    }
+
+    /// Row hover background. macOS 26+ → Liquid Glass moment (lift effect).
+    /// macOS 14/15/25 → subtle accent wash. Rest state = no fill (true list).
+    @ViewBuilder
+    private func rowHoverBackground(jobId: String) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        if hoveredJobId == jobId {
+            if #available(macOS 26.0, *) {
+                Color.clear.nnGlass(in: shape)
+            } else {
+                shape.fill(AppColors.accent.opacity(0.06))
+            }
+        } else {
+            Color.clear
+        }
+    }
+
     // MARK: - Routine type styling
 
     private static func iconName(for type: RoutineType) -> String {
@@ -262,12 +291,6 @@ struct RoutinesView: View {
         case .digest: return "Digest routine"
         case .alert:  return "Alert routine — notifies in the notch"
         }
-    }
-
-    // MARK: - Footer text
-
-    private func footerText(for job: CronJob) -> String {
-        humanSchedule(job.schedule_display)
     }
 
     /// Multi-line content for the native `.help()` tooltip on the pill.
@@ -371,48 +394,6 @@ struct RoutinesView: View {
 
         return raw
     }
-
-    // MARK: - Add card (last grid cell)
-
-    private var addCard: some View {
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
-        return Button {
-            resetForm()
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                showingCustomForm = true
-            }
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: "plus")
-                    .font(DS.Icon.large.weight(.semibold))
-                    .foregroundStyle(AppColors.accent)
-                Text("Create routine")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(AppColors.accent.opacity(0.85))
-            }
-            .frame(maxWidth: .infinity, minHeight: addCardHeight, alignment: .center)
-            .background(cardShape.fill(.quaternary.opacity(0.35)))
-            .overlay(
-                cardShape.strokeBorder(
-                    AppColors.accent.opacity(hoveredAddCard ? 0.75 : 0.5),
-                    style: StrokeStyle(lineWidth: 1, dash: [4, 3])
-                )
-            )
-            .overlay(
-                cardShape
-                    .fill(hoveredAddCard ? AppColors.accent.opacity(0.06) : .clear)
-                    .allowsHitTesting(false)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { hoveredAddCard = $0 }
-        .pointingHandCursor()
-        .animation(.easeInOut(duration: 0.15), value: hoveredAddCard)
-    }
-
-    // Matches the approximate height of a populated jobCard so the grid stays aligned.
-    private var addCardHeight: CGFloat { 120 }
 
     // MARK: - Custom form
 
@@ -935,16 +916,32 @@ struct RoutinesView: View {
 
 // MARK: - StatusPill
 
-/// Compact failure chip shown bottom-leading on a routine card when its
-/// last run reported a non-ok status. Renders nothing for `.nominal` /
-/// `.paused` (paused is already conveyed by the toggle dot + 50% card opacity).
+/// Compact status chip rendered trailing on each routine row. Always visible
+/// with label `active` / `failed` / `paused`. The dot color carries the state
+/// (accent blue / coral red / muted gray). When `action` is provided, the pill
+/// becomes a Button — that's the toggle (replaces the old StatusDotButton in
+/// the row leading position). Inner Button + parent Button works because
+/// SwiftUI routes taps to the innermost Button.
 struct StatusPill: View {
     let status: RoutineStatus
+    var action: (() -> Void)? = nil
 
     var body: some View {
+        if let action {
+            Button(action: action) {
+                content
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
         HStack(spacing: 4) {
             Circle()
-                .fill(.white)
+                .fill(dotColor)
                 .frame(width: 5, height: 5)
             Text(label)
                 .font(DS.Text.microMedium)
@@ -960,6 +957,14 @@ struct StatusPill: View {
         case .nominal: return "active"
         case .failed:  return "failed"
         case .paused:  return "paused"
+        }
+    }
+
+    private var dotColor: Color {
+        switch status {
+        case .nominal: return AppColors.accent
+        case .failed:  return Color(red: 0.95, green: 0.55, blue: 0.55)
+        case .paused:  return Color.white.opacity(0.4)
         }
     }
 }
