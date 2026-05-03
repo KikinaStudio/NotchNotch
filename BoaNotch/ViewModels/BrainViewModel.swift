@@ -38,6 +38,17 @@ struct WikiArticle: Identifiable {
     let path: String
 }
 
+/// One row from `~/.hermes/skills/.hub/lock.json` — provenance metadata for
+/// a skill that was installed via the Skills Hub catalogue. Drives the
+/// "Installées" pseudo-category and the `OFFICIEL` / `COMMUNAUTÉ` badges
+/// in the Tools tab.
+struct HubInstalledMeta: Equatable {
+    let name: String
+    let source: String       // "official" | "skills-sh" | "skills.sh" | ...
+    let identifier: String   // e.g. "official/security/1password"
+    let trustLevel: String   // "builtin" | "trusted" | "community"
+}
+
 class BrainViewModel: ObservableObject {
     static let fallbackMemoryCategory = "Généralités"
 
@@ -53,6 +64,11 @@ class BrainViewModel: ObservableObject {
     @Published var isIngesting: Bool = false
     @Published var hasLoaded = false
     @Published var activeTab: BrainTab = .brain
+
+    /// Hub-installed skills keyed by skill name. Populated by `loadHubInstalled()`
+    /// from `~/.hermes/skills/.hub/lock.json`. Empty when the user has never
+    /// installed via the catalogue (lock.json absent or `installed == {}`).
+    @Published var hubInstalled: [String: HubInstalledMeta] = [:]
 
     /// Aggregate cost (USD) over the last 30 days from `state.db.sessions`,
     /// using `actual_cost_usd` then falling back to `estimated_cost_usd` per row.
@@ -101,8 +117,37 @@ class BrainViewModel: ObservableObject {
     func reload() {
         loadMemory()
         loadSkills()
+        loadHubInstalled()
         loadWiki()
         refreshLightMetrics()
+    }
+
+    /// Reads `~/.hermes/skills/.hub/lock.json`. Schema:
+    /// `{version: 1, installed: {<name>: {source, trust_level, identifier,
+    /// install_path, scan_verdict, ...}}}`. Absent or malformed file → empty
+    /// dict (no error surfaced — first-run users have no lock.json yet).
+    func loadHubInstalled() {
+        let path = (hermesHome as NSString).appendingPathComponent("skills/.hub/lock.json")
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let installed = json["installed"] as? [String: [String: Any]]
+        else {
+            hubInstalled = [:]
+            return
+        }
+        var result: [String: HubInstalledMeta] = [:]
+        for (name, meta) in installed {
+            let source = (meta["source"] as? String) ?? ""
+            let identifier = (meta["identifier"] as? String) ?? ""
+            let trustLevel = (meta["trust_level"] as? String) ?? ""
+            result[name] = HubInstalledMeta(
+                name: name,
+                source: source,
+                identifier: identifier,
+                trustLevel: trustLevel
+            )
+        }
+        hubInstalled = result
     }
 
     func refreshLightMetrics() {

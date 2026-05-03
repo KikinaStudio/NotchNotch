@@ -229,6 +229,11 @@ struct NotchView: View {
                     }
                     .onChange(of: notchVM.isBrainOpen) { _, isOpen in
                         if isOpen { brainVM.loadIfNeeded() }
+                        // Catalogue overlay flag lives on NotchViewModel so
+                        // BrainView's `@StateObject` can be torn down cleanly.
+                        // When Brain closes (X / tab toggle), reset the flag so
+                        // re-opening Brain doesn't pop the overlay back up.
+                        if !isOpen { notchVM.isSkillsHubOpen = false }
                     }
                     .transition(.opacity.animation(.easeIn(duration: 0.12).delay(0.08)))
                 }

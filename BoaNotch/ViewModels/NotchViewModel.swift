@@ -70,6 +70,12 @@ class NotchViewModel: ObservableObject {
 
     @Published var isHistoryOpen = false
     @Published var isBrainOpen = false
+    /// Skills catalogue overlay above BrainView. Intentionally NOT included
+    /// in `closeAllPanels()` — closing Brain via the right-burger X cascades
+    /// down through BrainView's own `.onChange` reset, so this flag dies
+    /// with the panel without coupling NotchViewModel to the overlay's
+    /// existence. See CLAUDE.md "Documented exception — Skills Hub".
+    @Published var isSkillsHubOpen = false
 
     var isAnyPanelOpen: Bool {
         isSettingsOpen || isSearchOpen || isHistoryOpen || isBrainOpen

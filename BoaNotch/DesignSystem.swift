@@ -26,6 +26,10 @@ enum DS {
         /// 14pt regular. Texte de lecture chat principal.
         /// Note: pour MessageBubble, voir `messageBodySize` (scalé par textSize.medium=12 / large=15).
         static let body          = Font.system(size: 14)
+        /// 14pt medium. Titre de ligne d'App / titre de capacité dans la liste
+        /// Tools (App row Section 1, CapabilityCard Section 2 + catalogue).
+        /// Plus affirmé que `body` sans monter à `title`/`titleSmall`.
+        static let bodyMedium    = Font.system(size: 14, weight: .medium)
         /// 13pt regular. Blockquotes, file card titles, streaming cursor.
         static let bodySmall     = Font.system(size: 13)
         /// 12pt regular. CTA labels, code blocks inline.

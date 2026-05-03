@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum BrainTab: String, CaseIterable {
     case brain = "Memory"
@@ -25,21 +26,24 @@ struct BrainView: View {
     /// don't need to pass cronStore/CronJob types into BrainView).
     var tasksContent: () -> AnyView = { AnyView(EmptyView()) }
     @StateObject private var googleConnection = GoogleConnectionState()
+    /// Owns the catalogue overlay state (lazy fetch + screen drill-down).
+    /// Recreated each time BrainView mounts (i.e. each time the user opens
+    /// the Brain panel from a closed state) — fits the "fermer Brain ferme
+    /// aussi le catalogue" cascade described in CLAUDE.md.
+    @StateObject private var skillsHub = SkillsHubViewModel()
     @State private var selectedSkill: SkillInfo?
     @State private var selectedCuratedSkill: CuratedSkill?
     @State private var selectedMemoryBlock: MemoryBlock?
     @State private var hoveredMemoryId: String?
-    @State private var hoveredSkillId: String?
     @State private var hoveredCuratedId: String?
+    @State private var capabilitiesSearchQuery: String = ""
+    @State private var browseButtonHovered: Bool = false
     @State private var syncPulseScale: CGFloat = 1.0
 
-    /// Shared namespace for the brand-icon morph between Zone 1 (Actifs) and
-    /// Zone 2 (À connecter) when a curated skill flips state.
-    @Namespace private var toolsTransitionNS
-
-    /// Categories of `brainVM.technicalSkills` whose row list is collapsed.
-    /// First category is expanded by default (initialized lazily on first
-    /// non-empty load via `initializeZone3CollapseIfNeeded()`).
+    /// Categories of `technicalSkillCategories` whose row list is collapsed.
+    /// "Installées" (synthetic group) is expanded by default on first load;
+    /// other categories collapsed. Initialized lazily by
+    /// `initializeZone3CollapseIfNeeded()`.
     @State private var collapsedTechnicalCategories: Set<String> = []
     @State private var didInitializeZone3Collapse = false
 
@@ -51,9 +55,10 @@ struct BrainView: View {
             ZStack {
                 contentForTab
                     .opacity((selectedSkill == nil && selectedMemoryBlock == nil && selectedCuratedSkill == nil) ? 1 : 0)
+                    .allowsHitTesting(!notchVM.isSkillsHubOpen)
 
                 if let skill = selectedSkill {
-                    detailView(title: skill.name, content: skill.content) {
+                    skillDetailView(skill: skill) {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                             selectedSkill = nil
                         }
@@ -96,9 +101,36 @@ struct BrainView: View {
                 }
             }
         }
+        .overlay {
+            // Catalogue de capacités (cf CLAUDE.md "Documented exception —
+            // Skills Hub"). Couvre toute la surface BrainView. Indépendant
+            // des autres panneaux : son flag `isSkillsHubOpen` n'est pas
+            // dans `closeAllPanels`. Fermer Brain depuis le X global ferme
+            // ce panel par cascade naturelle (le @StateObject est détruit
+            // avec BrainView, et NotchView reset le flag dans son onChange).
+            if notchVM.isSkillsHubOpen {
+                SkillsHubView(hub: skillsHub) {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        notchVM.isSkillsHubOpen = false
+                    }
+                }
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing),
+                    removal: .opacity
+                ))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: notchVM.isSkillsHubOpen)
         .onAppear {
             brainVM.refreshLightMetrics()
             googleConnection.refresh()
+            // Wire the catalogue overlay's "already installed" filter and
+            // its post-install refresh hook. Re-armed on every BrainView
+            // mount because the StateObject is recreated each time.
+            skillsHub.installedNames = Set(brainVM.skills.map { $0.name.lowercased() })
+            skillsHub.onInstalled = { [weak brainVM] in
+                brainVM?.reload()
+            }
         }
         .onReceive(lightMetricsTimer) { _ in
             brainVM.refreshLightMetrics()
@@ -110,6 +142,9 @@ struct BrainView: View {
                     selectedMemoryBlock = nil
                 }
             }
+        }
+        .onChange(of: brainVM.skills.count) { _, _ in
+            skillsHub.installedNames = Set(brainVM.skills.map { $0.name.lowercased() })
         }
     }
 
@@ -389,58 +424,19 @@ struct BrainView: View {
         Divider().padding(.leading, 14)
     }
 
-    // MARK: - Tools tab (état-driven: Actifs · À connecter · Installées)
-
-    /// Curated skills currently `.connected`. Drives Zone 1 (compact tiles).
-    private var connectedCuratedSkills: [CuratedSkill] {
-        CuratedSkillCatalog.all.filter {
-            if case .connected = brainVM.curatedSkillStates[$0.id] { return true }
-            return false
-        }
-    }
-
-    /// Curated skills not yet connected (or with an unresolved state — treated
-    /// as available so the user can see the connect path). Drives Zone 2.
-    private var availableCuratedSkills: [CuratedSkill] {
-        CuratedSkillCatalog.all.filter {
-            if case .connected = brainVM.curatedSkillStates[$0.id] { return false }
-            return true
-        }
-    }
+    // MARK: - Tools tab (2 sections : Apps + Capacités)
 
     private var toolsTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             tabIntro("Ce que ton agent peut faire pour toi.")
 
             FadingScrollView {
-                // Liquid Glass language inside an opaque panel: surfaces are
-                // continuous, separated by space rather than dividers. Each
-                // zone has its own internal rhythm; the 24pt gap below each
-                // zone (top-padding on the next) carries the boundary.
                 VStack(alignment: .leading, spacing: 0) {
-                    if !connectedCuratedSkills.isEmpty {
-                        zoneActifs
-                    }
-
-                    if !availableCuratedSkills.isEmpty {
-                        zoneAConnecter
-                            .padding(.top, connectedCuratedSkills.isEmpty ? 0 : 24)
-                    }
-
-                    if !brainVM.technicalSkills.isEmpty {
-                        zoneInstallees
-                            .padding(.top,
-                                     (connectedCuratedSkills.isEmpty
-                                      && availableCuratedSkills.isEmpty) ? 0 : 24)
-                    }
+                    appsSection
+                    capabilitiesSection
+                        .padding(.top, 24)
                 }
                 .padding(.bottom, 8)
-                // Drives the brand-icon morph between Zone 1 and Zone 2 when
-                // a curated skill flips state. The matchedGeometryEffect on
-                // the BrandIconView nodes does the heavy lifting; this just
-                // ensures SwiftUI animates the diff.
-                .animation(.spring(response: 0.4, dampingFraction: 0.85),
-                           value: brainVM.curatedSkillStates)
             }
         }
         .onAppear {
@@ -449,24 +445,36 @@ struct BrainView: View {
         .onChange(of: brainVM.technicalSkills.count) { _, _ in
             initializeZone3CollapseIfNeeded()
         }
+        .onChange(of: brainVM.hubInstalled.count) { old, new in
+            // After a fresh install, ensure "Installées" is expanded so the
+            // newly-added capacity is visible (even if the user had collapsed
+            // it manually).
+            if new > old {
+                collapsedTechnicalCategories.remove(SkillCategoryGroup.installedViaHubID)
+            }
+        }
     }
 
-    /// On first non-empty load, collapse every category except the first.
-    /// 85+ skills fully expanded is overwhelming; one expanded category
-    /// teaches the pattern (chevron + tap to expand) without a wall of text.
+    /// On first non-empty load, expand "Installées" if it exists, else expand
+    /// the first category. Subsequent calls only prune stale ids without
+    /// auto-expanding new ones (the user's collapse choices win).
     private func initializeZone3CollapseIfNeeded() {
-        guard !didInitializeZone3Collapse else { return }
         let categories = technicalSkillCategories
         guard !categories.isEmpty else { return }
-        let allNames = Set(categories.map(\.name))
-        let firstName = categories.first?.name
-        collapsedTechnicalCategories = allNames.subtracting([firstName].compactMap { $0 })
-        didInitializeZone3Collapse = true
+        let allIds = Set(categories.map(\.id))
+        if !didInitializeZone3Collapse {
+            let installedID = SkillCategoryGroup.installedViaHubID
+            let expandedId = allIds.contains(installedID) ? installedID : categories.first?.id
+            collapsedTechnicalCategories = allIds.subtracting([expandedId].compactMap { $0 })
+            didInitializeZone3Collapse = true
+        } else {
+            collapsedTechnicalCategories = collapsedTechnicalCategories.intersection(allIds)
+        }
     }
 
-    /// Header shared by all three zones. Distinct from category sub-headers
-    /// in Zone 3 (which use `DS.Text.sectionHead` mono-bold) — this one is
-    /// heavier (`.callout`) to mark the top-level state grouping.
+    /// Section header shared by Section 1 (Apps) and Section 2 (Capacités).
+    /// Distinct from category sub-headers inside Section 2 which use the
+    /// uppercase mono `DS.Text.sectionHead`.
     private func zoneHeader(icon: String, label: String, count: Int) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -482,185 +490,237 @@ struct BrainView: View {
         }
     }
 
-    // MARK: Zone 1 — Actifs (curated, connected)
+    // MARK: Section 1 — Apps (curated capabilities, 3-column card grid)
 
-    private var zoneActifs: some View {
+    private var appsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            zoneHeader(icon: "checkmark.circle.fill",
-                       label: "Actifs",
-                       count: connectedCuratedSkills.count)
+            zoneHeader(icon: "app.badge",
+                       label: "Apps",
+                       count: CuratedSkillCatalog.all.count)
 
-            // Adaptive flow: ~4 chips per row on standard panel, more on large.
-            // Each chip hugs its content via fixedSize but the grid clamps to
-            // a reasonable max so a long name doesn't dominate.
+            // 3-column fixed grid : avec 6 Apps curées on a 2 lignes pile.
+            // `.flexible()` partage la largeur dispo en parts égales — le
+            // panel `.standard` donne ~180pt par card, `.large` ~250pt.
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 130, maximum: 200),
-                                   spacing: 8,
-                                   alignment: .leading)],
-                alignment: .leading,
-                spacing: 8
-            ) {
-                ForEach(connectedCuratedSkills) { skill in
-                    connectedChip(skill)
-                }
-            }
-        }
-    }
-
-    /// Compact capsule chip — concentric with Zone 2 cards (both rounded
-    /// continuous shapes) but slimmer to read as "inventory" rather than
-    /// "primary action surface". Hovers add a hairline overlay matching the
-    /// Liquid Glass micro-reaction language.
-    private func connectedChip(_ skill: CuratedSkill) -> some View {
-        let shape = Capsule(style: .continuous)
-        return Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedCuratedSkill = skill
-            }
-        } label: {
-            HStack(spacing: 8) {
-                BrandIconView(kind: skill.icon, size: 18)
-                    .matchedGeometryEffect(id: skill.id, in: toolsTransitionNS)
-                Text(skill.displayName)
-                    .font(DS.Text.caption)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 4)
-                // Inline status dot — same visual as `stateIndicator(.connected)`
-                // but sized for the chip footprint.
-                Circle()
-                    .fill(Color.green.opacity(0.85))
-                    .frame(width: 6, height: 6)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(shape.fill(.quaternary.opacity(0.4)))
-            .overlay(
-                shape
-                    .fill(hoveredCuratedId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
-                    .allowsHitTesting(false)
-            )
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-        .onHover { over in hoveredCuratedId = over ? skill.id : nil }
-        .animation(.easeInOut(duration: 0.15), value: hoveredCuratedId == skill.id)
-    }
-
-    // MARK: Zone 2 — À connecter (curated, available)
-
-    private var zoneAConnecter: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            zoneHeader(icon: "link.badge.plus",
-                       label: "À connecter",
-                       count: availableCuratedSkills.count)
-
-            // Adaptive: 2 cards on standard panel, 3 on large — uses the
-            // extra horizontal space rather than just stretching 2 cards
-            // wider.
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 240, maximum: 360),
-                                   spacing: 10,
-                                   alignment: .top)],
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
                 alignment: .leading,
                 spacing: 10
             ) {
-                ForEach(availableCuratedSkills) { skill in
-                    availableSkillCard(skill)
+                ForEach(CuratedSkillCatalog.all) { skill in
+                    appCard(skill)
                 }
             }
         }
     }
 
-    private func availableSkillCard(_ skill: CuratedSkill) -> some View {
-        let shape = RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
+    /// Card 3-par-ligne pour une App curée. Layout 2 lignes : icône + badge
+    /// "Officiel" en haut, nom en bas. **L'état connecté/non-connecté est
+    /// porté par la card elle-même** (Liquid Glass : couches translucides +
+    /// hairline neutre), pas par un label texte explicite. L'accent
+    /// (`AppColors.accent`) est réservé au hover — au repos, le contraste se
+    /// joue sur la matière (fill + hairline neutre).
+    ///
+    ///   • Connectée : fill `.quaternary.opacity(0.50)`, hairline blanche
+    ///     `0.10` 1pt — la card a du poids, l'icône brand color signe le lien.
+    ///   • Non-connectée : fill `.quaternary.opacity(0.20)` (ghostée), hairline
+    ///     blanche `0.04` (presque invisible) — la card s'efface.
+    ///   • Hover : stroke accent (plus vibrant sur connectée, plus doux sur
+    ///     non-connectée qui invite à la connexion).
+    ///
+    /// L'icône reste désaturée à `.primary.opacity(0.35)` quand `.available`,
+    /// le nom passe `.primary` → `.secondary` — ces 2 signaux de typographie
+    /// s'ajoutent au traitement de la card.
+    private func appCard(_ skill: CuratedSkill) -> some View {
+        let state = brainVM.curatedSkillStates[skill.id] ?? .available
+        let isConnected: Bool = {
+            if case .connected = state { return true }
+            return false
+        }()
+        let isHovered = hoveredCuratedId == skill.id
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        let fillOpacity: Double = isConnected ? 0.50 : 0.20
+        let strokeColor: Color = {
+            if isHovered {
+                return AppColors.accent.opacity(isConnected ? 0.55 : 0.35)
+            }
+            // Neutral hairline at rest — accent reserved for hover.
+            return isConnected
+                ? Color.white.opacity(0.10)
+                : Color.white.opacity(0.04)
+        }()
+
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 selectedCuratedSkill = skill
             }
         } label: {
-            VStack(alignment: .leading, spacing: 6) {
-                BrandIconView(kind: skill.icon, size: 24)
-                    .matchedGeometryEffect(id: skill.id, in: toolsTransitionNS)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 0) {
+                    BrandIconView(kind: skill.icon, size: 28, desaturated: !isConnected)
+                    Spacer(minLength: 4)
+                    appOfficialBadge
+                }
 
                 Text(skill.displayName)
-                    .font(DS.Text.bodySmall.weight(.semibold))
-                    .foregroundStyle(.primary)
+                    .font(DS.Text.bodyMedium)
+                    .foregroundStyle(isConnected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                     .lineLimit(1)
                     .truncationMode(.tail)
-
-                Text(skill.descriptionFR)
-                    .font(DS.Text.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2, reservesSpace: true)
-                    .truncationMode(.tail)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer(minLength: 4)
-
-                HStack(spacing: 4) {
-                    Text("Connecter")
-                        .font(DS.Text.captionMedium)
-                    Image(systemName: "chevron.right")
-                        .font(DS.Icon.glyph)
-                }
-                .foregroundStyle(AppColors.accent)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(shape.fill(.quaternary.opacity(0.6)))
-            .overlay(
-                shape
-                    .fill(hoveredCuratedId == skill.id ? AnyShapeStyle(DS.Stroke.hairline) : AnyShapeStyle(Color.clear))
-                    .allowsHitTesting(false)
-            )
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(shape)
+            .background(shape.fill(.quaternary.opacity(fillOpacity)))
+            .overlay(shape.stroke(strokeColor, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .pointingHandCursor()
-        .frame(height: 130)
         .onHover { over in hoveredCuratedId = over ? skill.id : nil }
-        .animation(.easeInOut(duration: 0.15), value: hoveredCuratedId == skill.id)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: isConnected)
     }
 
-    // MARK: Zone 3 — Installées (technical Hermes skills, grouped by category)
+    /// Tinted-fill tag style (inspired by the user-supplied "Medium" pill
+    /// reference — text in accent blue, background in a lighter opacity of
+    /// the same accent, no stroke). Smaller and more discreet than the
+    /// previous outlined variant. Same shape used by `CapabilityCard.badgeView`
+    /// for consistency.
+    private var appOfficialBadge: some View {
+        Text("Officiel")
+            .font(.system(size: 8, weight: .medium))
+            .foregroundStyle(AppColors.accent)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(AppColors.accent.opacity(0.18)))
+    }
 
-    private var zoneInstallees: some View {
+    // MARK: Section 2 — Capacités (technical skills, card-style, grouped)
+
+    private var capabilitiesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            zoneHeader(icon: "wrench.adjustable",
-                       label: "Installées",
-                       count: brainVM.technicalSkills.count)
+            capabilitiesHeader
 
             LazyVStack(alignment: .leading, spacing: 4) {
-                ForEach(technicalSkillCategories, id: \.name) { group in
+                ForEach(filteredTechnicalSkillCategories) { group in
                     technicalCategoryBlock(group)
                 }
             }
         }
     }
 
+    /// Header de Section 2 spécifique : titre + count à gauche, search field
+    /// in-line au milieu, bouton "+ Parcourir" en accent à droite. Le
+    /// `zoneHeader(...)` partagé (Section 1) ne convient pas ici parce qu'on
+    /// veut une recherche locale et un CTA de navigation.
+    private var capabilitiesHeader: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "wrench.adjustable")
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.tertiary)
+            Text("Capacités")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.primary)
+            Text("\(brainVM.technicalSkills.count)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+
+            Spacer(minLength: 8)
+
+            capabilitiesSearchField
+                .frame(maxWidth: 220)
+
+            browseButton
+        }
+    }
+
+    private var capabilitiesSearchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+            TextField("Filtrer…", text: $capabilitiesSearchQuery)
+                .textFieldStyle(.plain)
+                .font(DS.Text.caption)
+                .foregroundStyle(.primary)
+            if !capabilitiesSearchQuery.isEmpty {
+                Button {
+                    capabilitiesSearchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.quaternary.opacity(0.4))
+        )
+    }
+
+    /// Bouton accent ouvrant le catalogue overlay. **Unique point d'entrée
+    /// vers le catalogue** — la card d'invitation dashed précédente a été
+    /// retirée le 2026-05-04 au profit d'un CTA inline dans le header de
+    /// section, plus dense et cohérent avec le pattern Routines `[+ New]`.
+    private var browseButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                notchVM.isSkillsHubOpen = true
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                Text("Parcourir")
+                    .font(DS.Text.caption.weight(.semibold))
+            }
+            .foregroundStyle(Color.black.opacity(0.85))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(AppColors.accent.opacity(browseButtonHovered ? 1.0 : 0.85))
+            )
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .help("Parcourir le catalogue de capacités")
+        .onHover { browseButtonHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: browseButtonHovered)
+    }
+
     private func technicalCategoryBlock(_ group: SkillCategoryGroup) -> some View {
-        let isExpanded = !collapsedTechnicalCategories.contains(group.name)
+        // When the user is searching, force every visible category open so
+        // matches aren't hidden behind a closed disclosure. The underlying
+        // `collapsedTechnicalCategories` set is preserved; clearing the
+        // search query restores the user's manual collapse state.
+        let isExpanded = isSearchActive || !collapsedTechnicalCategories.contains(group.id)
+        let header = headerInfo(for: group)
         return VStack(alignment: .leading, spacing: 0) {
-            // Sub-header is itself the toggle — full row tappable, chevron
-            // rotates 90° when expanded.
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                     if isExpanded {
-                        collapsedTechnicalCategories.insert(group.name)
+                        collapsedTechnicalCategories.insert(group.id)
                     } else {
-                        collapsedTechnicalCategories.remove(group.name)
+                        collapsedTechnicalCategories.remove(group.id)
                     }
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: iconForSkillCategory(group.name))
+                    Image(systemName: header.icon)
                         .font(DS.Text.sectionHead)
                         .foregroundStyle(Color.white.opacity(0.28))
-                    Text(labelForSkillCategory(group.name))
+                    Text(header.label)
                         .font(DS.Text.sectionHead)
                         .tracking(1.5)
                         .textCase(.uppercase)
@@ -681,16 +741,23 @@ struct BrainView: View {
             .pointingHandCursor()
 
             if isExpanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(group.skills.enumerated()), id: \.element.id) { index, skill in
-                        if index > 0 {
-                            Rectangle()
-                                .fill(DS.Stroke.hairline)
-                                .frame(height: DS.Hairline.standard)
-                        }
-                        skillRow(skill)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(group.skills) { skill in
+                        CapabilityCard(
+                            icon: SkillIconCatalog.icon(for: skill, fallback: iconForSkillCategory),
+                            title: skill.name,
+                            description: skill.description,
+                            badge: badgeFor(skill),
+                            onTap: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                    selectedSkill = skill
+                                }
+                            }
+                        )
                     }
                 }
+                .padding(.top, 4)
+                .padding(.bottom, 8)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .move(edge: .top)),
                     removal: .opacity
@@ -699,67 +766,27 @@ struct BrainView: View {
         }
     }
 
-    private func skillRow(_ skill: SkillInfo) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                selectedSkill = skill
-            }
-        } label: {
-            HStack(spacing: 10) {
-                // Per-skill SF Symbol from SkillIconCatalog (e.g. apple-notes →
-                // note.text), with category fallback for skills not yet mapped.
-                Image(systemName: SkillIconCatalog.icon(for: skill, fallback: iconForSkillCategory))
-                    .font(DS.Icon.inline)
-                    .foregroundStyle(.tertiary)
-                    .frame(width: 18, alignment: .center)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(skill.name)
-                        .font(DS.Text.caption)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if !skill.description.isEmpty {
-                        Text(skill.description)
-                            .font(DS.Text.nano)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                // Affordance only on hover — keeps the row visually quiet
-                // when not active.
-                Image(systemName: "chevron.right")
-                    .font(DS.Icon.chevron)
-                    .foregroundStyle(.tertiary)
-                    .opacity(hoveredSkillId == skill.id ? 1 : 0)
-            }
-            .padding(.vertical, DS.Spacing.row)
-            .padding(.horizontal, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+    /// Sub-header icon + French label per group. The synthetic
+    /// `installedViaHub` group gets `sparkles` + "Installées" — we picked
+    /// `sparkles` over `square.and.arrow.down.fill` because it reads as
+    /// "fraîchement ajouté par toi" rather than "downloads folder".
+    private func headerInfo(for group: SkillCategoryGroup) -> (icon: String, label: String) {
+        switch group.kind {
+        case .installedViaHub:
+            return ("sparkles", "Installées")
+        case .category(let name):
+            return (iconForSkillCategory(name), labelForSkillCategory(name))
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
-        .onHover { over in hoveredSkillId = over ? skill.id : nil }
-        .animation(.easeInOut(duration: 0.12), value: hoveredSkillId == skill.id)
     }
 
-    @ViewBuilder
-    private func stateIndicator(for state: CuratedSkillState) -> some View {
-        switch state {
-        case .connected:
-            Circle()
-                .fill(Color.green.opacity(0.85))
-                .frame(width: 7, height: 7)
-        case .available:
-            Image(systemName: "chevron.right")
-                .font(DS.Icon.chevron)
-                .foregroundStyle(.tertiary)
+    /// Maps a hub-installed skill to its provenance badge. Skills not present
+    /// in `hubInstalled` (i.e. bundled or local) receive no badge.
+    private func badgeFor(_ skill: SkillInfo) -> CapabilityCard.BadgeKind? {
+        guard let meta = brainVM.hubInstalled[skill.name] else { return nil }
+        if meta.source == "official" || meta.trustLevel == "builtin" {
+            return .officiel
         }
+        return .communaute
     }
 
     // MARK: - Tasks tab (RoutinesView embedded)
@@ -901,16 +928,85 @@ struct BrainView: View {
         }
     }
 
-    private struct SkillCategoryGroup {
-        let name: String
+    private struct SkillCategoryGroup: Identifiable {
+        enum Kind: Equatable {
+            /// Pseudo-category for capacities installed via the catalogue.
+            /// Sourced from `~/.hermes/skills/.hub/lock.json`. Always rendered
+            /// at the top of the list with the "Installées" label.
+            case installedViaHub
+            /// Real on-disk category from `skill.category` (e.g. "productivity",
+            /// "media", etc.).
+            case category(String)
+        }
+
+        static let installedViaHubID = "_hub_installed_"
+
+        let kind: Kind
         let skills: [SkillInfo]
+
+        var id: String {
+            switch kind {
+            case .installedViaHub: return Self.installedViaHubID
+            case .category(let name): return name
+            }
+        }
     }
 
+    /// Returns `technicalSkillCategories` filtered by `capabilitiesSearchQuery`
+    /// (case-insensitive on `name + description`). Empty groups are dropped so
+    /// only categories with matches remain visible. When the query is empty,
+    /// returns the full list unchanged.
+    private var filteredTechnicalSkillCategories: [SkillCategoryGroup] {
+        let q = capabilitiesSearchQuery
+            .lowercased()
+            .trimmingCharacters(in: .whitespaces)
+        let all = technicalSkillCategories
+        guard !q.isEmpty else { return all }
+        return all.compactMap { group in
+            let filtered = group.skills.filter {
+                $0.name.lowercased().contains(q)
+                    || $0.description.lowercased().contains(q)
+            }
+            guard !filtered.isEmpty else { return nil }
+            return SkillCategoryGroup(kind: group.kind, skills: filtered)
+        }
+    }
+
+    private var isSearchActive: Bool {
+        !capabilitiesSearchQuery.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Partitions `brainVM.technicalSkills` into:
+    ///   1. A synthetic `installedViaHub` group (skills present in
+    ///      `~/.hermes/skills/.hub/lock.json`) at the top.
+    ///   2. Remaining skills grouped by their real on-disk category, sorted
+    ///      alphabetically.
+    /// A hub-installed skill is removed from its native category to avoid
+    /// double-listing.
     private var technicalSkillCategories: [SkillCategoryGroup] {
-        let grouped = Dictionary(grouping: brainVM.technicalSkills, by: \.category)
-        return grouped
-            .map { SkillCategoryGroup(name: $0.key, skills: $0.value) }
-            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let hubNames = Set(brainVM.hubInstalled.keys)
+        let installedViaHub = brainVM.technicalSkills.filter { hubNames.contains($0.name) }
+        let rest = brainVM.technicalSkills.filter { !hubNames.contains($0.name) }
+        var result: [SkillCategoryGroup] = []
+        if !installedViaHub.isEmpty {
+            let sortedInstalled = installedViaHub.sorted {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            result.append(SkillCategoryGroup(kind: .installedViaHub, skills: sortedInstalled))
+        }
+        let grouped = Dictionary(grouping: rest, by: \.category)
+        let sorted = grouped
+            .map { SkillCategoryGroup(kind: .category($0.key), skills: $0.value) }
+            .sorted { a, b in
+                switch (a.kind, b.kind) {
+                case (.category(let na), .category(let nb)):
+                    return na.localizedStandardCompare(nb) == .orderedAscending
+                default:
+                    return false
+                }
+            }
+        result.append(contentsOf: sorted)
+        return result
     }
 
     // MARK: - Wiki empty state (used by `wikiSection` inside `brainTab`)
@@ -1026,13 +1122,19 @@ struct BrainView: View {
 
     // MARK: - Skill detail view
 
-    private func detailView(title: String, content: String, onBack: @escaping () -> Void) -> some View {
+    /// Drill-down rendered when a CapabilityCard in Section 2 is tapped. Uses
+    /// `SkillMarkdownView` for block-aware markdown (headings, lists, code
+    /// blocks, quotes) instead of the previous flat `AttributedString` —
+    /// otherwise raw `##` and `**` markers leaked to the user. Footer carries
+    /// a single CTA "Voir dans le Finder" that reveals the skill's `SKILL.md`
+    /// in Finder so power users can inspect the source.
+    private func skillDetailView(skill: SkillInfo, onBack: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onBack) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.caption.weight(.semibold))
-                    Text(title)
+                    Text(skill.name)
                         .font(.footnote.weight(.medium))
                         .lineLimit(1)
                 }
@@ -1043,14 +1145,56 @@ struct BrainView: View {
             .padding(.bottom, 10)
 
             FadingScrollView {
-                let rendered = (try? AttributedString(markdown: content, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                    ?? AttributedString(content)
-                Text(rendered)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SkillMarkdownView(content: skill.content)
+                    .padding(.bottom, 4)
             }
+
+            HStack {
+                Spacer()
+                Button {
+                    revealSkillInFinder(skill)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder")
+                            .font(.caption.weight(.semibold))
+                        Text("Voir dans le Finder")
+                            .font(DS.Text.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Color.black.opacity(0.85))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(AppColors.accent)
+                    )
+                }
+                .buttonStyle(.plain)
+                .pointingHandCursor()
+                .help("Ouvrir le dossier de la capacité")
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    /// Reveals `~/.hermes/skills/<category>/<name>/SKILL.md` in Finder via
+    /// `NSWorkspace.activateFileViewerSelecting`. `SkillInfo.id` is already
+    /// the `<category>/<name>` path-fragment used by `loadSkills()` — no
+    /// extra resolution needed.
+    private func revealSkillInFinder(_ skill: SkillInfo) {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let skillMd = homeDir
+            .appendingPathComponent(".hermes/skills")
+            .appendingPathComponent(skill.id)
+            .appendingPathComponent("SKILL.md")
+        if FileManager.default.fileExists(atPath: skillMd.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([skillMd])
+        } else {
+            // Fall back to the skill folder if SKILL.md is missing for any
+            // reason — at least the user lands somewhere useful.
+            let folder = homeDir
+                .appendingPathComponent(".hermes/skills")
+                .appendingPathComponent(skill.id)
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
         }
     }
 

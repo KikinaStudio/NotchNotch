@@ -16,6 +16,12 @@ import AppKit
 struct BrandIconView: View {
     let kind: IconKind
     var size: CGFloat = 24
+    /// When true, the icon is rendered in a uniform near-grey
+    /// (`Color.primary.opacity(0.35)`) instead of its brand color.
+    /// Used by the Section 1 "Apps" row when an App is `.available`
+    /// (not yet connected) — gives a clear monochrome cue without
+    /// dropping the icon shape.
+    var desaturated: Bool = false
 
     var body: some View {
         switch kind {
@@ -26,18 +32,24 @@ struct BrandIconView: View {
                     .renderingMode(.template)
                     .scaledToFit()
                     .frame(width: size, height: size)
-                    .foregroundStyle(Self.color(for: hex))
+                    .foregroundStyle(desaturated
+                                     ? AnyShapeStyle(Color.primary.opacity(0.35))
+                                     : AnyShapeStyle(Self.color(for: hex)))
             } else {
                 Image(systemName: "puzzlepiece.fill")
                     .font(.system(size: size * 0.7, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(desaturated
+                                     ? AnyShapeStyle(Color.primary.opacity(0.35))
+                                     : AnyShapeStyle(.tertiary))
                     .frame(width: size, height: size)
             }
         case .sfSymbol(let name):
             Image(systemName: name)
                 .font(.system(size: size * 0.85, weight: .medium))
                 .frame(width: size, height: size)
-                .foregroundStyle(.primary)
+                .foregroundStyle(desaturated
+                                 ? AnyShapeStyle(Color.primary.opacity(0.35))
+                                 : AnyShapeStyle(.primary))
         }
     }
 
