@@ -144,19 +144,86 @@ enum DS {
     enum Radius {
         /// 6pt. Petits éléments (input fields, code blocks, error frames).
         static let chip = CGFloat(6)
-        /// 12pt. Cartes routines, gros containers (CLAUDE.md "12pt continuous rounded").
+        /// 8pt. Boutons CTA, segmented controls, search fields.
+        /// Valeur largement dominante dans le repo (BrainView, Settings,
+        /// Routines, TemplateBrowser).
+        static let button = CGFloat(8)
+        /// 10pt. Card compacte (CapabilityCard, AppCard Tools tab).
+        /// Plus subtil que `card`, signe une matière "rangée à plat".
+        static let cardCompact = CGFloat(10)
+        /// 12pt. Cartes prominentes routines/memory/templates, gros containers
+        /// (CLAUDE.md "12pt continuous rounded").
         static let card = CGFloat(12)
     }
 
     // MARK: - Spacing
-    /// Espacements standards.
+    /// Espacements génériques (gaps entre éléments). Pour les paddings de
+    /// composants standardisés (cards, rows, boutons), voir DS.Padding.
     enum Spacing {
+        /// 4pt — gap intra-élément (icône + label inline, espace serré dans un row).
+        static let xs = CGFloat(4)
         /// 8pt — gap items modérément liés, padding intérieur input field.
         static let sm = CGFloat(8)
-        /// 10pt — padding vertical row standard list (CLAUDE.md "Vertical padding ~10pt").
-        static let row = CGFloat(10)
+        /// 10pt — gap dense list, padding row standard.
+        static let md = CGFloat(10)
+        /// 14pt — gap cards et rows denses.
+        static let lg = CGFloat(14)
         /// 16pt — gap inter-sections.
+        static let xl = CGFloat(16)
+        /// 20pt — gap entre zones majeures (Memory → Wiki dans BrainView).
+        static let xxl = CGFloat(20)
+        /// 24pt — gap inter-sections Tools tab (Apps → Capacités).
+        static let xxxl = CGFloat(24)
+
+        /// Alias historique de `md` (10pt). Conservé pour compatibilité ;
+        /// sera retiré une fois les call-sites migrés vers `DS.Spacing.md`.
+        static let row = CGFloat(10)
+        /// Alias historique de `xl` (16pt). Conservé pour compatibilité ;
+        /// sera retiré une fois les call-sites migrés vers `DS.Spacing.xl`.
         static let section = CGFloat(16)
+    }
+
+    // MARK: - Padding presets
+    /// Presets de paddings pour composants standardisés. Distincts de
+    /// `DS.Spacing` qui couvre les gaps génériques entre éléments.
+    /// Nommage par rôle (card, button, segment, input) plutôt que par
+    /// échelle, pour cohérence avec la typo (`title`, `body`, `caption`).
+    ///
+    /// Doctrine : tout nouveau composant utilise un de ces presets ou
+    /// AJOUTE un nouveau preset ici. Pas de padding inline en call site.
+    enum Padding {
+        /// 14H × 12V — card compacte, lecture dense (CapabilityCard, usages
+        /// Tools tab Section 2 et catalogue SkillsHub).
+        static let cardCompactH = CGFloat(14)
+        static let cardCompactV = CGFloat(12)
+
+        /// 14H × 16V — card prominente, contenu primaire (memoryCardCompact
+        /// dans BrainView, templateCard dans TemplateBrowser, MissionsActivityBanner).
+        static let cardProminentH = CGFloat(14)
+        static let cardProminentV = CGFloat(16)
+
+        /// 14H × 6V — row dense de liste avec hairline divider entre items
+        /// (routineRow, futurs sessionRow et memoryRow). À combiner avec
+        /// DS.Layout.rowMinHeight.
+        static let rowH = CGFloat(14)
+        static let rowV = CGFloat(6)
+
+        /// 12H × 6V — bouton CTA et action standard (browseButton,
+        /// externalLinkButton, "Save API key", "Enregistrer", futur PrimaryButton).
+        static let buttonH = CGFloat(12)
+        static let buttonV = CGFloat(6)
+
+        /// 12H × 5V — segmented control / picker pill (segmentedButton dans
+        /// SettingsView, providerSegment dans ConnectProviderStep, futur
+        /// SegmentedButton). Plus serré que `button` pour densité d'un groupe.
+        static let segmentH = CGFloat(12)
+        static let segmentV = CGFloat(5)
+
+        /// 10H × 6V — input field stylisé (search field BrainView/History,
+        /// futur SearchField). Le champ texte respire moins qu'un bouton parce
+        /// que le label est saisi par l'utilisateur, pas affiché statiquement.
+        static let inputH = CGFloat(10)
+        static let inputV = CGFloat(6)
     }
 
     // MARK: - Hairline weights
@@ -174,17 +241,44 @@ enum DS {
     }
 
     // MARK: - Layout
-    /// Contraintes de layout (largeurs max, hauteurs minimales).
+    /// Contraintes de layout (largeurs max, hauteurs minimales, insets de panel).
     enum Layout {
         /// 720pt — largeur max de la liste de routines sur panel large (centrée).
         /// Sur panel standard (680pt) on reste full-width.
         static let maxWidthRoutines = CGFloat(720)
-        /// 32pt — hauteur minimale d'une ligne de routine en mode task-report.
+
+        /// 32pt — hauteur minimale d'une row dense en mode task-report.
         /// Densité Reminders.app / Things 3 (≈32pt). On sacrifie la cible HIG
-        /// 44pt parce que le toggle (StatusPill) a sa propre hit-area et que
-        /// le row entier est tappable pour l'édition — la densité prime.
+        /// 44pt parce que les contrôles internes (StatusPill toggle) ont leur
+        /// propre hit-area et que le row entier est tappable. La densité prime.
+        static let rowMinHeight = CGFloat(32)
+
+        /// 42pt — inset horizontal de tous les panels (Settings/Brain/History/Chat)
+        /// dans NotchView. Cette valeur est *aussi* utilisée en négatif (-42)
+        /// dans ScrollEdgeFade.swift pour permettre aux carousels edge-to-edge
+        /// de dépasser. Garder ces deux call-sites en synchronisation.
+        static let panelHorizontalInset = CGFloat(42)
+
+        /// 14pt — top inset des panels structurés (Settings/Brain/History).
+        static let panelTopInset = CGFloat(14)
+
+        /// 25pt — bottom inset des panels structurés. Plus large que le top
+        /// pour laisser respirer + accommoder le fade `FadingScrollView`.
+        static let panelBottomInset = CGFloat(25)
+
+        /// 4pt — top inset variant ChatView. Moins épais que les panels structurés
+        /// parce que les premiers messages doivent monter plus haut.
+        static let chatTopInset = CGFloat(4)
+
+        /// 18pt — bottom inset variant ChatView. Espace pour l'input bar fixée
+        /// en bas (qui a son propre padding interne).
+        static let chatBottomInset = CGFloat(18)
+
+        /// Alias historique de `rowMinHeight` (32pt). Conservé pour compatibilité ;
+        /// sera retiré une fois les call-sites migrés.
         static let routineRowMinHeight = CGFloat(32)
-        /// 14pt — padding horizontal d'une ligne de routine.
+        /// Alias historique remplacé par `DS.Padding.rowH` (14pt).
+        /// Conservé pour compatibilité ; sera retiré une fois les call-sites migrés.
         static let routineRowPadH = CGFloat(14)
     }
 }
