@@ -12,64 +12,68 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Messages — bottom-anchored, with alpha-mask fade at top + bottom.
-            // Mask (not paint overlay) so the fade is to *transparency*, letting
-            // the panel's solid black or Liquid Glass background show through.
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Spacer(minLength: 0)
-                            .frame(maxHeight: .infinity)
+            if chatVM.messages.isEmpty {
+                WelcomeExamplesCarousel(chatVM: chatVM)
+            } else {
+                // Messages — bottom-anchored, with alpha-mask fade at top + bottom.
+                // Mask (not paint overlay) so the fade is to *transparency*, letting
+                // the panel's solid black or Liquid Glass background show through.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Spacer(minLength: 0)
+                                .frame(maxHeight: .infinity)
 
-                        ForEach(chatVM.messages) { message in
-                            MessageBubble(
-                                message: message,
-                                searchQuery: searchVM.query,
-                                onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
-                                    ? { chatVM.retryLastAssistant() }
-                                    : nil,
-                                onEdit: (message.role == .user && !chatVM.isStreaming)
-                                    ? { msg in
-                                        chatVM.editingMessageId = msg.id
-                                        chatVM.draft = msg.content
-                                    }
-                                    : nil,
-                                onRefine: (message.routineId != nil)
-                                    ? { rid in chatVM.startRefine(routineId: rid) }
-                                    : nil,
-                                isChatStreaming: chatVM.isStreaming
-                            )
-                            .id(message.id)
+                            ForEach(chatVM.messages) { message in
+                                MessageBubble(
+                                    message: message,
+                                    searchQuery: searchVM.query,
+                                    onRetry: (message.role == .assistant && message.id == chatVM.messages.last(where: { $0.role == .assistant })?.id)
+                                        ? { chatVM.retryLastAssistant() }
+                                        : nil,
+                                    onEdit: (message.role == .user && !chatVM.isStreaming)
+                                        ? { msg in
+                                            chatVM.editingMessageId = msg.id
+                                            chatVM.draft = msg.content
+                                        }
+                                        : nil,
+                                    onRefine: (message.routineId != nil)
+                                        ? { rid in chatVM.startRefine(routineId: rid) }
+                                        : nil,
+                                    isChatStreaming: chatVM.isStreaming
+                                )
+                                .id(message.id)
+                            }
                         }
+                        .padding(.horizontal, 2)
+                        .padding(.bottom, 14)
+                        .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
                     }
-                    .padding(.horizontal, 2)
-                    .padding(.bottom, 14)
-                    .frame(minHeight: 0, maxHeight: .infinity, alignment: .bottom)
+                    .scrollIndicators(.hidden)
+                    .defaultScrollAnchor(.bottom)
+                    .onChange(of: chatVM.messages.count) { scrollToBottom(proxy) }
+                    .onChange(of: chatVM.messages.last?.content) { scrollToBottom(proxy) }
+                    .onChange(of: searchVM.currentMatchIndex) { scrollToSearch(proxy) }
+                    .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
                 }
-                .scrollIndicators(.hidden)
-                .defaultScrollAnchor(.bottom)
-                .onChange(of: chatVM.messages.count) { scrollToBottom(proxy) }
-                .onChange(of: chatVM.messages.last?.content) { scrollToBottom(proxy) }
-                .onChange(of: searchVM.currentMatchIndex) { scrollToSearch(proxy) }
-                .onChange(of: searchVM.totalMatches) { scrollToSearch(proxy) }
+                .mask(
+                    VStack(spacing: 0) {
+                        LinearGradient(
+                            colors: [.clear, .black],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 20)
+                        Rectangle().fill(.black)
+                        LinearGradient(
+                            colors: [.black, .clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 23)
+                    }
+                )
             }
-            .mask(
-                VStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [.clear, .black],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 20)
-                    Rectangle().fill(.black)
-                    LinearGradient(
-                        colors: [.black, .clear],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 23)
-                }
-            )
 
             // Connection error banner
             if let errorMessage = chatVM.connectionError {
@@ -357,6 +361,134 @@ struct SpinningRing: View {
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
             .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isSpinning)
             .onAppear { isSpinning = true }
+    }
+}
+
+// MARK: - Welcome state (empty chat)
+
+fileprivate struct WelcomeExamplesCarousel: View {
+    @ObservedObject var chatVM: ChatViewModel
+    @State private var order: [Int] = []
+    @State private var offset: Int = 0
+    @State private var isHovered: Bool = false
+
+    private static let cardWidth: CGFloat = 260
+    private static let cardHeight: CGFloat = 110
+
+    private static let pool: [(icon: String, prompt: String)] = [
+        // Goals long-cours
+        ("target",           "Goal : apprendre le japonais 20 min par jour pendant 6 mois"),
+        ("target",           "Goal : trouver un T2 à Lisbonne pour septembre, max 1500€"),
+        ("target",           "Goal : finir le manuscrit de mon roman avant fin juin"),
+        ("target",           "Goal : reprendre la course, 5km sans s'arrêter d'ici novembre"),
+        // Mémoire write — concrètes
+        ("brain",            "Souviens-toi que je suis allergique aux fruits de mer"),
+        ("brain",            "Ma fille s'appelle Léa, elle adore les dinosaures et déteste les épinards"),
+        ("brain",            "Mon vol Tokyo part le 14 mai à 23h45, terminal 2E"),
+        // Mémoire recall + croisement
+        ("magnifyingglass",  "Cherche dans tes mémoires : qui est Marc ?"),
+        ("magnifyingglass",  "Quels projets ai-je en cours ?"),
+        ("magnifyingglass",  "Croise mes projets en cours avec mes mails non-lus de la semaine"),
+        // Cron actionnable / surveillance
+        ("clock",            "Brief de mes mails non-lus chaque matin à 8h"),
+        ("bell.badge",       "Préviens-moi si le prix des AirPods Max passe sous 500€"),
+        ("bell.badge",       "Surveille les releases du repo NousResearch/hermes-agent"),
+        ("bell.badge",       "Quand un mail de Marie arrive, résume-le en 3 lignes et ping-moi"),
+        ("bell.badge",       "Quand le Bitcoin dépasse 80k$, envoie-moi une alerte"),
+        // Mail / agenda croisé
+        ("envelope",         "Trouve dans mes mails mes billets de train de la semaine prochaine"),
+        ("calendar",         "Récap de mon agenda + mes commits chaque vendredi à 17h"),
+        ("envelope",         "Qui m'a écrit ce mois-ci au sujet du projet NotchNotch ?"),
+        // Web / research
+        ("link",             "Résume cet article et range-le dans mon wiki : <colle l'URL>"),
+        ("globe",            "Compare Claude Opus 4.7 et Gemini 3 sur le code Swift"),
+        ("globe",            "Trois cafés calmes pour bosser dans le Marais demain matin"),
+        // Shell / fichiers
+        ("terminal",         "Combien de fichiers dans ~/Téléchargements ?"),
+        ("terminal",         "Mes 5 derniers commits sur ce repo, avec leur message"),
+        ("terminal",         "Cherche tous les TODO dans le code et regroupe-les par fichier"),
+        // Brain / wiki
+        ("bookmark",         "Note : un chat détective dans le Paris des années 30"),
+        ("text.book.closed", "Lis le SCHEMA.md de mon brain et dis ce qui est mal organisé"),
+    ]
+
+    private var currentEntry: (icon: String, prompt: String) {
+        let i = order.isEmpty ? offset % Self.pool.count : order[offset % order.count]
+        return Self.pool[i]
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Left arrow
+            Button { advance(by: -1) } label: {
+                Image(systemName: "chevron.left")
+                    .font(DS.Text.caption.weight(.medium))
+                    .foregroundStyle(DS.Surface.tertiary)
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+
+            // Single card
+            singleCard(entry: currentEntry)
+                .id(offset)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal:   .move(edge: .leading).combined(with: .opacity)
+                ))
+
+            // Right arrow
+            Button { advance(by: 1) } label: {
+                Image(systemName: "chevron.right")
+                    .font(DS.Text.caption.weight(.medium))
+                    .foregroundStyle(DS.Surface.tertiary)
+            }
+            .buttonStyle(.plain)
+            .pointingHandCursor()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            if order.isEmpty {
+                order = Array(0..<Self.pool.count).shuffled()
+            }
+        }
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            advance(by: 1)
+        }
+    }
+
+    private func advance(by delta: Int) {
+        let count = max(order.count, 1)
+        withAnimation(.easeInOut(duration: 0.4)) {
+            offset = ((offset + delta) % count + count) % count
+        }
+    }
+
+    private func singleCard(entry: (icon: String, prompt: String)) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return Button {
+            chatVM.draft = entry.prompt
+            chatVM.focusComposerTrigger = UUID()
+        } label: {
+            VStack(spacing: 10) {
+                Image(systemName: entry.icon)
+                    .font(.system(size: 18, weight: .thin))
+                    .foregroundStyle(isHovered ? DS.Surface.secondary : DS.Surface.tertiary)
+                Text(entry.prompt)
+                    .font(DS.Text.nano)
+                    .foregroundStyle(DS.Surface.quaternary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(16)
+            .frame(width: Self.cardWidth, height: Self.cardHeight)
+            .overlay(shape.strokeBorder(Color.white.opacity(isHovered ? 0.14 : 0.07), lineWidth: 0.5))
+            .clipShape(shape)
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .onHover { isHovered = $0 }
+        .animation(.easeOut(duration: 0.15), value: isHovered)
     }
 }
 
