@@ -184,9 +184,7 @@ struct NotchView: View {
                         Group {
                             if notchVM.isSettingsOpen {
                                 SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
-                                    .padding(.top, 14)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 25)
+                                    .notchPanelInsets(variant: .standard)
                                     .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
                                 ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)

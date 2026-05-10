@@ -349,9 +349,7 @@ struct SettingsView: View {
     }
 
     private var sectionDivider: some View {
-        Rectangle()
-            .fill(DS.Stroke.hairline)
-            .frame(height: 1)
+        Hairline()
             .frame(maxWidth: .infinity)
     }
 
