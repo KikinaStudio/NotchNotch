@@ -555,21 +555,28 @@ struct BrainView: View {
                 selectedCuratedSkill = skill
             }
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 0) {
-                    BrandIconView(kind: skill.icon, size: 28, desaturated: !isConnected)
-                    Spacer(minLength: 4)
-                    appOfficialBadge
-                }
+            VStack(alignment: .leading, spacing: 8) {
+                // Top-left officiality stamp — small seal in accent. Replaces
+                // the previous "Officiel" text tag (took its own row width).
+                Image(systemName: "checkmark.seal.fill")
+                    .font(DS.Text.captionSemibold)
+                    .foregroundStyle(AppColors.accent)
+                    .help("App officielle NotchNotch")
 
-                Text(skill.displayName)
-                    .font(DS.Text.bodyMedium)
-                    .foregroundStyle(isConnected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Main row : brand icon + title side-by-side. Card height is
+                // now driven by a single content line (~50pt total) instead
+                // of the previous 2-row vertical stack (~76pt).
+                HStack(spacing: 8) {
+                    BrandIconView(kind: skill.icon, size: 22, desaturated: !isConnected)
+                    Text(skill.displayName)
+                        .font(DS.Text.bodyMedium)
+                        .foregroundStyle(isConnected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                }
             }
-            .padding(12)
+            .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(shape)
             .background(shape.fill(.quaternary.opacity(fillOpacity)))
@@ -580,20 +587,6 @@ struct BrainView: View {
         .onHover { over in hoveredCuratedId = over ? skill.id : nil }
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: isConnected)
-    }
-
-    /// Tinted-fill tag style (inspired by the user-supplied "Medium" pill
-    /// reference — text in accent blue, background in a lighter opacity of
-    /// the same accent, no stroke). Smaller and more discreet than the
-    /// previous outlined variant. Same shape used by `CapabilityCard.badgeView`
-    /// for consistency.
-    private var appOfficialBadge: some View {
-        Text("Officiel")
-            .font(.system(size: 8, weight: .medium))
-            .foregroundStyle(AppColors.accent)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(AppColors.accent.opacity(0.18)))
     }
 
     // MARK: Section 2 — Capacités (technical skills, card-style, grouped)
