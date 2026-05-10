@@ -188,9 +188,7 @@ struct NotchView: View {
                                     .transition(.opacity)
                             } else if notchVM.isHistoryOpen {
                                 ConversationHistoryView(chatVM: chatVM, sessionStore: sessionStore, notchVM: notchVM, titleStore: titleStore)
-                                    .padding(.top, 14)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 25)
+                                    .notchPanelInsets(variant: .standard)
                                     .transition(.opacity)
                             } else if notchVM.isBrainOpen {
                                 BrainView(

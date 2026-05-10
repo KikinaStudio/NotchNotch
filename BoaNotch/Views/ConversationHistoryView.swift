@@ -38,9 +38,9 @@ struct ConversationHistoryView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
-                            .font(.footnote.weight(.semibold))
+                            .font(DS.Text.bodySmall.weight(.semibold))
                         Text("New")
-                            .font(.callout.weight(.medium))
+                            .font(DS.Text.labelMedium)
                     }
                     .foregroundStyle(AppColors.accent)
                 }
@@ -52,13 +52,13 @@ struct ConversationHistoryView: View {
             if sessionStore.recentSessions.isEmpty {
                 Spacer()
                 Text("No conversations yet")
-                    .font(.body)
+                    .font(DS.Text.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
             } else if filteredSessions.isEmpty {
                 Spacer()
                 Text("No matches")
-                    .font(.body)
+                    .font(DS.Text.body)
                     .foregroundStyle(.tertiary)
                 Spacer()
             } else {
@@ -76,28 +76,28 @@ struct ConversationHistoryView: View {
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.footnote)
+                .font(DS.Text.bodySmall)
                 .foregroundStyle(.tertiary)
             TextField("Search conversations", text: $query)
                 .textFieldStyle(.plain)
-                .font(.callout)
+                .font(DS.Text.label)
                 .foregroundStyle(.primary)
             if !query.isEmpty {
                 Button {
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.footnote)
+                        .font(DS.Text.bodySmall)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, DS.Padding.inputH)
+        .padding(.vertical, DS.Padding.inputV)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: DS.Radius.button)
                 .fill(.quaternary.opacity(0.6))
         )
         .frame(maxWidth: .infinity)
@@ -111,12 +111,12 @@ struct ConversationHistoryView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: session.sourceIcon)
-                    .font(.footnote)
+                    .font(DS.Text.bodySmall)
                     .foregroundStyle(iconColor(for: session.source))
                     .frame(width: 16)
 
                 Text(displayTitle(for: session))
-                    .font(.body)
+                    .font(DS.Text.bodySmall)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
@@ -124,14 +124,14 @@ struct ConversationHistoryView: View {
 
                 if let date = session.startedAt {
                     Text(relativeFormatter.localizedString(for: date, relativeTo: Date()))
-                        .font(.footnote)
+                        .font(DS.Text.bodySmall)
                         .foregroundStyle(.tertiary)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, DS.Padding.inputH)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: DS.Radius.chip)
                     .fill(isActive ? AnyShapeStyle(AppColors.accent.opacity(0.18)) : AnyShapeStyle(Color.clear))
             )
         }
