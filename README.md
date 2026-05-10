@@ -165,7 +165,7 @@ macOS will prompt for:
 ## Known limitations
 
 - **No local message history on restart** -- the UI starts blank after relaunch, but Hermes preserves full conversation context server-side. Your agent remembers everything.
-- **Fixed notch size** -- 580x340pt. Dynamic height and drag-to-resize are planned.
+- **No per-pixel drag-resize** -- two preset panel sizes ship (680x380pt standard, up to 900x600pt large). Toggle via the resize button in the top bar.
 - **Hardcoded localhost:8642** -- no UI to change the Hermes URL yet.
 - **Read-only cron management** -- routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
 - **Unsigned** -- triggers Gatekeeper. Use `xattr -cr` or install via Homebrew with `--no-quarantine`.
@@ -216,7 +216,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |
     +-- NotchShape (custom animatable path, quad curves)
     |     Closed: matches hardware notch (~185x32pt)
-    |     Open: expanded chat panel (580x340pt)
+    |     Open: 680x380pt (standard) or up to 900x600pt (large)
     |
     +-- Top bar (when open)
     |     Left: search button
@@ -239,7 +239,7 @@ notchnotch (NSPanel, always-on-top, level mainMenu+3)
     |     Drop overlay (file drag), Toast (response preview)
     |
     +-- Services
-          HermesClient -> localhost:8642 (/v1/responses, non-streaming)
+          HermesClient -> localhost:8642 (/v1/responses, SSE streaming with non-streaming fallback)
           SessionStore -> auto-detect Telegram session from state.db
           SpeechTranscriber, DocumentExtractor, AudioRecorder
 ```
@@ -339,7 +339,7 @@ This `id` is the Telegram `chat_id` of your DM with the Hermes bot. Sent as `X-H
 
 ### Window system
 
-Custom `NSPanel` -- borderless, transparent, non-activating, level `mainMenu + 3`. Fixed panel size (620x380pt). Content animates inside via `NotchShape` clipping. Panel joins all spaces and only becomes key when open.
+Custom `NSPanel` -- borderless, transparent, non-activating, level `mainMenu + 3`. Two preset panel sizes (680x380pt standard, or up to 900x600pt large with clamping to 0.9 of the screen visibleFrame), persisted in `PanelSizeStore` and toggled via the resize button. Content animates inside via `NotchShape` clipping. Panel joins all spaces and only becomes key when open.
 
 ### Notch shape
 
@@ -351,6 +351,8 @@ Custom `Shape` with `animatableData` for smooth corner radius transitions. Quad 
 |----------|--------|---------|-------------|
 | `localhost:8642/health` | GET | -- | Health check |
 | `localhost:8642/v1/responses` | POST | `Content-Type: application/json`, `X-Hermes-Session-Id: <id>` | Responses API (server-side conversation state) |
+
+Hermes 0.13+ also accepts an `X-Hermes-Session-Key` header on `/v1/responses` for long-term-memory scoping (independent from `X-Hermes-Session-Id`). NotchNotch does not currently send it.
 
 Request:
 ```json
