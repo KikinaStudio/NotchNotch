@@ -32,19 +32,34 @@ enum DS {
         static let bodyMedium    = Font.system(size: 14, weight: .medium)
         /// 13pt regular. Blockquotes, file card titles, streaming cursor.
         static let bodySmall     = Font.system(size: 13)
+        /// 13pt semibold. Top-bar panel title (équiv `.headline` macOS), CTA full-width
+        /// affirmés (Submit routine), labels accentués 13pt.
+        static let bodySmallSemibold = Font.system(size: 13, weight: .semibold)
         /// 12pt regular. CTA labels, code blocks inline.
         static let label         = Font.system(size: 12)
         /// 12pt medium. Boutons CTA primaires onboarding (OnboardingButton/WideButton),
         /// labels d'erreur affirmés.
         static let labelMedium   = Font.system(size: 12, weight: .medium)
+        /// 12pt semibold. Headers prose section (zoneHeader, capabilitiesHeader),
+        /// labels affirmés 12pt.
+        static let labelSemibold = Font.system(size: 12, weight: .semibold)
+        /// 12pt regular monospaced. Cron expression display (advancedScheduleNotice),
+        /// stepper digits (dayOfMonthControl).
+        static let labelMono     = Font.system(size: 12, design: .monospaced)
         /// 11pt regular. Labels UI standards, hints, status text.
         static let caption       = Font.system(size: 11)
         /// 11pt medium. Titre de carte sélectionnée (model card name, privacy row title).
         static let captionMedium = Font.system(size: 11, weight: .medium)
+        /// 11pt semibold. Chevron icons in row action buttons, accentué 11pt.
+        static let captionSemibold = Font.system(size: 11, weight: .semibold)
         /// 10pt regular. Métadonnées faibles, labels secondaires onboarding.
         static let micro         = Font.system(size: 10)
         /// 10pt medium. Étiquettes affirmées (banner d'erreur, tag de routine active).
         static let microMedium   = Font.system(size: 10, weight: .medium)
+        /// 10pt semibold. Petit chevron/icône affirmée 10pt (back arrows, status badges).
+        static let microSemibold = Font.system(size: 10, weight: .semibold)
+        /// 10pt bold. Compteur badge dans templateCard, breadcrumb chevron.
+        static let microBold     = Font.system(size: 10, weight: .bold)
         /// 9pt regular. Métadonnées très faibles, fine print, descriptions discrètes.
         static let nano          = Font.system(size: 9)
         /// 12pt monospaced. Code blocks dans MessageBubble.
