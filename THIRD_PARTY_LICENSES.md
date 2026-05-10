@@ -2,6 +2,26 @@
 
 NotchNotch bundles the following MIT-licensed assets:
 
+## Pixelarticons (MIT)
+- Files: `BoaNotch/Resources/PixelIcons/*.svg`
+- Source: https://github.com/halfmage/pixelarticons
+- Copyright (c) 2020 Gerrit Halfmann
+- Subset bundled (toast icons): `alert`, `chat`, `clock`, `notification`, `pacman` (the last is the pack's `bookmark` glyph renamed; the free pack has no pacman).
+- Loaded via `PixelIcon.image(_:fallback:)` with SF Symbol fallbacks.
+
+## Simple Icons (MIT)
+- Files: `BoaNotch/Resources/BrandIcons/*.svg`
+- Source: https://github.com/simple-icons/simple-icons
+- Copyright (c) 2017-present The Simple Icons contributors
+- Subset bundled (brand glyphs for the Tools tab Apps section): `gmail`, `googlecalendar`, `googledrive`, `googlemeet`, `notion`, `spotify`.
+- Refresh: edit the `SLUGS` array in `scripts/fetch-brand-icons.sh` and run it manually.
+- Rendered as template images so `BrandIconView` can tint via `foregroundStyle`. Brand colors with luminance < 0.18 are substituted with `.primary` so they remain visible on the panel's near-black background (Notion's `#000000` is the canonical case).
+
+## Sparkle (MIT)
+- Source: https://github.com/sparkle-project/Sparkle
+- Copyright (c) Andy Matuschak and the Sparkle Project Authors
+- Linked as a Swift Package Manager dependency (see `Package.swift`); `Sparkle.framework` is copied into `Contents/Frameworks/` at release time by `scripts/release.sh`. Drives the in-app auto-update flow with EdDSA-signed appcasts.
+
 ## Lobe Icons (MIT)
 - Files: `BoaNotch/Resources/provider_*.svg`
 - Source: https://github.com/lobehub/lobe-icons
