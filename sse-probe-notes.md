@@ -1,5 +1,15 @@
 # SSE Probe Notes — `/v1/responses` on Hermes v0.11.0
 
+> Verified against Hermes v0.13.0 on 2026-05-10. SSE event shapes
+> unchanged: `_handle_responses` still branches on `stream=True` at
+> `~/.hermes/hermes-agent/gateway/platforms/api_server.py:1393` and
+> emits the same `response.output_text.delta` / `response.output_item.{added,done}`
+> sequence. v0.13 added `X-Hermes-Session-Key` as an opt-in header on
+> the same endpoint (independent from `X-Hermes-Session-Id`); NotchNotch
+> does not currently send it. Models cited below (`nemotron-3-super-120b-a12b:free`,
+> `minimax/minimax-m2.7`) reflect the 2026-04-23 probe environment;
+> available models on v0.13 are listed in `HermesConfig.availableModels`.
+
 Empirical observations from probing `POST http://localhost:8642/v1/responses` with `stream: true` on **Hermes Agent v0.11.0 (2026.4.23)**. v0.10.0 does NOT stream this endpoint (returns plain JSON despite `stream: true`) — v0.11.0 is the floor.
 
 All probes were made with the actually-running gateway process on localhost, NOT from reading docs. Source cross-reference: `~/.hermes/hermes-agent/gateway/platforms/api_server.py` (`_handle_responses` at line 1393 branches on `stream=True` into `_write_sse_responses` at line 1170).
