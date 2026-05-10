@@ -66,9 +66,9 @@ struct RoutinesView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
-                                    .font(.caption2.weight(.bold))
+                                    .font(DS.Text.microBold)
                                 Text("Back")
-                                    .font(.callout.weight(.medium))
+                                    .font(DS.Text.labelMedium)
                             }
                             .foregroundStyle(DS.Surface.secondary)
                         }
@@ -221,9 +221,9 @@ struct RoutinesView: View {
     private var newButtonLabel: some View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
-                .font(.footnote.weight(.semibold))
+                .font(DS.Text.bodySmallSemibold)
             Text("New")
-                .font(.callout.weight(.medium))
+                .font(DS.Text.labelMedium)
         }
         .foregroundStyle(AppColors.accent)
     }
@@ -410,9 +410,9 @@ struct RoutinesView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.caption2.weight(.bold))
+                            .font(DS.Text.microBold)
                         Text(isEditing ? "Edit routine" : "New routine")
-                            .font(.caption.weight(.medium))
+                            .font(DS.Text.captionMedium)
                     }
                     .foregroundStyle(.secondary)
                 }
@@ -423,7 +423,7 @@ struct RoutinesView: View {
 
                 formField(label: "What should it do?", optional: false) {
                     TextEditor(text: $formPrompt)
-                        .font(.callout)
+                        .font(DS.Text.label)
                         .foregroundStyle(.primary)
                         .scrollContentBackground(.hidden)
                         .padding(.horizontal, 6)
@@ -449,10 +449,10 @@ struct RoutinesView: View {
                             } label: {
                                 HStack(spacing: 5) {
                                     Image(systemName: option.icon)
-                                        .font(.caption2.weight(.semibold))
+                                        .font(DS.Text.microSemibold)
                                         .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.75)) : AnyShapeStyle(.secondary))
                                     Text(option.name)
-                                        .font(.caption.weight(.medium))
+                                        .font(DS.Text.captionMedium)
                                         .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
                                 }
                                 .padding(.horizontal, 10)
@@ -475,7 +475,7 @@ struct RoutinesView: View {
                     submit()
                 } label: {
                     Text(isEditing ? "Save changes" : "Create routine")
-                        .font(.footnote.weight(.semibold))
+                        .font(DS.Text.bodySmallSemibold)
                         .foregroundStyle(customFormValid ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -513,10 +513,10 @@ struct RoutinesView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "clock.badge.questionmark")
-                    .font(.caption)
+                    .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                 Text(rawCronFallback)
-                    .font(.callout.monospaced())
+                    .font(DS.Text.labelMono)
                     .foregroundStyle(.primary)
             }
             .padding(.horizontal, 10)
@@ -525,7 +525,7 @@ struct RoutinesView: View {
             .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
 
             Text("Édite cette routine via le chat — son planning n'est pas modifiable ici.")
-                .font(.caption2)
+                .font(DS.Text.micro)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -546,7 +546,7 @@ struct RoutinesView: View {
             scheduleExtras
 
             Text(humanSchedule(composedCron))
-                .font(.caption2)
+                .font(DS.Text.micro)
                 .foregroundStyle(.tertiary)
         }
     }
@@ -571,7 +571,7 @@ struct RoutinesView: View {
             scheduleFrequency = freq
         } label: {
             Text(freq.rawValue)
-                .font(.caption.weight(.medium))
+                .font(DS.Text.captionMedium)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -601,7 +601,7 @@ struct RoutinesView: View {
                     }
                 } label: {
                     Text(weekdayLabels[idx])
-                        .font(.caption2.weight(.semibold))
+                        .font(DS.Text.microSemibold)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
                         .frame(width: 26, height: 26)
                         .background {
@@ -621,7 +621,7 @@ struct RoutinesView: View {
     private var timeRow: some View {
         HStack(spacing: 8) {
             Text("at")
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.tertiary)
             DatePicker("", selection: $scheduleTime, displayedComponents: .hourAndMinute)
                 .labelsHidden()
@@ -634,11 +634,11 @@ struct RoutinesView: View {
     private var dayOfMonthControl: some View {
         HStack(spacing: 6) {
             Text("Day")
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.tertiary)
             Stepper(value: $dayOfMonth, in: 1...28) {
                 Text("\(dayOfMonth)")
-                    .font(.callout.monospacedDigit())
+                    .font(DS.Text.labelMono.monospacedDigit())
                     .foregroundStyle(.primary)
                     .frame(minWidth: 20, alignment: .trailing)
             }
@@ -649,7 +649,7 @@ struct RoutinesView: View {
     private var intervalPicker: some View {
         HStack(spacing: 6) {
             Text("Every")
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.tertiary)
             ForEach(hourIntervals, id: \.self) { h in
                 let isSelected = intervalHours == h
@@ -657,7 +657,7 @@ struct RoutinesView: View {
                     intervalHours = h
                 } label: {
                     Text("\(h)h")
-                        .font(.caption.weight(.medium))
+                        .font(DS.Text.captionMedium)
                         .foregroundStyle(isSelected ? AnyShapeStyle(.black.opacity(0.85)) : AnyShapeStyle(.secondary))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
@@ -703,18 +703,18 @@ struct RoutinesView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.caption)
+                    .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                 if optional {
                     Text("(optional)")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.tertiary)
                 }
             }
             content()
             if let hint {
                 Text(hint)
-                    .font(.caption2)
+                    .font(DS.Text.micro)
                     .foregroundStyle(.tertiary)
             }
         }
