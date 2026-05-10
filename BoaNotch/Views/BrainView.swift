@@ -253,7 +253,7 @@ struct BrainView: View {
                 .font(DS.Text.sectionHead)
                 .tracking(1.5)
                 .textCase(.uppercase)
-                .foregroundStyle(Color.white.opacity(0.28))
+                .foregroundStyle(DS.Surface.headerLow)
             if count > 0 {
                 Text("\(count)")
                     .font(.caption2.monospacedDigit())
@@ -715,12 +715,12 @@ struct BrainView: View {
                 HStack(spacing: 8) {
                     Image(systemName: header.icon)
                         .font(DS.Text.sectionHead)
-                        .foregroundStyle(Color.white.opacity(0.28))
+                        .foregroundStyle(DS.Surface.headerLow)
                     Text(header.label)
                         .font(DS.Text.sectionHead)
                         .tracking(1.5)
                         .textCase(.uppercase)
-                        .foregroundStyle(Color.white.opacity(0.28))
+                        .foregroundStyle(DS.Surface.headerLow)
                     Spacer(minLength: 8)
                     Text("\(group.skills.count)")
                         .font(.caption2.monospacedDigit())
@@ -1473,7 +1473,7 @@ struct CuratedSkillDetailView: View {
                 .font(DS.Text.sectionHead)
                 .tracking(1.5)
                 .textCase(.uppercase)
-                .foregroundStyle(Color.white.opacity(0.28))
+                .foregroundStyle(DS.Surface.headerLow)
                 .padding(.bottom, 2)
 
             ForEach(skill.promptExamplesFR, id: \.self) { example in

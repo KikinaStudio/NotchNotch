@@ -113,6 +113,9 @@ enum DS {
         static let tertiary   = AnyShapeStyle(Color.white.opacity(0.33))
         /// Texte très faible, désactivé, fills cartes routines. Blanc 24%.
         static let quaternary = AnyShapeStyle(Color.white.opacity(0.24))
+        /// Texte header de section UPPERCASE mono. Blanc 28%.
+        /// Spécifique aux section heads tracking 1.5 — distinct de `tertiary` (33%).
+        static let headerLow  = AnyShapeStyle(Color.white.opacity(0.28))
         /// Hairlines dividers. ShapeStyle natif .separator.
         static let separator  = AnyShapeStyle(.separator)
     }

@@ -25,8 +25,7 @@ struct PanelSection<Content: View>: View {
                     .font(DS.Text.sectionHead)
                     .tracking(1.5)
                     .textCase(.uppercase)
-                    // TODO(design): tokeniser DS.Surface.headerLow (white 0.28)
-                    .foregroundStyle(Color.white.opacity(0.28))
+                    .foregroundStyle(DS.Surface.headerLow)
                 if let count = count, count > 0 {
                     Text("\(count)")
                         .font(.caption2.monospacedDigit())

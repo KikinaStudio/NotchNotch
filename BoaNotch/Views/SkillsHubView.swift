@@ -234,7 +234,7 @@ struct SkillsHubView: View {
                                     .font(DS.Text.sectionHead)
                                     .tracking(1.5)
                                     .textCase(.uppercase)
-                                    .foregroundStyle(Color.white.opacity(0.28))
+                                    .foregroundStyle(DS.Surface.headerLow)
                                 ScrollView {
                                     Text(detail.skillMdPreview)
                                         .font(DS.Text.captionMono)
