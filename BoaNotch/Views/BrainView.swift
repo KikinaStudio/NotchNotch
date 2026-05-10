@@ -170,9 +170,7 @@ struct BrainView: View {
                     memorySection
 
                     if brainVM.hasWiki {
-                        Rectangle()
-                            .fill(DS.Stroke.hairline)
-                            .frame(height: 1)
+                        Hairline()
                             .padding(.vertical, 20)
                         wikiSection
                     }
@@ -183,9 +181,7 @@ struct BrainView: View {
     }
 
     private var memorySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("À propos de toi", count: brainVM.allMemoryBlocks.count)
-
+        PanelSection("À propos de toi", count: brainVM.allMemoryBlocks.count) {
             if brainVM.allMemoryBlocks.isEmpty {
                 emptyState("Hermes n'a encore rien appris.\nCommence à discuter, il retiendra ce qui compte.")
                     .padding(.vertical, 16)

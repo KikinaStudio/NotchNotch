@@ -582,20 +582,8 @@ struct SettingsView: View {
                 apiKey = ""
             } label: {
                 Text("Save")
-                    .font(DS.Text.caption.weight(.semibold))
-                    .foregroundStyle(apiKey.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background {
-                        let saveShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        if apiKey.isEmpty {
-                            saveShape.fill(.clear)
-                        } else {
-                            saveShape.fill(AppColors.accent.opacity(0.35))
-                        }
-                    }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PrimaryButtonStyleSubtle(enabled: !apiKey.isEmpty))
             .disabled(apiKey.isEmpty)
         }
     }
@@ -623,24 +611,9 @@ struct SettingsView: View {
     }
 
     private func segmentedButton(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        return Button(action: action) {
-            Text(label)
-                // TODO(design): poids conditionnel actif=semibold/inactif=medium pour affordance d'état segmenté
-                .font(DS.Text.caption.weight(isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? AnyShapeStyle(Color.black.opacity(0.85)) : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background {
-                    if isSelected {
-                        shape.fill(AppColors.accent)
-                    } else {
-                        shape.stroke(Color.gray.opacity(0.45), lineWidth: 1)
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        Button(label, action: action)
+            .buttonStyle(SegmentedButtonStyle(isSelected: isSelected))
+            .pointingHandCursor()
     }
 
     private func configTextField(_ label: String, text: Binding<String>) -> some View {

@@ -84,16 +84,11 @@ struct BrainOnboardingView: View {
                     activate()
                 } label: {
                     Text(errorText == nil ? "Activer" : "Réessayer")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(.black.opacity(0.85))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(AppColors.accent))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PrimaryButtonStyle(font: .callout.weight(.semibold)))
                 .disabled(isRunning || !anyEnabled)
                 .opacity(anyEnabled ? 1 : 0.4)
-                .pointingHandCursor()
             }
         }
         .padding(22)
