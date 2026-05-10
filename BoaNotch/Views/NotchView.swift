@@ -210,15 +210,11 @@ struct NotchView: View {
                                     },
                                     tasksContent: { AnyView(routinesEmbedded) }
                                 )
-                                    .padding(.top, 14)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 25)
+                                    .notchPanelInsets(variant: .standard)
                                     .transition(.opacity)
                             } else {
                                 ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
-                                    .padding(.top, 4)
-                                    .padding(.horizontal, 42)
-                                    .padding(.bottom, 18)
+                                    .notchPanelInsets(variant: .chat)
                             }
                         }
                     }

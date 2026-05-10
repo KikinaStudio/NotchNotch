@@ -264,7 +264,7 @@ struct BrainView: View {
     }
 
     private func memoryCardCompact(_ block: MemoryBlock) -> some View {
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let cardShape = RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Image(systemName: iconForCategory(block.category))
@@ -272,22 +272,22 @@ struct BrainView: View {
                     .foregroundStyle(AppColors.accent)
                     .frame(width: 14, alignment: .leading)
                 Text(memoryTitleAttributed(block))
-                    .font(.callout.weight(.medium))
+                    .font(DS.Text.bodySmall)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
 
             Text(memoryPreview(block))
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 16)
+        .padding(.horizontal, DS.Padding.cardProminentH)
+        .padding(.vertical, DS.Padding.cardProminentV)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardShape.fill(.quaternary.opacity(0.6)))
         .overlay(
