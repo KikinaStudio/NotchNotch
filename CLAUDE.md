@@ -631,9 +631,9 @@ compile.
 Single source of truth for all visual tokens: `BoaNotch/DesignSystem.swift`.
 Catalog organized as nested enums under `DS`:
 
-- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `label` 12 / `labelMedium` / `caption` 11 / `captionMedium` / `micro` 10 / `microMedium` 10 medium / `nano` 9. Mono variants: `codeBlock` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium. Brand: `serifMark` 13 serif (§ glyph in MemoryCards).
+- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `bodySmallMedium` 13 medium / `bodySmallSemibold` 13 semibold (≡ `.headline` macOS) / `label` 12 / `labelMedium` 12 medium / `labelSemibold` 12 semibold / `caption` 11 / `captionMedium` 11 medium / `captionSemibold` 11 semibold / `micro` 10 / `microMedium` 10 medium / `microSemibold` 10 semibold / `microBold` 10 bold / `nano` 9. Mono variants: `codeBlock` 12, `labelMono` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium. Brand: `serifMark` 13 serif (§ glyph in MemoryCards).
 - `DS.Icon.*` — SF Symbol sizes (`hero` 28 / `large` 22 / `primary` 18 / `secondary` 14 / `inline` 13 / `glyph` 12 / `caption` 11 / `mini` 9 / `chevron` 8 medium / `chevronBold` 8 bold)
-- `DS.Surface.*` — semantic foreground/fill ShapeStyles wrapped in `AnyShapeStyle`. `primary` / `secondary` are native macOS ShapeStyles (~85% / ~55% en dark mode). `tertiary` et `quaternary` ont été tunés sur valeurs explicites (`Color.white.opacity(0.33)` et `0.24` respectivement) pour cohérence visuelle entre tous les call-sites — ne PAS revenir aux ShapeStyles natifs sans un nouveau call. `separator` reste natif.
+- `DS.Surface.*` — semantic foreground/fill ShapeStyles wrapped in `AnyShapeStyle`. `primary` / `secondary` are native macOS ShapeStyles (~85% / ~55% en dark mode). `tertiary` (33%) et `quaternary` (24%) ont été tunés sur valeurs explicites pour cohérence visuelle entre tous les call-sites — ne PAS revenir aux ShapeStyles natifs sans un nouveau call. `headerLow` (28%) ajouté session C0 pour les section heads UPPERCASE mono via `PanelSection` — slot distinct de `tertiary` parce que la doctrine "Section header" l'impose à 28% spécifiquement (CLAUDE.md "Design language"). `separator` reste natif.
 - `DS.Status.*` — semantic dot tints wrapped in `AnyShapeStyle`: `success` (vert ~85%) / `failure` (rouge ~85%). Use for status pastilles (event timeline dots, failed-state text). Never hardcode `Color.green/red.opacity(...)` in views — route through these tokens.
 - `DS.Stroke.*` — hairline strokes for overlays where fine opacity control is needed (`hairline` 0.06, `lineWidth` 0.5)
 - `DS.Radius.*` — corner radii (`chip` 6, `button` 8, `cardCompact` 10, `card` 12). `button` est la valeur dominante pour les CTA / segmented controls / search fields. `cardCompact` pour les CapabilityCard et Apps tiles. `card` réservé aux containers prominents.
@@ -677,6 +677,38 @@ Migrations validatives session B (5 call-sites pour exercer l'API tôt) :
 - [BrainView.swift](BoaNotch/Views/BrainView.swift) divider Memory↔Wiki → `Hairline()` (1pt → 0.5pt, conforme `DS.Hairline.standard`).
 
 Décision explicite session B : **pas de glass natif macOS 26 sur les ButtonStyle/Containers**. Les CTA et cards dans le panel restent flat (fond `.quaternary.opacity()`) sur 14/15/26 pour préserver la doctrine "glass = floating UI hors panel" (cf "Liquid Glass policy" plus haut). `.buttonStyle(.glass)` / `.glassProminent` sera évalué plus tard pour les boutons floating (toasts), pas ici. Sessions C/D continueront la migration des call-sites restants vers ces primitifs (wiki/skills section headers, routine form buttons, template browser CTAs, etc.).
+
+**Session C+D (2026-05-10) — migration call-sites + sweep complet font aliases natifs** : 11 commits sur la branche, structurés par zone avec gating per-build et per-lint. Token ajouté à C0 : `DS.Surface.headerLow` (white 0.28) pour les section heads UPPERCASE mono — distinct de `tertiary` (33%). Substitué dans 6 occurrences (PrimitiveContainers, BrainView ×4, SkillsHubView). Lint script étendu avec une 3e passe catch des aliases natifs SwiftUI (`.callout`, `.footnote`, `.body`, `.caption`, `.caption2`, `.headline`, `.title*`) appliqués comme fonts hors `var body`. Tokens ajoutés à D0 (5) puis D5 (1, pendant sweep BrainView) :
+- `DS.Text.bodySmallSemibold` (13pt semibold) — top-bar panel title (équiv `.headline` macOS), CTA full-width affirmé (Submit routine).
+- `DS.Text.bodySmallMedium` (13pt medium) — detail labels (memory block category breadcrumb, skill detail header).
+- `DS.Text.labelSemibold` (12pt semibold) — headers prose section (zoneHeader, capabilitiesHeader).
+- `DS.Text.labelMono` (12pt monospaced) — cron expression display, stepper digits.
+- `DS.Text.captionSemibold` (11pt semibold) — chevron icons row action buttons.
+- `DS.Text.microSemibold` (10pt semibold) — petit chevron/icône affirmée 10pt.
+- `DS.Text.microBold` (10pt bold) — counter badges, breadcrumb chevrons.
+
+**État final lint** : 27 `.system(size:)` (TODOs documentés — dynamiques `textSize.scale`, badges 8pt mono, brand icons 22pt, hero 40pt) · 40 `.white.opacity()` (action button idle MessageBubble, hairlines fines spécifiques) · **0 native font alias** appliqué comme font dans une vue (les seules occurrences restantes sont des line-headers du lint script lui-même).
+
+**Stop conditions déclenchées en session C/D (rapportées sans écrire)** — utiles pour de futures sessions :
+1. **OnboardingButton/WideButton → PrimaryButtonStyle** : 2 patterns CTA distincts (28×9 padding glass-frosted vs 12×6 accent solid). Migration changerait l'identité. `WideButton` n'existe pas (référence comment-only).
+2. **zoneHeader / capabilitiesHeader → PanelSection** : prose-style avec icône + CTA inline, doctrine CLAUDE.md explicite. Migration nécessiterait extension `PanelSection(icon:trailing:)` ET visual identity shift (font 12pt semibold → 10pt mono bold, primary → headerLow). Préserver tels quels.
+3. **Form pills (frequencyPill, deliverButton, intervalPicker) → SegmentedButtonStyle** : SegmentedButtonStyle est stroke-only en non-sélectionné, les form pills sont fill `.quaternary.opacity(0.6)`. Identité visuelle distincte (fill vs stroke). Pour migrer plus tard : créer `SegmentedButtonStyleFilled` variant.
+4. **templateCard / memoryCardCompact → CardProminent** : CardProminent n'a pas d'API hover overlay. Pour migrer : étendre CardProminent avec `@ViewBuilder hover:` slot.
+5. **settingsSection → PanelSection** : helper SettingsView a `padding(.vertical, 14)` + `.tertiary` (33%), vs PanelSection `padding(.bottom, 8)` + `headerLow` (28%). Migration changerait spacing inter-sections + couleur sur 9 sections — délégation refusée.
+
+Migrations validatives complètes en session C/D (par fichier) :
+- **NotchView** : Settings/Brain/History/Chat wrappers → `notchPanelInsets(variant:)` (zéro delta, juste tokenisation).
+- **SettingsView** : `sectionDivider` helper → `Hairline()` (1pt → 0.5pt = harmonisation au standard).
+- **BrainView** : `memoryCardCompact` literals + 33 font aliases substitués via 11 patterns.
+- **ConversationHistoryView** : 10 font aliases + radius search/row + padding search → tokens DS.
+- **TemplateBrowserView** : 18 font aliases + radius literals.
+- **RoutinesView** : 24 font aliases en 9 patterns replace_all.
+- **NotchView/ExpandedBarView/SkillsHubView/SearchBarView/BrainOnboardingView/DropOverlay/ToastView/PrimitiveContainers** : sweeps mineurs, tous nettoyés.
+
+**Decisions de typo doctrinaires confirmées en session D** :
+- Titre d'item dans une liste : 13pt regular partout (`DS.Text.bodySmall`) — appliqué à ConversationHistoryView session row title (14pt → 13pt) et MemoryCardCompact title (12pt medium → 13pt regular). Pattern Routines, "true list" doctrine.
+- Top-bar panel title : `.headline` macOS = 13pt semibold = `DS.Text.bodySmallSemibold` (match exact).
+
 MessageBubble (session 3) reduced 51 hardcodes to 5 justified TODOs (animated
 pulse opacity ×2, blockquote bar 0.15, image overlay 0.1, action button idle
 0.28). Tokens added during that pass: `DS.Text.bodySmall`, `DS.Text.captionMono`,
@@ -686,11 +718,19 @@ justifiés (textSize.scale dynamique, ellipsis 15pt one-off, BrailleSpinner 0.7
 `DS.Text.microMedium`. Remaining zones: BrainView, SettingsView, RoutinesView,
 TemplateBrowserView.
 A bash check script `scripts/lint-design.sh` lists remaining hardcoded
-`.system(size:)` and `.white.opacity()` outside `DesignSystem.swift`. Output
-format is `file:line:` directly clickable in editors. Run before committing
-UI changes. SwiftLint was tried but requires full Xcode, not available in
-this dev environment — the bash script covers the same two rules with zero
-external dependency.
+`.system(size:)`, `.white.opacity()`, AND native SwiftUI font aliases
+(`.callout`, `.footnote`, `.body`, `.caption`, `.caption2`, `.headline`,
+`.title*`, etc.) applied as fonts via `.font(.X)` outside `DesignSystem.swift`.
+3 sections, output format is `file:line:` directly clickable in editors.
+Run before committing UI changes. SwiftLint was tried but requires full
+Xcode, not available in this dev environment — the bash script covers the
+3 rules with zero external dependency.
+
+État final post-D : 27 hits `.system(size:)` (TODOs documentés — dynamiques
+`textSize.scale`, badges 8pt mono, brand icons 22pt, hero icons 28-40pt) ·
+40 hits `.white.opacity()` (action button idle MessageBubble, hairlines
+fines spécifiques) · **0 native font alias** appliqué comme font dans
+une vue. Toute typographie passe par `DS.Text.*`.
 
 **ShapeStyle ternaries reminder**: SwiftUI requires `AnyShapeStyle(...)` on
 both branches of a conditional `foregroundStyle`. The `DS.Surface.*` tokens
