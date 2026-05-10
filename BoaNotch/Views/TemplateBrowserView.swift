@@ -91,10 +91,10 @@ struct TemplateBrowserView: View {
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.tertiary)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, DS.Padding.cardProminentH)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
                     .fill(.quaternary.opacity(0.6))
             )
         }
@@ -106,12 +106,12 @@ struct TemplateBrowserView: View {
 
     private func templateCard(_ template: RoutineTemplate) -> some View {
         let isAlert = template.deliver == "local"
-        let cardShape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let cardShape = RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(template.title)
-                    .font(.callout.weight(.medium))
+                    .font(DS.Text.labelMedium)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -150,8 +150,8 @@ struct TemplateBrowserView: View {
             }
             .padding(.top, 5)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 16)
+        .padding(.horizontal, DS.Padding.cardProminentH)
+        .padding(.vertical, DS.Padding.cardProminentV)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(cardShape.fill(.quaternary.opacity(0.6)))
         .overlay(
