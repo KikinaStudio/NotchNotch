@@ -33,11 +33,11 @@ struct DropOverlay: View {
     private func zoneView(icon: String, title: String, subtitle: String, isActive: Bool) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.title3.weight(.medium))
+                .font(DS.Text.titleSmall)
             Text(title)
-                .font(.callout.weight(.semibold))
+                .font(DS.Text.labelSemibold)
             Text(subtitle)
-                .font(.caption2)
+                .font(DS.Text.micro)
                 .foregroundStyle(.secondary)
         }
         .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))

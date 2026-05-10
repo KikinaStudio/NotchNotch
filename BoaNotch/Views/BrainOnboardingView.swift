@@ -15,12 +15,12 @@ struct BrainOnboardingView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Active ton cerveau NotchNotch")
-                .font(.title3.weight(.semibold))
+                .font(DS.Text.titleSmall)
                 .foregroundStyle(.primary)
                 .padding(.bottom, 4)
 
             Text("Transforme ce que tu lis en une base de connaissance vivante.")
-                .font(.footnote)
+                .font(DS.Text.bodySmall)
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 16)
 
@@ -52,13 +52,13 @@ struct BrainOnboardingView: View {
                         .controlSize(.small)
                         .tint(AppColors.accent)
                     Text(stepText)
-                        .font(.footnote)
+                        .font(DS.Text.bodySmall)
                         .foregroundStyle(.secondary)
                 }
                 .padding(.bottom, 8)
             } else if let errorText {
                 Text(errorText)
-                    .font(.footnote)
+                    .font(DS.Text.bodySmall)
                     .foregroundStyle(Color(red: 0.95, green: 0.45, blue: 0.45))
                     .lineLimit(2)
                     .padding(.bottom, 8)
@@ -70,7 +70,7 @@ struct BrainOnboardingView: View {
                     dismiss()
                 } label: {
                     Text("Pas maintenant")
-                        .font(.callout.weight(.medium))
+                        .font(DS.Text.labelMedium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -86,7 +86,7 @@ struct BrainOnboardingView: View {
                     Text(errorText == nil ? "Activer" : "Réessayer")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(PrimaryButtonStyle(font: .callout.weight(.semibold)))
+                .buttonStyle(PrimaryButtonStyle(font: DS.Text.labelSemibold))
                 .disabled(isRunning || !anyEnabled)
                 .opacity(anyEnabled ? 1 : 0.4)
             }
@@ -110,10 +110,10 @@ struct BrainOnboardingView: View {
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.callout.weight(.medium))
+                    .font(DS.Text.labelMedium)
                     .foregroundStyle(.primary)
                 Text(subtitle)
-                    .font(.caption)
+                    .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -8,12 +8,12 @@ struct SearchBarView: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.footnote)
+                .font(DS.Text.bodySmall)
                 .foregroundStyle(.tertiary)
 
             TextField("Search...", text: $searchVM.query)
                 .textFieldStyle(.plain)
-                .font(.callout)
+                .font(DS.Text.label)
                 .foregroundStyle(.primary)
                 .tint(AppColors.accent)
                 .focused($isFocused)
@@ -21,17 +21,17 @@ struct SearchBarView: View {
 
             if searchVM.totalMatches > 0 {
                 Text("\(searchVM.currentMatchIndex + 1)/\(searchVM.totalMatches)")
-                    .font(.caption.monospaced())
+                    .font(DS.Text.caption.monospaced())
                     .foregroundStyle(.secondary)
             } else if !searchVM.query.isEmpty {
                 Text("0")
-                    .font(.caption.monospaced())
+                    .font(DS.Text.caption.monospaced())
                     .foregroundStyle(.tertiary)
             }
 
             Button { searchVM.previousMatch() } label: {
                 Image(systemName: "chevron.up")
-                    .font(.caption.weight(.medium))
+                    .font(DS.Text.captionMedium)
                     .foregroundStyle(searchVM.totalMatches > 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.quaternary))
             }
             .buttonStyle(.plain)
@@ -39,7 +39,7 @@ struct SearchBarView: View {
 
             Button { searchVM.nextMatch() } label: {
                 Image(systemName: "chevron.down")
-                    .font(.caption.weight(.medium))
+                    .font(DS.Text.captionMedium)
                     .foregroundStyle(searchVM.totalMatches > 0 ? AnyShapeStyle(.secondary) : AnyShapeStyle(.quaternary))
             }
             .buttonStyle(.plain)
@@ -47,14 +47,14 @@ struct SearchBarView: View {
 
             Button { onClose() } label: {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.medium))
+                    .font(DS.Text.captionMedium)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary.opacity(0.6)))
+        .padding(.horizontal, DS.Padding.inputH)
+        .padding(.vertical, DS.Padding.inputV)
+        .background(RoundedRectangle(cornerRadius: DS.Radius.button).fill(.quaternary.opacity(0.6)))
         .padding(.horizontal, 42)
         .padding(.top, 36)
         .padding(.bottom, 4)

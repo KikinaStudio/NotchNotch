@@ -50,7 +50,7 @@ struct SkillsHubView: View {
     private var header: some View {
         HStack {
             Text(headerTitle)
-                .font(.headline)
+                .font(DS.Text.bodySmallSemibold)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
             Spacer(minLength: 8)
@@ -410,9 +410,9 @@ struct SkillsHubView: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
-                    .font(.caption.weight(.semibold))
+                    .font(DS.Text.captionSemibold)
                 Text("Catalogue")
-                    .font(.footnote.weight(.medium))
+                    .font(DS.Text.bodySmallMedium)
                     .lineLimit(1)
             }
             .foregroundStyle(AppColors.accent)

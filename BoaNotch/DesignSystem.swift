@@ -32,6 +32,8 @@ enum DS {
         static let bodyMedium    = Font.system(size: 14, weight: .medium)
         /// 13pt regular. Blockquotes, file card titles, streaming cursor.
         static let bodySmall     = Font.system(size: 13)
+        /// 13pt medium. Detail labels (memory block category breadcrumb, skill detail header).
+        static let bodySmallMedium = Font.system(size: 13, weight: .medium)
         /// 13pt semibold. Top-bar panel title (équiv `.headline` macOS), CTA full-width
         /// affirmés (Submit routine), labels accentués 13pt.
         static let bodySmallSemibold = Font.system(size: 13, weight: .semibold)

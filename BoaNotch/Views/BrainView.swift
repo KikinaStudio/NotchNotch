@@ -211,7 +211,7 @@ struct BrainView: View {
                     }
                     syncButton
                 }
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 6)
 
@@ -224,16 +224,16 @@ struct BrainView: View {
                             HStack {
                                 if article.isIndex {
                                     Image(systemName: "pin.fill")
-                                        .font(.caption2)
+                                        .font(DS.Text.micro)
                                         .foregroundStyle(AppColors.accent.opacity(0.55))
                                 }
                                 Text(article.title)
-                                    .font(.footnote)
+                                    .font(DS.Text.bodySmall)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                 Spacer()
                                 Text("Ask")
-                                    .font(.caption2.weight(.medium))
+                                    .font(DS.Text.microMedium)
                                     .foregroundStyle(AppColors.accent.opacity(0.6))
                             }
                             .padding(.vertical, 6)
@@ -256,7 +256,7 @@ struct BrainView: View {
                 .foregroundStyle(DS.Surface.headerLow)
             if count > 0 {
                 Text("\(count)")
-                    .font(.caption2.monospacedDigit())
+                    .font(DS.Text.micro.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
         }
@@ -315,9 +315,9 @@ struct BrainView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.caption.weight(.semibold))
+                        .font(DS.Text.captionSemibold)
                     Text(block.category)
-                        .font(.footnote.weight(.medium))
+                        .font(DS.Text.bodySmallMedium)
                         .lineLimit(1)
                 }
                 .foregroundStyle(AppColors.accent)
@@ -474,14 +474,14 @@ struct BrainView: View {
     private func zoneHeader(icon: String, label: String, count: Int) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.callout.weight(.medium))
+                .font(DS.Text.labelMedium)
                 .foregroundStyle(.tertiary)
             Text(label)
-                .font(.callout.weight(.semibold))
+                .font(DS.Text.labelSemibold)
                 .foregroundStyle(.primary)
             Spacer(minLength: 8)
             Text("\(count)")
-                .font(.caption2.monospacedDigit())
+                .font(DS.Text.micro.monospacedDigit())
                 .foregroundStyle(.tertiary)
         }
     }
@@ -617,13 +617,13 @@ struct BrainView: View {
     private var capabilitiesHeader: some View {
         HStack(spacing: 10) {
             Image(systemName: "wrench.adjustable")
-                .font(.callout.weight(.medium))
+                .font(DS.Text.labelMedium)
                 .foregroundStyle(.tertiary)
             Text("Capacités")
-                .font(.callout.weight(.semibold))
+                .font(DS.Text.labelSemibold)
                 .foregroundStyle(.primary)
             Text("\(brainVM.technicalSkills.count)")
-                .font(.caption2.monospacedDigit())
+                .font(DS.Text.micro.monospacedDigit())
                 .foregroundStyle(.tertiary)
 
             Spacer(minLength: 8)
@@ -638,7 +638,7 @@ struct BrainView: View {
     private var capabilitiesSearchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.tertiary)
             TextField("Filtrer…", text: $capabilitiesSearchQuery)
                 .textFieldStyle(.plain)
@@ -649,7 +649,7 @@ struct BrainView: View {
                     capabilitiesSearchQuery = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
@@ -676,7 +676,7 @@ struct BrainView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "plus")
-                    .font(.caption.weight(.semibold))
+                    .font(DS.Text.captionSemibold)
                 Text("Parcourir")
                     .font(DS.Text.caption.weight(.semibold))
             }
@@ -723,7 +723,7 @@ struct BrainView: View {
                         .foregroundStyle(DS.Surface.headerLow)
                     Spacer(minLength: 8)
                     Text("\(group.skills.count)")
-                        .font(.caption2.monospacedDigit())
+                        .font(DS.Text.micro.monospacedDigit())
                         .foregroundStyle(.tertiary)
                     Image(systemName: "chevron.right")
                         .font(DS.Icon.chevronBold)
@@ -1013,7 +1013,7 @@ struct BrainView: View {
                 markdown: "Ton cerveau est vide. Installe [l'extension NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) et clippe ton premier article."
             )) ?? AttributedString("Ton cerveau est vide.")
         )
-        .font(.callout)
+        .font(DS.Text.label)
         .foregroundStyle(.tertiary)
         .multilineTextAlignment(.center)
         .tint(AppColors.accent.opacity(0.7))
@@ -1035,7 +1035,7 @@ struct BrainView: View {
                         .frame(width: 11, height: 11)
                 } else {
                     Image(systemName: "arrow.clockwise")
-                        .font(.footnote)
+                        .font(DS.Text.bodySmall)
                         .foregroundStyle(brainVM.pendingRawCount > 0 ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .scaleEffect(brainVM.pendingRawCount > 0 ? syncPulseScale : 1.0)
                 }
@@ -1129,9 +1129,9 @@ struct BrainView: View {
             Button(action: onBack) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.caption.weight(.semibold))
+                        .font(DS.Text.captionSemibold)
                     Text(skill.name)
-                        .font(.footnote.weight(.medium))
+                        .font(DS.Text.bodySmallMedium)
                         .lineLimit(1)
                 }
                 .foregroundStyle(AppColors.accent)
@@ -1152,7 +1152,7 @@ struct BrainView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")
-                            .font(.caption.weight(.semibold))
+                            .font(DS.Text.captionSemibold)
                         Text("Voir dans le Finder")
                             .font(DS.Text.caption.weight(.semibold))
                     }
@@ -1198,7 +1198,7 @@ struct BrainView: View {
 
     private func emptyState(_ message: String) -> some View {
         Text(message)
-            .font(.callout)
+            .font(DS.Text.label)
             .foregroundStyle(.tertiary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1226,7 +1226,7 @@ struct MemoryCard: View {
                     .font(DS.Text.serifMark)
                     .foregroundStyle(AppColors.accent.opacity(0.6))
                 Text(titleAttributed)
-                    .font(.callout.weight(.semibold))
+                    .font(DS.Text.labelSemibold)
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
@@ -1264,21 +1264,21 @@ struct MemoryCard: View {
         HStack(spacing: 10) {
             if confirmingDelete {
                 Text("Supprimer ?")
-                    .font(.caption2.weight(.medium))
+                    .font(DS.Text.microMedium)
                     .foregroundStyle(.secondary)
                 Button("Oui") {
                     confirmingDelete = false
                     onDelete?()
                 }
                 .buttonStyle(.plain)
-                .font(.caption2.weight(.semibold))
+                .font(DS.Text.microSemibold)
                 .foregroundStyle(Color.red.opacity(0.85))
                 .pointingHandCursor()
                 Button("Annuler") {
                     confirmingDelete = false
                 }
                 .buttonStyle(.plain)
-                .font(.caption2)
+                .font(DS.Text.micro)
                 .foregroundStyle(.tertiary)
                 .pointingHandCursor()
             } else {
@@ -1288,7 +1288,7 @@ struct MemoryCard: View {
                     DispatchQueue.main.async { editorFocused = true }
                 } label: {
                     Image(systemName: "pencil")
-                        .font(.caption.weight(.medium))
+                        .font(DS.Text.captionMedium)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
@@ -1299,7 +1299,7 @@ struct MemoryCard: View {
                     confirmingDelete = true
                 } label: {
                     Image(systemName: "trash")
-                        .font(.caption.weight(.medium))
+                        .font(DS.Text.captionMedium)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
@@ -1334,7 +1334,7 @@ struct MemoryCard: View {
                     draft = ""
                 }
                 .buttonStyle(.plain)
-                .font(.caption.weight(.medium))
+                .font(DS.Text.captionMedium)
                 .foregroundStyle(.tertiary)
                 .pointingHandCursor()
 
@@ -1348,7 +1348,7 @@ struct MemoryCard: View {
                     isEditing = false
                 }
                 .buttonStyle(.plain)
-                .font(.caption.weight(.semibold))
+                .font(DS.Text.captionSemibold)
                 .foregroundStyle(AppColors.accent)
                 .pointingHandCursor()
                 .keyboardShortcut(.return, modifiers: .command)
@@ -1393,9 +1393,9 @@ struct CuratedSkillDetailView: View {
             Button(action: onBack) {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
-                        .font(.caption.weight(.semibold))
+                        .font(DS.Text.captionSemibold)
                     Text(skill.displayName)
-                        .font(.footnote.weight(.medium))
+                        .font(DS.Text.bodySmallMedium)
                         .lineLimit(1)
                 }
                 .foregroundStyle(AppColors.accent)

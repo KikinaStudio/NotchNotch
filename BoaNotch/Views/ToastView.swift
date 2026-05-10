@@ -77,7 +77,7 @@ struct ToastView: View {
                 .foregroundStyle(kind.tint)
 
             Text(cleanForToast(message))
-                .font(.callout)
+                .font(DS.Text.label)
                 .foregroundStyle(.primary)
                 .lineLimit(2)
                 .truncationMode(.tail)

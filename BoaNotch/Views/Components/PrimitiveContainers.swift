@@ -28,7 +28,7 @@ struct PanelSection<Content: View>: View {
                     .foregroundStyle(DS.Surface.headerLow)
                 if let count = count, count > 0 {
                     Text("\(count)")
-                        .font(.caption2.monospacedDigit())
+                        .font(DS.Text.micro.monospacedDigit())
                         .foregroundStyle(.tertiary)
                 }
             }
