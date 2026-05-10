@@ -57,10 +57,10 @@ struct TemplateBrowserView: View {
                     .font(DS.Icon.caption)
                     .foregroundStyle(AppColors.accent)
                 Text(category.title)
-                    .font(.callout.weight(.semibold))
+                    .font(DS.Text.labelSemibold)
                     .foregroundStyle(.primary)
                 Text("\(category.templates.count)")
-                    .font(.caption2.monospacedDigit())
+                    .font(DS.Text.micro.monospacedDigit())
                     .foregroundStyle(.tertiary)
             }
 
@@ -84,11 +84,11 @@ struct TemplateBrowserView: View {
                     .font(DS.Icon.caption)
                     .foregroundStyle(AppColors.accent)
                 Text("Create your own")
-                    .font(.callout.weight(.medium))
+                    .font(DS.Text.labelMedium)
                     .foregroundStyle(.primary)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .font(.caption2.weight(.medium))
+                    .font(DS.Text.microMedium)
                     .foregroundStyle(.tertiary)
             }
             .padding(.horizontal, DS.Padding.cardProminentH)
@@ -127,7 +127,7 @@ struct TemplateBrowserView: View {
             }
 
             Text(template.subtitle)
-                .font(.caption)
+                .font(DS.Text.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .truncationMode(.tail)
@@ -140,7 +140,7 @@ struct TemplateBrowserView: View {
                     .frame(width: 7, height: 7)
 
                 Text(template.schedule)
-                    .font(.caption2.weight(.medium).monospaced())
+                    .font(DS.Text.microMedium.monospaced())
                     .foregroundStyle(.secondary)
                     .tracking(0.3)
                     .lineLimit(1)
@@ -195,13 +195,13 @@ struct TemplateBrowserView: View {
                 Image(systemName: "clock")
                 Text(template.schedule)
             }
-            .font(.caption)
+            .font(DS.Text.caption)
             .foregroundStyle(.tertiary)
 
             if template.inputs.isEmpty {
                 Spacer()
                 Text("No configuration needed — this routine works out of the box.")
-                    .font(.caption)
+                    .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                 Spacer()
@@ -221,15 +221,15 @@ struct TemplateBrowserView: View {
                 onSelectTemplate(draft)
             } label: {
                 Text("Create routine")
-                    .font(.footnote.weight(.semibold))
+                    .font(DS.Text.bodySmallSemibold)
                     .foregroundStyle(allRequiredFilled(template) ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background {
                         if allRequiredFilled(template) {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35))
+                            RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous).fill(AppColors.accent.opacity(0.35))
                         } else {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
+                            RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous).fill(.quaternary)
                         }
                     }
             }
@@ -244,11 +244,11 @@ struct TemplateBrowserView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 3) {
                 Text(input.label)
-                    .font(.caption)
+                    .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                 if !input.required {
                     Text("(optional)")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                         .foregroundStyle(.tertiary)
                 }
             }
@@ -257,11 +257,11 @@ struct TemplateBrowserView: View {
             case .freeText(let placeholder):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.callout)
+                    .font(DS.Text.label)
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                    .background(RoundedRectangle(cornerRadius: DS.Radius.chip).fill(.quaternary))
 
             case .picker(let options):
                 HStack(spacing: 6) {
@@ -270,15 +270,15 @@ struct TemplateBrowserView: View {
                             inputValues[input.id] = option
                         } label: {
                             Text(option)
-                                .font(.caption.weight(.medium))
+                                .font(DS.Text.captionMedium)
                                 .foregroundStyle(inputValues[input.id] == option ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
                                 .background {
                                     if inputValues[input.id] == option {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(AppColors.accent.opacity(0.35))
+                                        RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous).fill(AppColors.accent.opacity(0.35))
                                     } else {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary)
+                                        RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous).fill(.quaternary)
                                     }
                                 }
                         }
@@ -289,34 +289,34 @@ struct TemplateBrowserView: View {
             case .number(let placeholder, _):
                 TextField(placeholder, text: binding(for: input.id))
                     .textFieldStyle(.plain)
-                    .font(.callout)
+                    .font(DS.Text.label)
                     .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                    .background(RoundedRectangle(cornerRadius: DS.Radius.chip).fill(.quaternary))
                     .frame(width: 80)
 
             case .filePath(let placeholder):
                 HStack(spacing: 6) {
                     Text(inputValues[input.id] ?? placeholder)
-                        .font(.callout)
+                        .font(DS.Text.label)
                         .foregroundStyle(inputValues[input.id] != nil ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                        .background(RoundedRectangle(cornerRadius: DS.Radius.chip).fill(.quaternary))
 
                     Button {
                         pickFile(for: input.id)
                     } label: {
                         Image(systemName: "folder")
-                            .font(.footnote)
+                            .font(DS.Text.bodySmall)
                             .foregroundStyle(.secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 5)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                            .background(RoundedRectangle(cornerRadius: DS.Radius.chip).fill(.quaternary))
                     }
                     .buttonStyle(.plain)
                     .pointingHandCursor()
@@ -329,9 +329,9 @@ struct TemplateBrowserView: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.left")
-                    .font(.caption2.weight(.bold))
+                    .font(DS.Text.microBold)
                 Text(title)
-                    .font(.caption.weight(.medium))
+                    .font(DS.Text.captionMedium)
             }
             .foregroundStyle(.secondary)
         }
