@@ -24,9 +24,9 @@ struct ExpandedBarView: View {
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "person.fill")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                     Text(config.activeProfile)
-                        .font(.caption2.weight(.medium))
+                        .font(DS.Text.microMedium)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -54,7 +54,7 @@ struct ExpandedBarView: View {
                 HStack(spacing: 4) {
                     ProviderIcon(providerID: config.modelProvider, size: 6)
                     Text(config.modelDisplayName)
-                        .font(.caption2.weight(.medium))
+                        .font(DS.Text.microMedium)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -82,9 +82,9 @@ struct ExpandedBarView: View {
             } label: {
                 HStack(spacing: 3) {
                     Image(systemName: "brain")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                     Text(shortLabel(config.reasoningEffort))
-                        .font(.caption2.weight(.medium))
+                        .font(DS.Text.microMedium)
                 }
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
@@ -100,7 +100,7 @@ struct ExpandedBarView: View {
                 config.setImmediate("skip_memory", value: config.skipMemory)
             } label: {
                 Image(systemName: config.skipMemory ? "eye.slash.fill" : "eye.slash")
-                    .font(.footnote)
+                    .font(DS.Text.bodySmall)
                     .foregroundStyle(config.skipMemory ? AnyShapeStyle(AppColors.accent) : AnyShapeStyle(.tertiary))
             }
             .buttonStyle(.plain)
@@ -118,7 +118,7 @@ struct ExpandedBarView: View {
             let visibleRatio = chatVM.lastInputTokens > 0 ? max(rawRatio, 0.05) : 0
             HStack(spacing: 6) {
                 Text("Contexte")
-                    .font(.caption2)
+                    .font(DS.Text.micro)
                     .foregroundStyle(.secondary)
                 Capsule()
                     .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)

@@ -442,7 +442,7 @@ struct NotchView: View {
     private var leftSlot: some View {
         if let title = panelTitle {
             Text(title)
-                .font(.headline)
+                .font(DS.Text.bodySmallSemibold)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
         } else {
@@ -557,7 +557,7 @@ struct RecordingToastView: View {
                     Image(systemName: "text.bubble.fill")
                         .font(DS.Text.micro)
                     Text("Talk")
-                        .font(.caption.weight(.semibold))
+                        .font(DS.Text.captionSemibold)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
@@ -576,9 +576,9 @@ struct RecordingToastView: View {
             Button { notchVM.onBrainDumpAction?() } label: {
                 HStack(spacing: 5) {
                     Text("🧠")
-                        .font(.caption2)
+                        .font(DS.Text.micro)
                     Text("Dump")
-                        .font(.caption.weight(.semibold))
+                        .font(DS.Text.captionSemibold)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
