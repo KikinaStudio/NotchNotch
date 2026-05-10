@@ -85,13 +85,7 @@ When the notch is closed, a black toast slides under the notch with the response
 
 ### 1. Install
 
-**Homebrew (recommended):**
-
-```bash
-brew install --cask KikinaStudio/tap/notchnotch --no-quarantine
-```
-
-**Or download the DMG** from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/releases). Drag to Applications, then run once:
+**Download the DMG** from [GitHub Releases](https://github.com/KikinaStudio/Notchnotch/releases). Drag to Applications, then run once:
 
 ```bash
 xattr -cr /Applications/notchnotch.app
@@ -168,7 +162,7 @@ macOS will prompt for:
 - **No per-pixel drag-resize** -- two preset panel sizes ship (680x380pt standard, up to 900x600pt large). Toggle via the resize button in the top bar.
 - **Hardcoded localhost:8642** -- no UI to change the Hermes URL yet.
 - **Read-only cron management** -- routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
-- **Unsigned** -- triggers Gatekeeper. Use `xattr -cr` or install via Homebrew with `--no-quarantine`.
+- **Unsigned** -- triggers Gatekeeper. Use `xattr -cr` to clear the quarantine flag.
 
 ---
 
@@ -252,8 +246,6 @@ BoaNotch/
 +-- scripts/
 |   +-- run.sh                           # Build + bundle + codesign + launch
 |   +-- release.sh                       # Universal binary + DMG + ad-hoc sign
-+-- homebrew/
-|   +-- notchnotch.rb                    # Homebrew Cask formula template
 +-- BoaNotch/
     +-- BoaNotchApp.swift                # @main entry point
     +-- AppDelegate.swift                # Lifecycle, Carbon hotkeys, menu bar, voice
@@ -409,20 +401,7 @@ bash scripts/release.sh
 gh release create vX.Y.Z .build/notchnotch-vX.Y.Z.dmg \
     --title "notchnotch vX.Y.Z" \
     --notes "Onboarding, notchnotch rebrand"
-
-# 3. Update Homebrew formula
-shasum -a 256 .build/notchnotch-vX.Y.Z.dmg
-# Copy the hash into homebrew/notchnotch.rb sha256 field
 ```
-
-### Homebrew tap setup
-
-To enable `brew install --cask KikinaStudio/tap/notchnotch`:
-
-1. Create repo `KikinaStudio/homebrew-tap` on GitHub
-2. Copy `homebrew/notchnotch.rb` to `Casks/notchnotch.rb` in that repo
-3. Fill in the `sha256` from `shasum -a 256` of the DMG
-4. Users install with: `brew install --cask KikinaStudio/tap/notchnotch --no-quarantine`
 
 ### Signing notes
 
