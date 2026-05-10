@@ -209,6 +209,16 @@ class ChatViewModel: ObservableObject {
                                     self.messages[lastIndex].events[i].endedAt = Date()
                                 }
                             }
+
+                        case .retryStarted:
+                            // The retry restarts a fresh agent turn server-side
+                            // (no true mid-stream resume on /v1/responses), so
+                            // any deltas accumulated on this assistant message
+                            // would be doubled by the second pass. Clear them.
+                            // Final reconciliation via ResponseResult guarantees
+                            // the visible content matches the surviving turn.
+                            self.messages[lastIndex].content = ""
+                            self.messages[lastIndex].events.removeAll()
                         }
                     }
                 }
@@ -253,7 +263,19 @@ class ChatViewModel: ObservableObject {
             } catch {
                 if !Task.isCancelled {
                     let desc = error.localizedDescription
-                    if desc.contains("Could not connect") || desc.contains("Connection refused") {
+                    // Typed retry-exhaustion errors from streamResponse take
+                    // priority — their French localizedDescription is the
+                    // user-facing message (in-bubble, no toast).
+                    if let hermesError = error as? HermesError,
+                       case .unreachable = hermesError {
+                        connectionError = hermesError.errorDescription
+                    } else if let hermesError = error as? HermesError,
+                              case .streamInterrupted = hermesError {
+                        connectionError = hermesError.errorDescription
+                    } else if let hermesError = error as? HermesError,
+                              case .serverError = hermesError {
+                        connectionError = hermesError.errorDescription
+                    } else if desc.contains("Could not connect") || desc.contains("Connection refused") {
                         connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
                     } else if desc.contains("timed out") || desc.contains("Timeout") {
                         connectionError = "Hermes took too long to respond. Try reducing max iterations in settings, or check if the agent is stuck (hermes logs)"

@@ -130,7 +130,10 @@ class HermesConfig: ObservableObject {
         case "anthropic": return "https://api.anthropic.com/v1"
         case "openrouter": return "https://openrouter.ai/api/v1"
         case "nous": return "https://inference-api.nousresearch.com/v1"
-        case "minimax": return "https://api.minimax.io/v1"
+        // MiniMax exposes its Anthropic-compatible endpoint at /anthropic
+        // (NOT /v1 — Hermes routes via api_mode: anthropic_messages, see
+        // ~/.hermes/hermes-agent/plugins/model-providers/minimax/__init__.py).
+        case "minimax": return "https://api.minimax.io/anthropic"
         case "gemini": return "https://generativelanguage.googleapis.com/v1beta/openai"
         case "huggingface": return "https://router.huggingface.co/v1"
         case "zai": return "https://api.z.ai/api/paas/v4"

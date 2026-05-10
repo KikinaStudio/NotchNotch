@@ -151,6 +151,21 @@ class HermesClient {
         case toolCallCompleted(id: String, name: String, resultPreview: String)
         case completed(promptTokens: Int?, completionTokens: Int?)
         case failed(String)
+        /// Fired when streamResponse retries the POST after a network-level
+        /// disconnect (gateway killed, /update, Sparkle restart). The
+        /// consumer must clear any partial state accumulated on the
+        /// in-flight assistant message — the retry restarts a fresh
+        /// agent turn server-side, so deltas repart from zero.
+        /// `attempt` ∈ {1, 2, 3}.
+        case retryStarted(attempt: Int)
+    }
+
+    /// Sentinel thrown by `performStreamAttempt` when the SSE stream
+    /// closes (TCP EOF) before delivering a `response.completed` event.
+    /// This signals "the gateway died mid-stream" — eligible for retry,
+    /// distinct from a clean completion or an explicit `response.failed`.
+    private enum StreamAttemptError: Error {
+        case eofWithoutCompletion
     }
 
     /// Streaming equivalent of `sendResponse`. Subscribes to Hermes's
@@ -163,6 +178,74 @@ class HermesClient {
     func streamResponse(
         input: String,
         systemContext: String? = nil,
+        onEvent: @escaping (StreamEvent) -> Void
+    ) async throws -> ResponseResult {
+        // Retry policy (selective): only retry on disconnects that strongly
+        // imply the server-side agent task is dead. We do NOT retry on
+        // timeouts (server may still be churning — second POST would
+        // double-bill), 4xx (client bug), 5xx (server explicitly answered),
+        // or Task.cancel (user intent).
+        //
+        // Backoff: 1s, 2s, 4s. Same `conversation` UUID across retries so
+        // server-side response chaining still resolves (api_server.py:2020).
+        // Note: this is a plain network retry, not a true mid-stream resume —
+        // PR #21192 only auto-resumes messaging-platform sessions, not the
+        // /v1/responses HTTP endpoint. See CLAUDE.md for the trade-off.
+        let backoffNanoseconds: [UInt64] = [0, 1_000_000_000, 2_000_000_000, 4_000_000_000]
+        var lastRetryableError: Error? = nil
+
+        for attempt in 0...3 {
+            if attempt > 0 {
+                try await Task.sleep(nanoseconds: backoffNanoseconds[attempt])
+                let errDesc = lastRetryableError.map { String(describing: $0) } ?? "unknown"
+                print("[notchnotch] SSE retry \(attempt)/3 after \(errDesc)")
+                onEvent(.retryStarted(attempt: attempt))
+            }
+            do {
+                return try await performStreamAttempt(
+                    input: input,
+                    systemContext: systemContext,
+                    onEvent: onEvent
+                )
+            } catch let urlError as URLError where urlError.code == .cannotConnectToHost {
+                lastRetryableError = urlError
+                if attempt == 3 { throw HermesError.unreachable }
+                continue
+            } catch let urlError as URLError where urlError.code == .networkConnectionLost {
+                lastRetryableError = urlError
+                if attempt == 3 { throw HermesError.streamInterrupted }
+                continue
+            } catch StreamAttemptError.eofWithoutCompletion {
+                lastRetryableError = StreamAttemptError.eofWithoutCompletion
+                if attempt == 3 { throw HermesError.streamInterrupted }
+                continue
+            } catch let hermesError as HermesError {
+                // Server-acknowledged failures: re-emball 5xx with body
+                // into a clean HermesError.serverError. 4xx and other
+                // typed errors throw verbatim.
+                if case .httpErrorWithBody(let code, _) = hermesError, code >= 500 {
+                    throw HermesError.serverError(code)
+                }
+                if case .httpError(let code) = hermesError, code >= 500 {
+                    throw HermesError.serverError(code)
+                }
+                throw hermesError
+            }
+            // Other errors (CancellationError, URLError.timedOut,
+            // URLError.cancelled, anything unrecognized) bubble up
+            // verbatim — no retry, no rewrapping.
+        }
+        // Unreachable: every path in the loop either returns or throws.
+        throw HermesError.streamInterrupted
+    }
+
+    /// Single SSE attempt. Throws `StreamAttemptError.eofWithoutCompletion`
+    /// on premature TCP close, URLError on network-layer failures, or
+    /// HermesError on HTTP / server-side failures. The caller (`streamResponse`)
+    /// owns the retry decision.
+    private func performStreamAttempt(
+        input: String,
+        systemContext: String?,
         onEvent: @escaping (StreamEvent) -> Void
     ) async throws -> ResponseResult {
         guard let url = URL(string: "\(baseURL)/v1/responses") else {
@@ -393,15 +476,13 @@ class HermesClient {
             }
         }
 
-        // Stream closed without response.completed — still produce a final.
-        onEvent(.completed(promptTokens: promptTokens, completionTokens: completionTokens))
-        return ResponseResult(
-            content: content,
-            thinkingContent: thinkingContent,
-            toolCalls: toolCallsAccumulated,
-            promptTokens: promptTokens,
-            completionTokens: completionTokens
-        )
+        // Stream closed (TCP EOF) without delivering response.completed.
+        // A clean stream always passes through `case "response.completed"`
+        // above (which returns), so reaching here means the gateway died
+        // mid-flight or the connection dropped. Throw the sentinel so the
+        // outer retry loop can decide whether to retry or surface the
+        // streamInterrupted error.
+        throw StreamAttemptError.eofWithoutCompletion
     }
 
     /// function_call_output.output is `[{"type":"input_text","text":"..."}, ...]`.
@@ -809,6 +890,15 @@ enum HermesError: LocalizedError {
     case invalidResponse
     case httpError(Int)
     case httpErrorWithBody(Int, String)
+    /// Gateway not reachable on localhost:8642 after retries.
+    /// Surfaced as the in-bubble error message on full connect failure.
+    case unreachable
+    /// 5xx returned by the gateway. No retry — the server explicitly
+    /// answered, just not happily.
+    case serverError(Int)
+    /// SSE stream closed mid-flight after exhausting retries (gateway
+    /// died and didn't come back, or transient drops kept happening).
+    case streamInterrupted
 
     var errorDescription: String? {
         switch self {
@@ -816,6 +906,12 @@ enum HermesError: LocalizedError {
         case .invalidResponse: return "Bad response"
         case .httpError(let code): return "HTTP \(code)"
         case .httpErrorWithBody(let code, let body): return "HTTP \(code): \(body)"
+        case .unreachable:
+            return "Hermes ne répond pas. Vérifie qu'il tourne (~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run)."
+        case .serverError(let code):
+            return "Hermes a renvoyé une erreur (code \(code)). Réessaye dans un instant."
+        case .streamInterrupted:
+            return "Connexion à Hermes interrompue après 3 tentatives. Réessaye."
         }
     }
 }

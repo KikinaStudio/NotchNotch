@@ -65,6 +65,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // After Sparkle relaunches us, surface the Gatekeeper hint so users know
         // macOS may block the new binary on first run (we ship ad-hoc-signed).
         UpdaterService.shared.presentPostUpdateGatekeeperHintIfNeeded()
+
+        applyHermesLocaleOnce()
+    }
+
+    /// One-shot, idempotent: write `display.language: fr` to ~/.hermes/config.yaml
+    /// once per install so Hermes v0.13+ static i18n (PR #20329) renders CLI
+    /// and gateway messages in French. No UI, no toast — fail silently if the
+    /// config doesn't exist yet (Hermes not installed) so we don't create an
+    /// orphan file. Retries automatically next launch if the write itself fails
+    /// (the flag stays false until success).
+    private func applyHermesLocaleOnce() {
+        let key = "didSetHermesLocaleFr"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        let configPath = NSString(string: "~/.hermes/config.yaml").expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: configPath) else { return }
+        hermesConfig.setImmediate("display.language", value: "fr")
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     private func ensureBrainDirectories() {
