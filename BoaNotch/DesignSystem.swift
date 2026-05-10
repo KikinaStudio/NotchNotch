@@ -194,13 +194,6 @@ enum DS {
         static let xxl = CGFloat(20)
         /// 24pt — gap inter-sections Tools tab (Apps → Capacités).
         static let xxxl = CGFloat(24)
-
-        /// Alias historique de `md` (10pt). Conservé pour compatibilité ;
-        /// sera retiré une fois les call-sites migrés vers `DS.Spacing.md`.
-        static let row = CGFloat(10)
-        /// Alias historique de `xl` (16pt). Conservé pour compatibilité ;
-        /// sera retiré une fois les call-sites migrés vers `DS.Spacing.xl`.
-        static let section = CGFloat(16)
     }
 
     // MARK: - Padding presets
@@ -293,12 +286,5 @@ enum DS {
         /// 18pt — bottom inset variant ChatView. Espace pour l'input bar fixée
         /// en bas (qui a son propre padding interne).
         static let chatBottomInset = CGFloat(18)
-
-        /// Alias historique de `rowMinHeight` (32pt). Conservé pour compatibilité ;
-        /// sera retiré une fois les call-sites migrés.
-        static let routineRowMinHeight = CGFloat(32)
-        /// Alias historique remplacé par `DS.Padding.rowH` (14pt).
-        /// Conservé pour compatibilité ; sera retiré une fois les call-sites migrés.
-        static let routineRowPadH = CGFloat(14)
     }
 }

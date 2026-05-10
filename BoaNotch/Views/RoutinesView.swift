@@ -147,9 +147,9 @@ struct RoutinesView: View {
                 }
                 .accessibilityLabel(isActive ? "Pause \(title)" : "Resume \(title)")
             }
-            .padding(.horizontal, DS.Layout.routineRowPadH)
+            .padding(.horizontal, DS.Padding.rowH)
             .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, minHeight: DS.Layout.routineRowMinHeight, alignment: .center)
+            .frame(maxWidth: .infinity, minHeight: DS.Layout.rowMinHeight, alignment: .center)
             .background(rowHoverBackground(jobId: job.id))
             .contentShape(Rectangle())
             .opacity(isPaused ? 0.5 : 1.0)
@@ -191,7 +191,7 @@ struct RoutinesView: View {
         Rectangle()
             .fill(DS.Stroke.hairline)
             .frame(height: DS.Hairline.standard)
-            .padding(.horizontal, DS.Layout.routineRowPadH)
+            .padding(.horizontal, DS.Padding.rowH)
     }
 
     /// Discreet trailing row that mirrors the routine row anatomy. Acts as an
@@ -209,9 +209,9 @@ struct RoutinesView: View {
                     .foregroundStyle(DS.Surface.secondary)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, DS.Layout.routineRowPadH)
+            .padding(.horizontal, DS.Padding.rowH)
             .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, minHeight: DS.Layout.routineRowMinHeight, alignment: .center)
+            .frame(maxWidth: .infinity, minHeight: DS.Layout.rowMinHeight, alignment: .center)
             .contentShape(Rectangle()),
             tint: DS.Surface.secondary
         )
