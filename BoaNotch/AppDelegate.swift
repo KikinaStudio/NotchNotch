@@ -30,6 +30,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         Self.shared = self
 
+        // Touch the ComputerUseService singleton to trigger its lazy init.
+        // The private init() kicks off a refreshState() Task that logs the
+        // cua-driver detection via os_log (visible in Console.app and
+        // `log show`). @MainActor on the class requires we touch the
+        // singleton from a main-actor context (here) rather than at
+        // AppDelegate class-level init.
+        _ = ComputerUseService.shared
+
         ensureBrainDirectories()
 
         chatVM.notchVM = notchVM
