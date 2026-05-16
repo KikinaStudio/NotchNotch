@@ -18,6 +18,14 @@ import os.log
 final class ComputerUseService: ObservableObject {
     static let shared = ComputerUseService()
 
+    /// UserDefaults key for the user's confirmation that they've granted
+    /// macOS TCC permissions (Accessibility / Screen Recording / Automation).
+    /// We cannot verify these programmatically — cua-driver is a separate
+    /// binary with its own bundle-id, scoped TCC grants. The flag is a
+    /// UI-side act of faith: the user clicks "C'est bon" after walking
+    /// through the panels.
+    private static let permissionsConfirmedKey = "computerUsePermissionsConfirmed"
+
     @Published var state: SystemCapabilityState = .notInstalled
     @Published var isInstalling: Bool = false
     @Published var installProgress: String = ""
@@ -29,6 +37,11 @@ final class ComputerUseService: ObservableObject {
 
     /// `which cua-driver` → updates `state`. Cheap; safe to call after any
     /// install attempt or whenever the user returns from a permission panel.
+    /// State derivation: missing binary → `.notInstalled`; binary present and
+    /// the UserDefaults confirmation flag is true → `.ready`; otherwise
+    /// `.installedPendingPermissions` (binary on PATH but permissions not
+    /// confirmed yet).
+    ///
     /// The session-1 console log goes through `os_log` (NOT `print`) so it
     /// shows up in Console.app and `log show` for both Debug and Release
     /// builds — Swift `print` doesn't reach the unified log for GUI bundles
@@ -36,8 +49,23 @@ final class ComputerUseService: ObservableObject {
     /// `AppDelegate.probeCompressionEndpointOnce` and `LoginItemService`.
     func refreshState() async {
         let exists = await ShellRunner.commandExists("cua-driver")
-        state = exists ? .installed : .notInstalled
+        if !exists {
+            state = .notInstalled
+        } else if UserDefaults.standard.bool(forKey: Self.permissionsConfirmedKey) {
+            state = .ready
+        } else {
+            state = .installedPendingPermissions
+        }
         os_log("[notchnotch] cua-driver state: %{public}@", type: .info, String(describing: state))
+    }
+
+    /// Called from the detail view's "C'est bon" button. The user has just
+    /// walked through the 3 System Settings panels and tells us they've
+    /// granted the permissions. We persist the flag and bump the state to
+    /// `.ready` so the UI updates immediately without waiting for a refresh.
+    func confirmPermissions() {
+        UserDefaults.standard.set(true, forKey: Self.permissionsConfirmedKey)
+        state = .ready
     }
 
     /// Wraps `hermes computer-use install`. The underlying script downloads
@@ -45,6 +73,12 @@ final class ComputerUseService: ObservableObject {
     /// is bulk-blocking so we surface progress as a single static message
     /// rather than streaming per-line — line-level streaming will require a
     /// dedicated AsyncSequence variant in a later session.
+    ///
+    /// On success, writes `approvals.mode: manual` into `~/.hermes/config.yaml`.
+    /// This is the safe default for non-technical users — Hermes will ask
+    /// before running anything sensitive. For most users the value is already
+    /// `manual` (it's the Hermes default), so the write is a no-op; matters
+    /// for fresh installs where the user may have explicitly set another value.
     ///
     /// Never called automatically; an explicit UI button must trigger this.
     func install() async {
@@ -61,6 +95,8 @@ final class ComputerUseService: ObservableObject {
                 installError = raw.isEmpty
                     ? "Échec de l'installation (code \(result.exitCode))"
                     : String(raw.prefix(500))
+            } else {
+                HermesConfig.shared.setImmediate("approvals.mode", value: "manual")
             }
         } catch {
             installError = error.localizedDescription

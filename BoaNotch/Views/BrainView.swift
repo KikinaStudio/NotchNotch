@@ -26,6 +26,11 @@ struct BrainView: View {
     /// don't need to pass cronStore/CronJob types into BrainView).
     var tasksContent: () -> AnyView = { AnyView(EmptyView()) }
     @StateObject private var googleConnection = GoogleConnectionState()
+    /// Singleton service for the "Contrôle du Mac" SystemCapability. Used by
+    /// the Apps grid prefix + the dedicated detail overlay. `@ObservedObject`
+    /// (not `@StateObject`) because the lifecycle belongs to the singleton —
+    /// we observe an externally-owned instance.
+    @ObservedObject private var computerUseService = ComputerUseService.shared
     /// Owns the catalogue overlay state (lazy fetch + screen drill-down).
     /// Recreated each time BrainView mounts (i.e. each time the user opens
     /// the Brain panel from a closed state) — fits the "fermer Brain ferme
@@ -33,9 +38,11 @@ struct BrainView: View {
     @StateObject private var skillsHub = SkillsHubViewModel()
     @State private var selectedSkill: SkillInfo?
     @State private var selectedCuratedSkill: CuratedSkill?
+    @State private var selectedSystemCapability: SystemCapability?
     @State private var selectedMemoryBlock: MemoryBlock?
     @State private var hoveredMemoryId: String?
     @State private var hoveredCuratedId: String?
+    @State private var hoveredSystemId: String?
     @State private var capabilitiesSearchQuery: String = ""
     @State private var browseButtonHovered: Bool = false
     @State private var syncPulseScale: CGFloat = 1.0
@@ -54,7 +61,7 @@ struct BrainView: View {
             // Content (tabs now live in NotchView's top bar)
             ZStack {
                 contentForTab
-                    .opacity((selectedSkill == nil && selectedMemoryBlock == nil && selectedCuratedSkill == nil) ? 1 : 0)
+                    .opacity((selectedSkill == nil && selectedMemoryBlock == nil && selectedCuratedSkill == nil && selectedSystemCapability == nil) ? 1 : 0)
                     .allowsHitTesting(!notchVM.isSkillsHubOpen)
 
                 if let skill = selectedSkill {
@@ -84,6 +91,25 @@ struct BrainView: View {
                         },
                         onStateRefresh: {
                             brainVM.refreshLightMetrics()
+                        }
+                    )
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing),
+                        removal: .move(edge: .trailing)
+                    ))
+                }
+
+                if let capability = selectedSystemCapability {
+                    ComputerUseDetailView(
+                        capability: capability,
+                        service: computerUseService,
+                        onBack: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                                selectedSystemCapability = nil
+                            }
+                        },
+                        onAskExample: { prompt in
+                            onPrefillChat?(prompt)
                         }
                     )
                     .transition(.asymmetric(
@@ -492,9 +518,10 @@ struct BrainView: View {
         VStack(alignment: .leading, spacing: 10) {
             zoneHeader(icon: "app.badge",
                        label: "Apps",
-                       count: CuratedSkillCatalog.all.count)
+                       count: CuratedSkillCatalog.all.count + SystemCapabilityCatalog.all.count)
 
-            // 3-column fixed grid : avec 6 Apps curées on a 2 lignes pile.
+            // 3-column fixed grid : avec 6 Apps curées + N SystemCapabilities
+            // on dépasse 2 lignes mais le `LazyVGrid` gère la hauteur.
             // `.flexible()` partage la largeur dispo en parts égales — le
             // panel `.standard` donne ~180pt par card, `.large` ~250pt.
             LazyVGrid(
@@ -506,10 +533,128 @@ struct BrainView: View {
                 alignment: .leading,
                 spacing: 10
             ) {
+                // SystemCapabilities first (Contrôle du Mac) — visually
+                // distinct from curated Apps : no "Officiel" checkmark stamp,
+                // state-driven tint instead of brand color.
+                ForEach(SystemCapabilityCatalog.all) { capability in
+                    systemCard(capability)
+                }
                 ForEach(CuratedSkillCatalog.all) { skill in
                     appCard(skill)
                 }
             }
+        }
+    }
+
+    /// Card pour une SystemCapability (binaire local + permissions TCC). Layout
+    /// dérivé d'`appCard` mais SANS le `checkmark.seal.fill` "Officiel" — les
+    /// SystemCapabilities ne sont pas marquées officielles, l'identité c'est
+    /// "ton Mac" pas "un service externe". L'état (notInstalled / installing /
+    /// installedPendingPermissions / ready) est porté par la matière de la
+    /// card (fill + hairline) ET par la tint de l'icône.
+    ///
+    ///   • notInstalled : ghost (fill .quaternary.opacity 0.20, hairline 0.04),
+    ///     icône grise — comme une App non-connectée.
+    ///   • installing : fill 0.35 + hairline accent — en cours.
+    ///   • installedPendingPermissions : fill 0.35 + hairline orange + icône
+    ///     orange — signal d'action requise.
+    ///   • ready : fill 0.50 + hairline 0.10 + icône accent — équivalent App
+    ///     connectée.
+    private func systemCard(_ capability: SystemCapability) -> some View {
+        let state = computerUseService.state
+        let isHovered = hoveredSystemId == capability.id
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        let fillOpacity: Double = {
+            switch state {
+            case .notInstalled: return 0.20
+            case .installing, .installedPendingPermissions: return 0.35
+            case .ready: return 0.50
+            }
+        }()
+        let restStroke: Color = {
+            switch state {
+            case .notInstalled: return Color.white.opacity(0.04)
+            case .installing: return AppColors.accent.opacity(0.30)
+            case .installedPendingPermissions: return Color.orange.opacity(0.30)
+            case .ready: return Color.white.opacity(0.10)
+            }
+        }()
+        let strokeColor: Color = isHovered
+            ? AppColors.accent.opacity(state == .ready ? 0.55 : 0.35)
+            : restStroke
+
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                selectedSystemCapability = capability
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                // No "Officiel" seal — see doctrine above. Spacer keeps the
+                // baseline aligned with sibling appCards (which have the seal
+                // on this row).
+                Color.clear.frame(height: 13)
+
+                HStack(spacing: 8) {
+                    BrandIconView(
+                        kind: capability.icon,
+                        size: 22,
+                        desaturated: state == .notInstalled,
+                        tint: systemCardIconTint(state)
+                    )
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(capability.displayName)
+                            .font(DS.Text.bodyMedium)
+                            .foregroundStyle(state == .ready
+                                             ? AnyShapeStyle(.primary)
+                                             : AnyShapeStyle(.secondary))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text(systemCardStateLabel(state))
+                            .font(DS.Text.nano)
+                            .foregroundStyle(systemCardStateLabelStyle(state))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(shape)
+            .background(shape.fill(.quaternary.opacity(fillOpacity)))
+            .overlay(shape.stroke(strokeColor, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .pointingHandCursor()
+        .onHover { over in hoveredSystemId = over ? capability.id : nil }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state)
+    }
+
+    private func systemCardIconTint(_ state: SystemCapabilityState) -> Color? {
+        switch state {
+        case .notInstalled: return nil  // desaturated handles it
+        case .installing: return AppColors.accent
+        case .installedPendingPermissions: return Color.orange
+        case .ready: return AppColors.accent
+        }
+    }
+
+    private func systemCardStateLabel(_ state: SystemCapabilityState) -> String {
+        switch state {
+        case .notInstalled: return "Pas installé"
+        case .installing: return "Installation…"
+        case .installedPendingPermissions: return "Permissions requises"
+        case .ready: return "Actif"
+        }
+    }
+
+    private func systemCardStateLabelStyle(_ state: SystemCapabilityState) -> AnyShapeStyle {
+        switch state {
+        case .notInstalled: return AnyShapeStyle(.secondary)
+        case .installing: return AnyShapeStyle(AppColors.accent)
+        case .installedPendingPermissions: return AnyShapeStyle(Color.orange)
+        case .ready: return AnyShapeStyle(.primary)
         }
     }
 

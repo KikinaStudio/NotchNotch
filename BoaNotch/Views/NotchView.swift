@@ -183,7 +183,18 @@ struct NotchView: View {
 
                         Group {
                             if notchVM.isSettingsOpen {
-                                SettingsView(sessionStore: sessionStore, notchVM: notchVM, hermesConfig: hermesConfig, loginItemService: loginItemService, appearanceSettings: appearanceSettings)
+                                SettingsView(
+                                    sessionStore: sessionStore,
+                                    notchVM: notchVM,
+                                    hermesConfig: hermesConfig,
+                                    loginItemService: loginItemService,
+                                    appearanceSettings: appearanceSettings,
+                                    onPrefillChat: { message in
+                                        chatVM.draft = message
+                                        notchVM.isSettingsOpen = false
+                                        chatVM.focusComposerTrigger = UUID()
+                                    }
+                                )
                                     .notchPanelInsets(variant: .standard)
                                     .transition(.opacity)
                             } else if notchVM.isHistoryOpen {

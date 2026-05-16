@@ -39,12 +39,21 @@ enum SystemDetectionRule: Hashable {
     case binaryOnPath(String)
 }
 
-/// Resolved per-capability state. `.installed` means the binary is present on
-/// PATH — this makes NO claim about TCC permissions (Accessibility / Screen
-/// Recording / Automation grants). Permission state will be a separate signal
-/// surfaced in a future session.
+/// Resolved per-capability state. The 4 cases form a directed progression:
+///
+///   `.notInstalled` → `.installing` → `.installedPendingPermissions` → `.ready`
+///
+/// - `.installedPendingPermissions`: the binary is on PATH but the user has
+///   not yet confirmed the macOS TCC grants (Accessibility / Screen Recording
+///   / Automation). NotchNotch can NOT verify these programmatically —
+///   cua-driver is a separate binary with its own bundle-id, and TCC grants
+///   are scoped per bundle.
+/// - `.ready`: binary is on PATH AND the user clicked "C'est bon" in the
+///   detail view after walking through the 3 System Settings panels. This is
+///   a UI-side act of faith persisted via `UserDefaults`.
 enum SystemCapabilityState: Hashable {
     case notInstalled
     case installing
-    case installed
+    case installedPendingPermissions
+    case ready
 }

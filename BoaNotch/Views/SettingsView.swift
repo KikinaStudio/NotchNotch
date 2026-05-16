@@ -6,12 +6,21 @@ struct SettingsView: View {
     @ObservedObject var hermesConfig: HermesConfig
     @ObservedObject var loginItemService: LoginItemService
     @ObservedObject var appearanceSettings: AppearanceSettings
+    /// Pre-fill the chat composer + close the Settings panel. Used by the
+    /// Computer Use "Tester" button. Matches the closure shape passed to
+    /// `BrainView.onPrefillChat`.
+    var onPrefillChat: ((String) -> Void)?
     @StateObject private var googleConnection = GoogleConnectionState()
+    @ObservedObject private var computerUseService = ComputerUseService.shared
     @State private var apiKey = ""
     @State private var customBaseURL: String = ""
     @State private var showCustomModelSheet: Bool = false
     @State private var isOpenRouterConnecting: Bool = false
     @State private var openRouterError: String?
+    /// Mirrors `~/.hermes/config.yaml` → `approvals.mode`. Legal values:
+    /// `manual` / `smart` / `off`. Seeded on `onAppear` and rewritten via
+    /// `HermesConfig.setImmediate` on segment tap.
+    @State private var approvalMode: String = "manual"
 
     var body: some View {
         bodyContent
@@ -122,6 +131,13 @@ struct SettingsView: View {
                 // ── Memory ──
                 settingsSection("Memory") {
                     MemoryProviderSection()
+                }
+
+                sectionDivider
+
+                // ── Computer Use ──
+                settingsSection("Computer Use") {
+                    computerUseSection
                 }
 
                 sectionDivider
@@ -308,6 +324,112 @@ struct SettingsView: View {
                 // ── Updates ──
                 settingsSection("Updates") {
                     updatesRow
+                }
+            }
+        }
+        .onAppear {
+            // Seed the approval-mode picker from disk. Done on every appear
+            // (not just first) so an external edit to config.yaml is picked
+            // up next time the user opens Settings. The Hermes default if
+            // the key is absent is "manual".
+            approvalMode = HermesConfig.shared.readKey("approvals.mode") ?? "manual"
+        }
+    }
+
+    // MARK: - Computer Use section
+
+    @ViewBuilder
+    private var computerUseSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            computerUseStateRow
+
+            if computerUseService.state != .notInstalled {
+                approvalModePicker
+            }
+        }
+    }
+
+    private var computerUseStateRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Contrôle du Mac")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                Text(computerUseStateDetail)
+                    .font(DS.Text.micro)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            computerUseActionButton
+        }
+    }
+
+    private var computerUseStateDetail: String {
+        switch computerUseService.state {
+        case .notInstalled: return "Pas installé"
+        case .installing: return "Installation en cours…"
+        case .installedPendingPermissions: return "Permissions à accorder"
+        case .ready: return "Actif"
+        }
+    }
+
+    @ViewBuilder
+    private var computerUseActionButton: some View {
+        switch computerUseService.state {
+        case .notInstalled:
+            settingsActionButton(label: "Installer") {
+                Task { await computerUseService.install() }
+            }
+        case .installing:
+            ProgressView()
+                .controlSize(.mini)
+                .scaleEffect(0.7)
+                .frame(width: 16, height: 16)
+        case .installedPendingPermissions:
+            // Opens Accessibility first — it's the most critical TCC grant
+            // for cua-driver. The detail view (reachable from Brain panel)
+            // walks through all 3. This is the Settings-side shortcut.
+            settingsActionButton(label: "Réglages") {
+                computerUseService.openAccessibilitySettings()
+            }
+        case .ready:
+            settingsActionButton(label: "Tester") {
+                onPrefillChat?("Prends une capture de l'écran et dis-moi ce que tu vois")
+            }
+        }
+    }
+
+    private func settingsActionButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(label, action: action)
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
+            .pointingHandCursor()
+    }
+
+    private var approvalModePicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Mode d'approbation")
+                .font(DS.Text.caption)
+                .foregroundStyle(.secondary)
+            Text("Quand un agent veut exécuter une action sensible")
+                .font(DS.Text.micro)
+                .foregroundStyle(.tertiary)
+
+            HStack(spacing: 4) {
+                // Legal values per ~/.hermes/hermes-agent/tools/approval.py:840
+                // are exactly "manual" / "smart" / "off". Do NOT use "auto" —
+                // it does not exist on the Hermes side.
+                ForEach([
+                    ("manual", "Toujours demander"),
+                    ("smart", "Approbation intelligente"),
+                    ("off", "Ne jamais demander")
+                ], id: \.0) { value, label in
+                    segmentedButton(label: label, isSelected: approvalMode == value) {
+                        approvalMode = value
+                        hermesConfig.setImmediate("approvals.mode", value: value)
+                    }
                 }
             }
         }

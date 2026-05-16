@@ -22,6 +22,11 @@ struct BrandIconView: View {
     /// (not yet connected) — gives a clear monochrome cue without
     /// dropping the icon shape.
     var desaturated: Bool = false
+    /// Optional override for the icon color. When non-nil, takes precedence
+    /// over both the brand color and the `desaturated` fallback. Used by
+    /// `SystemCapability` cards to express state (orange for pending
+    /// permissions, accent for ready, etc.).
+    var tint: Color? = nil
 
     var body: some View {
         switch kind {
@@ -32,25 +37,40 @@ struct BrandIconView: View {
                     .renderingMode(.template)
                     .scaledToFit()
                     .frame(width: size, height: size)
-                    .foregroundStyle(desaturated
-                                     ? AnyShapeStyle(Color.primary.opacity(0.35))
-                                     : AnyShapeStyle(Self.color(for: hex)))
+                    .foregroundStyle(resolvedStyle(brandHex: hex))
             } else {
                 Image(systemName: "puzzlepiece.fill")
                     .font(.system(size: size * 0.7, weight: .medium))
-                    .foregroundStyle(desaturated
-                                     ? AnyShapeStyle(Color.primary.opacity(0.35))
-                                     : AnyShapeStyle(.tertiary))
+                    .foregroundStyle(resolvedFallbackStyle)
                     .frame(width: size, height: size)
             }
         case .sfSymbol(let name):
             Image(systemName: name)
                 .font(.system(size: size * 0.85, weight: .medium))
                 .frame(width: size, height: size)
-                .foregroundStyle(desaturated
-                                 ? AnyShapeStyle(Color.primary.opacity(0.35))
-                                 : AnyShapeStyle(.primary))
+                .foregroundStyle(resolvedSymbolStyle)
         }
+    }
+
+    private func resolvedStyle(brandHex: String) -> AnyShapeStyle {
+        if let tint { return AnyShapeStyle(tint) }
+        return desaturated
+            ? AnyShapeStyle(Color.primary.opacity(0.35))
+            : AnyShapeStyle(Self.color(for: brandHex))
+    }
+
+    private var resolvedFallbackStyle: AnyShapeStyle {
+        if let tint { return AnyShapeStyle(tint) }
+        return desaturated
+            ? AnyShapeStyle(Color.primary.opacity(0.35))
+            : AnyShapeStyle(.tertiary)
+    }
+
+    private var resolvedSymbolStyle: AnyShapeStyle {
+        if let tint { return AnyShapeStyle(tint) }
+        return desaturated
+            ? AnyShapeStyle(Color.primary.opacity(0.35))
+            : AnyShapeStyle(.primary)
     }
 
     // MARK: - Color resolution

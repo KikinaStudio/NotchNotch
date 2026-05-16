@@ -311,6 +311,17 @@ class HermesConfig: ObservableObject {
         writeToConfig(keyPath, value: value)
     }
 
+    /// Public on-demand reader for arbitrary YAML keys. Re-parses
+    /// `~/.hermes/config.yaml` each call. Use for settings rows that surface
+    /// live config values without a typed `@Published` property (e.g. the
+    /// `approvals.mode` picker in Settings → Computer Use). Returns `nil` if
+    /// the file is unreadable, the key is missing, or the value is YAML null.
+    func readKey(_ keyPath: String) -> String? {
+        guard let content = try? String(contentsOfFile: configPath, encoding: .utf8),
+              let yaml = (try? Yams.load(yaml: content)) as? [String: Any] else { return nil }
+        return yamlString(yaml, keyPath)
+    }
+
     private func writeToConfig(_ keyPath: String, value: Any) {
         guard var content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
 
