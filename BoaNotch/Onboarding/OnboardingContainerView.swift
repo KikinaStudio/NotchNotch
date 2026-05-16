@@ -11,15 +11,16 @@ struct OnboardingContainerView: View {
                 case 1: PrivacyStep(onboardingVM: onboardingVM)
                 case 2: InstallHermesStep(onboardingVM: onboardingVM)
                 case 3: ConnectProviderStep(onboardingVM: onboardingVM)
-                case 4: TelegramStep(onboardingVM: onboardingVM)
-                case 5: ReadyStep(onboardingVM: onboardingVM)
+                case 4: ComputerUseStep(onboardingVM: onboardingVM)
+                case 5: TelegramStep(onboardingVM: onboardingVM)
+                case 6: ReadyStep(onboardingVM: onboardingVM)
                 default: ReadyStep(onboardingVM: onboardingVM)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Navigation — back + dots (no back on welcome/ready, no dots on welcome/ready)
-            if onboardingVM.currentStep > 0 && onboardingVM.currentStep < 5 {
+            if onboardingVM.currentStep > 0 && onboardingVM.currentStep < 6 {
                 HStack {
                     Button { onboardingVM.goBack() } label: {
                         HStack(spacing: 3) {
@@ -37,7 +38,7 @@ struct OnboardingContainerView: View {
 
                     // Step dots
                     HStack(spacing: 5) {
-                        ForEach(0..<6, id: \.self) { i in
+                        ForEach(0..<7, id: \.self) { i in
                             Circle()
                                 // TODO(design): pas de bucket DS.Surface pour 0.1 (étape inactive); 0.5 ≈ secondary mais ternaire mixte conservé en littéral pour cohérence visuelle.
                                 .fill(.white.opacity(i == onboardingVM.currentStep ? 0.5 : 0.1))
