@@ -125,6 +125,50 @@ notchnotch te proposera la mise à jour automatiquement au prochain lancement. �
                  length="5795287"
                  type="application/octet-stream"/>
     </item>
+    <item>
+      <title>Version 1.3.2</title>
+      <pubDate>Sat, 16 May 2026 20:10:38 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>1.3.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[
+# notchnotch v1.3.2
+
+## Hotfix release (DEUXIÈME tentative)
+
+Si tu as v1.3.0 ou v1.3.1 qui crashe au démarrage, **c'est cette version-là qu'il te faut**.
+
+### Le vrai problème
+
+Sur macOS Tahoe avec hardened runtime, **library validation** est enforcée par défaut. Un framework embedded (Sparkle) doit avoir le même Team ID que l'app hôte… ou alors l'entitlement `com.apple.security.cs.disable-library-validation` doit être présent.
+
+notchnotch est ad-hoc-signé (TeamID vide), Sparkle aussi (après mon fix v1.3.1 qui re-signait inside-out). Mais **TeamID vide n'est PAS traité comme "même TeamID"** par dyld sur Tahoe — c'est traité comme "pas de TeamID = échec library validation". D'où le crash `mapping process and mapped file (non-platform) have different Team IDs` même quand les deux ont `TeamIdentifier=not set`.
+
+v1.3.1 corrigeait le bon inside-out signing mais ratait la racine. v1.3.2 ajoute l'entitlement.
+
+### Le fix
+
+`BoaNotch/BoaNotch.entitlements` gagne `com.apple.security.cs.disable-library-validation`. C'est la recette standard Sparkle pour les distros non-notarized. La Sandbox reste off (off depuis le début), le hardened runtime reste on, seule la library validation est relâchée.
+
+Vérifié en local : avec l'entitlement, l'app lance sans crash. Sans, crash dyld immédiat.
+
+### Pour mettre à jour
+
+- **Depuis v1.2.1** : Sparkle te proposera v1.3.2 automatiquement
+- **Depuis v1.3.0 ou v1.3.1 (qui crashent)** : tu dois **re-télécharger le DMG manuellement** depuis [GitHub Releases](https://github.com/KikinaStudio/NotchNotch/releases/tag/v1.3.2). Sparkle ne peut pas tourner sur une app qui ne lance pas.
+
+### Le reste
+
+Tout le contenu de v1.3.0/v1.3.1 est inclus : Contrôle du Mac (opt-in), trois onglets Memory/Tools/Missions, timeline unifiée du chat, Liquid Glass, SF Symbols 7, Hermes 0.13 (SSE retry, FR locale, fix MiniMax), refine wand sur routines locales, toasts par couleur sémantique, empty-state carousel, 11 providers LLM, sélecteur de memory provider.
+
+Bypass Gatekeeper au premier launch (right-click → Open → Open) — notchnotch n'est pas notarized par Apple.
+      ]]></description>
+      <enclosure url="https://github.com/KikinaStudio/NotchNotch/releases/download/v1.3.2/notchnotch-v1.3.2.dmg"
+                 sparkle:edSignature="xpyspDiEUXZazs3/C8q62zUg+5ZgEutkuLHeMyFbAew4yANnNAPhgrdjcar+SVzcf1UQ9Tj5+lyTNPIKCd9QDg=="
+                 length="5796257"
+                 type="application/octet-stream"/>
+    </item>
+
 
 
 
