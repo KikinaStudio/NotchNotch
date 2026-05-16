@@ -82,9 +82,29 @@ cp -R "$SPARKLE_FRAMEWORK" "$APP_DIR/Frameworks/"
 # we resign right after.
 install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/${APP_NAME}"
 
-# ── Codesign app (ad-hoc, deep, hardened runtime) ──────────────────────
+# ── Re-sign Sparkle.framework inside-out ───────────────────────────────
+# Sparkle ships pre-signed by its developers. On Tahoe with hardened
+# runtime, dyld refuses to load an embedded framework whose TeamID
+# differs from the host app's (ours is ad-hoc, empty TeamID). The outer
+# `codesign --deep` skips nested code that already has a valid signature,
+# so Sparkle's developer TeamID stays in place and the app crashes at
+# launch with "different Team IDs". Sign Sparkle inside-out explicitly
+# with the same ad-hoc identity before signing the outer app.
+SPARKLE_BUNDLE="$APP_DIR/Frameworks/Sparkle.framework"
+echo "Re-signing Sparkle.framework inside-out (ad-hoc)..."
+for nested in \
+    "$SPARKLE_BUNDLE/Versions/B/XPCServices/Downloader.xpc" \
+    "$SPARKLE_BUNDLE/Versions/B/XPCServices/Installer.xpc" \
+    "$SPARKLE_BUNDLE/Versions/B/Updater.app" \
+    "$SPARKLE_BUNDLE/Versions/B/Autoupdate" \
+    "$SPARKLE_BUNDLE/Versions/B/Sparkle" \
+    "$SPARKLE_BUNDLE"; do
+    [ -e "$nested" ] && codesign --force --options runtime --sign - "$nested"
+done
+
+# ── Codesign outer app (ad-hoc, hardened runtime) ──────────────────────
 echo "Signing ${APP_NAME}.app (ad-hoc, hardened runtime)..."
-codesign --force --deep --sign - \
+codesign --force --sign - \
     --entitlements BoaNotch/BoaNotch.entitlements \
     --options runtime \
     ".build/${APP_NAME}.app"

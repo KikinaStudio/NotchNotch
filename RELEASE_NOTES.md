@@ -1,26 +1,29 @@
-# notchnotch v1.3.0
+# notchnotch v1.3.1
 
-## Nouveautés
+## Hotfix release
 
-- **Contrôle du Mac (opt-in).** Ton agent peut maintenant utiliser tes apps comme tu le ferais : ouvrir Mail et répondre à un thread, ranger des fichiers dans Finder, naviguer dans Safari. Discret (ton curseur ne bouge pas), sûr (jamais ton mot de passe ni `sudo`), et sous contrôle (mode d'approbation manuelle par défaut, smart ou off). L'onboarding propose la step en quatrième position, skippable à tout moment.
-- **Trois onglets dans Brain : Memory · Tools · Missions.** L'ancien onglet Skills devient Tools, organisé en deux sections : une grille d'**Apps** connectées (Gmail, Drive, Spotify, Notion) et un catalogue de **Capacités** techniques avec recherche inline et bouton Parcourir pour installer depuis le Hermes Skills Hub. L'onglet Tasks devient Missions et héberge maintenant tes Routines (le panneau séparé a disparu).
-- **Timeline unifiée du chat.** Réflexion de l'agent et appels d'outils s'affichent dans une chronologie ordonnée pendant le streaming, avec un récap "Réfléchi pendant Ns" une fois la réponse terminée. Chaque ligne peut être dépliée pour voir les arguments et le résultat.
-- **Liquid Glass.** Sur macOS Tahoe (26+), le fond du panneau combine un dégradé noir-vers-verre avec la matière `.glassEffect` native. Camouflage propre du notch matériel, transparence subtile en bas. Fallback solide sur macOS 14/15.
-- **SF Symbols 7.** Toutes les icônes du top bar redessinées avec l'effet `drawOn` au survol sur Tahoe. Burgers gauche (chat / search / new / history) et droite (settings / Memory / Tools / Missions) symétriques.
+Si tu as téléchargé v1.3.0 et que l'app crashe au démarrage (rien ne s'affiche après le double-clic), c'est pour toi.
 
-## Améliorations
+### Le problème
 
-- **Hermes 0.13.** Retry automatique sur déconnexions SSE (3 tentatives, backoff 1/2/4s, conversation préservée), interface en français (`display.language: fr`), fix MiniMax (endpoint `/anthropic` au lieu de `/v1`), scrubbing de secrets côté serveur, header `X-Hermes-Session-Key` pour la continuité de session.
-- **Auto-update Sparkle stable.** Correction du `rpath @executable_path/../Frameworks` qui empêchait l'app de trouver Sparkle.framework après update. Le bypass Gatekeeper reste nécessaire à chaque mise à jour (notchnotch n'est pas notarized).
-- **Refine sur les routines locales.** Quand une routine livre un résultat dans le notch, un bouton baguette apparaît à côté de Copy/Retry pour pré-remplir le composer avec un primer ("Pour cette routine, je voudrais que tu…") et l'envoyer en `system_context` à Hermes.
-- **Toasts par couleur sémantique.** info (lavande), chat (bleu accent), success (vert pacman), error (corail), cron (ambre cloche). Le bleu n'est plus universel — il est réservé à la voix de l'agent.
-- **Empty-state carousel du chat.** 26 prompts spécifiques à Hermes (Goals long-cours, mémoire, cron, Mail/agenda, web, shell, brain/wiki), shufflés au premier affichage, auto-rotation toutes les 2s avec chevrons gauche/droite.
-- **Sélecteurs de fichiers visibles.** Les `NSOpenPanel` (paperclip, file picker des templates) flottent maintenant au-dessus du notch.
-- **Catalogue de providers étendu.** Gemini, HuggingFace, Z.AI, Kimi-Coding, Xiaomi et Custom (endpoint OpenAI-compatible type Ollama/vLLM) s'ajoutent à Nous Portal / OpenRouter / OpenAI / Anthropic / MiniMax. Brand icons monochrome via Simple Icons.
-- **Memory providers.** Sélecteur dans Settings pour basculer entre built-in, hindsight, mem0, supermemory, OpenViking, RetainDB. Local-only providers utilisables sans config supplémentaire ; les providers cloud demandent une clé API que NotchNotch écrit dans `~/.hermes/.env`.
+v1.3.0 shippait Sparkle.framework avec sa signature d'origine (Sparkle developers). Sur macOS Tahoe avec hardened runtime, dyld refuse de charger un framework embedded dont le TeamID diffère de l'app hôte. notchnotch étant ad-hoc-signé (TeamID vide), Sparkle (TeamID Sparkle) → mismatch → crash 3 secondes après le launch.
 
-## Pour mettre à jour
+`codesign --deep` était censé re-signer Sparkle avec notre identité ad-hoc mais skippait les binaires déjà valablement signés. Bug latent depuis l'intro de Sparkle (v1.2.x) qui se manifestait surtout sur Tahoe fraîche.
 
-Si tu as déjà v1.2.1, notchnotch te proposera la mise à jour automatiquement au prochain lancement. Sinon, télécharge le DMG depuis [GitHub Releases](https://github.com/KikinaStudio/NotchNotch/releases/tag/v1.3.0).
+### Le fix
 
-**Important** : à chaque mise à jour, refais le bypass Gatekeeper au premier launch (right-click → Open → Open). C'est normal — notchnotch n'est pas (encore) notarized par Apple.
+`scripts/release.sh` re-signe maintenant Sparkle.framework **inside-out explicitement** avant le sign outer : XPCServices/Downloader.xpc, XPCServices/Installer.xpc, Updater.app, Autoupdate, le dylib Sparkle, puis le bundle complet. Tous prennent la même identité ad-hoc que notchnotch.app. Plus de TeamID mismatch.
+
+### Pour mettre à jour
+
+Si tu avais v1.2.1 qui marche, Sparkle te proposera v1.3.1 automatiquement.
+
+Si tu as v1.3.0 (qui crashe), **tu dois re-télécharger manuellement** depuis [GitHub Releases](https://github.com/KikinaStudio/NotchNotch/releases/tag/v1.3.1) — l'app v1.3.0 ne peut pas démarrer Sparkle, donc l'auto-update ne fonctionne pas pour cette version.
+
+### Tout le reste de v1.3.0
+
+Les nouveautés v1.3.0 sont incluses ici : Contrôle du Mac (opt-in), trois onglets Memory/Tools/Missions, timeline unifiée du chat, Liquid Glass, SF Symbols 7, Hermes 0.13 (SSE retry, FR locale, fix MiniMax), refine wand sur routines locales, toasts par couleur sémantique, empty-state carousel, 11 providers LLM, sélecteur de memory provider.
+
+### Pour mettre à jour (depuis v1.2.1)
+
+notchnotch te proposera la mise à jour automatiquement au prochain lancement. À chaque mise à jour, refais le bypass Gatekeeper au premier launch (right-click → Open → Open) — l'app n'est pas (encore) notarized par Apple.
