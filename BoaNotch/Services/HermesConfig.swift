@@ -71,33 +71,22 @@ class HermesConfig: ObservableObject {
                     ("claude-opus-4-6-20250514", "opus 4.6"),
                 ]
             case "openrouter":
-                // Curated short-list of OpenRouter `:free` models. Verified
-                // live against https://openrouter.ai/api/v1/models — the
-                // previous list (claude-sonnet-4.6, gemini-3-flash-preview,
-                // minimax-m2.7, qwen-3.6-plus-preview) was hardcoded as
-                // "popular paid", which broke fresh free-tier users with
-                // HTTP 402 on their first message ("requires more credits,
-                // or fewer max_tokens").
-                //
-                // Free models have rate limits (typically 50-200 req/day)
-                // but no per-token charge. Users with credits can still
-                // pick any paid model via Advanced → Add custom model ID.
-                //
-                // TODO(post-v1.4.0): fetch this list live from
-                // /api/v1/models at launch + cache for 24h, then filter
-                // on `pricing.prompt == "0"` or `:free` suffix. Free
-                // model availability changes weekly and a hardcoded list
-                // will go stale within months. See also the max_tokens
-                // problem below — Hermes's anthropic_adapter computes
-                // max_tokens from context_length and free-tier OpenRouter
-                // rejects with HTTP 402; we need to cap it for `:free`
-                // models specifically.
+                // Prefer the live OpenRouter free-model list (fetched once per
+                // 24h, cached in UserDefaults). Falls back to a small hardcoded
+                // list when the cache is empty (first launch with no network,
+                // or OpenRouter is down). Custom user-added IDs are merged on
+                // top by the caller — see `customs + base` at the bottom.
+                let live = OpenRouterCatalog.shared.freeModels
+                if !live.isEmpty {
+                    return live.map { model in
+                        (value: model.id, label: OpenRouterCatalog.niceLabel(for: model.id))
+                    }
+                }
                 return [
-                    ("nvidia/nemotron-3-super-120b-a12b:free", "nemotron 120b"),
-                    ("qwen/qwen3-coder:free", "qwen3 coder"),
                     ("deepseek/deepseek-v4-flash:free", "deepseek v4 flash"),
-                    ("meta-llama/llama-3.3-70b-instruct:free", "llama 3.3 70b"),
-                    ("nousresearch/hermes-3-llama-3.1-405b:free", "hermes 3 405b"),
+                    ("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", "nemotron 3 nano omni"),
+                    ("google/gemma-4-26b-a4b-it:free", "gemma 4 26b"),
+                    ("google/gemma-4-31b-it:free", "gemma 4 31b"),
                 ]
             case "minimax":
                 return [
@@ -174,6 +163,24 @@ class HermesConfig: ObservableObject {
     func switchModel(_ model: (value: String, label: String)) {
         modelDefault = model.value
         setImmediate("model.default", value: model.value)
+        applyMaxTokensCap(for: model.value)
+    }
+
+    /// OpenRouter's free tier rejects requests where the computed `max_tokens`
+    /// exceeds a per-request credit floor (~13K tokens). Hermes's
+    /// anthropic_adapter normally derives `max_tokens` from `context_length`,
+    /// which balloons to 65K+ for modern models — and every chat fails with
+    /// HTTP 402 ("You requested up to 65536 tokens, but can only afford
+    /// 13333"). For `:free` model IDs we cap explicitly via
+    /// `model.max_tokens: 8000` (comfortable margin under the 13K floor).
+    /// Paid models get the override removed so Hermes resumes its natural
+    /// calculation.
+    private func applyMaxTokensCap(for modelId: String) {
+        if modelId.hasSuffix(":free") {
+            setImmediate("model.max_tokens", value: 8000)
+        } else {
+            unsetKey("model.max_tokens")
+        }
     }
 
     // MARK: - API key storage (~/.hermes/.env)
@@ -257,6 +264,7 @@ class HermesConfig: ObservableObject {
     private var fileSource: DispatchSourceFileSystemObject?
     private var debounceTask: Task<Void, Never>?
     private var writeDebounceTask: Task<Void, Never>?
+    private var openRouterCancellable: AnyCancellable?
 
     // MARK: - Init
 
@@ -265,6 +273,16 @@ class HermesConfig: ObservableObject {
         loadCustomModels()
         scanProfiles()
         startWatching()
+
+        // Re-render observers when OpenRouter's live model list arrives.
+        // `availableModels` is a computed property — without this, the
+        // picker would stay on the hardcoded fallback until something
+        // else triggers an objectWillChange.
+        openRouterCancellable = OpenRouterCatalog.shared.$freeModels
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
     }
 
     deinit {
@@ -342,6 +360,35 @@ class HermesConfig: ObservableObject {
         guard let content = try? String(contentsOfFile: configPath, encoding: .utf8),
               let yaml = (try? Yams.load(yaml: content)) as? [String: Any] else { return nil }
         return yamlString(yaml, keyPath)
+    }
+
+    /// Remove a key (and its line) from ~/.hermes/config.yaml. Used by
+    /// `applyMaxTokensCap` to clean up the cap when the user switches back
+    /// from a `:free` model to a paid one — leaving a stale `max_tokens: 8000`
+    /// would needlessly throttle the new (paid) model.
+    func unsetKey(_ keyPath: String) {
+        guard var content = try? String(contentsOfFile: configPath, encoding: .utf8) else { return }
+        let parts = keyPath.split(separator: ".").map(String.init)
+        guard let key = parts.last else { return }
+        let section = parts.count > 1 ? parts.dropLast().joined(separator: ".") : nil
+
+        if let section {
+            content = removeNestedYAMLKey(content, section: section, key: key)
+        } else {
+            let pattern = "(?m)^" + NSRegularExpression.escapedPattern(for: key) + ":.*\\n?"
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                content = regex.stringByReplacingMatches(
+                    in: content,
+                    range: NSRange(content.startIndex..., in: content),
+                    withTemplate: "")
+            }
+        }
+
+        do {
+            try content.data(using: .utf8)!.write(to: URL(fileURLWithPath: configPath), options: .atomic)
+        } catch {
+            print("[notchnotch] unsetKey \(keyPath) write error: \(error)")
+        }
     }
 
     private func writeToConfig(_ keyPath: String, value: Any) {
@@ -474,6 +521,39 @@ class HermesConfig: ObservableObject {
         }
         // Key not found — append at end
         return content + "\n\(key): \(value)\n"
+    }
+
+    private func removeNestedYAMLKey(_ content: String, section: String, key: String) -> String {
+        let sectionParts = section.split(separator: ".").map(String.init)
+        guard let sectionKey = sectionParts.last else { return content }
+        let keyIndent = String(repeating: "  ", count: sectionParts.count)
+
+        var lines = content.components(separatedBy: "\n")
+        var inSection = false
+        var removeIndex: Int?
+
+        for i in 0..<lines.count {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespaces)
+            if !inSection {
+                if trimmed.hasPrefix(sectionKey + ":") {
+                    inSection = true
+                }
+            } else {
+                if trimmed.isEmpty { continue }
+                if !lines[i].hasPrefix(keyIndent) {
+                    break  // Left the section without finding the key.
+                }
+                if trimmed.hasPrefix(key + ":") {
+                    removeIndex = i
+                    break
+                }
+            }
+        }
+
+        if let idx = removeIndex {
+            lines.remove(at: idx)
+        }
+        return lines.joined(separator: "\n")
     }
 
     private func replaceNestedYAML(_ content: String, section: String, key: String, value: String) -> String {

@@ -22,7 +22,25 @@ Le LaunchAgent utilise le label `ai.hermes.gateway` (convention communauté Herm
 
 User-scoped (`~/Library/LaunchAgents/`), donc zéro sudo, zéro mot de passe admin, zéro TCC à accorder. Tu peux toujours le contrôler avec `launchctl bootout/bootstrap gui/$(id -u)/ai.hermes.gateway` si tu veux faire du custom.
 
-### Pour mettre à jour
+## API HTTP toujours active
+
+Hermes n'ouvre le port 8642 que si `API_SERVER_ENABLED=true` est dans `~/.hermes/.env`. Avant v1.4.0 ce flag était implicite quand un messaging platform était configuré, mais pour un user qui n'a ni Telegram, ni Discord, ni Slack, Hermes tournait en mode **cron-only** — actif via le LaunchAgent, mais sans serveur HTTP que NotchNotch puisse joindre. Symptôme : toast jaune permanent *"Hermes ne répond pas"* même après une install propre.
+
+v1.4.0 écrit `API_SERVER_ENABLED=true` (et `API_SERVER_CORS_ORIGINS=*` pour l'extension Clipper) automatiquement à la fin de l'onboarding. Sur les installs existantes (upgrade depuis v1.3.x via Sparkle), le boot probe NotchNotch vérifie ces deux clés au lancement et les ajoute si absentes — puis kickstart le LaunchAgent pour que Hermes les relise. Toute valeur que tu aurais explicitement posée (`API_SERVER_ENABLED=false` par exemple) est respectée et n'est pas écrasée.
+
+## Modèles OpenRouter gratuits à jour
+
+La liste des modèles OpenRouter `:free` proposés dans le picker est maintenant **fetch live** depuis l'API OpenRouter au premier lancement, mise en cache 24h dans UserDefaults, et rafraîchie une fois par jour. Plus de liste rancie qui se traîne pendant des mois pendant qu'OpenRouter retire des modèles — au moindre `hermes-3-405b:free` qui disparaît côté serveur, le picker NotchNotch est à jour au prochain refresh.
+
+Fallback réseau-down : si OpenRouter est injoignable au tout premier lancement, le picker affiche une liste hardcodée de 4 modèles `:free` connus comme stables (DeepSeek V4 Flash, Nemotron 3 Nano Omni, Gemma 4 26B / 31B). Les rafraîchissements suivants tenteront de nouveau silencieusement.
+
+## `max_tokens` adapté aux modèles gratuits
+
+Le tier gratuit d'OpenRouter rejette toute requête où `max_tokens` excède ~13K (plancher de crédits par requête). Hermes calcule `max_tokens` à partir de `context_length` par défaut, ce qui balloon à 65K+ sur des modèles modernes — et chaque chat se fait shooter en HTTP 402 *"You requested up to 65536 tokens, but can only afford 13333"*.
+
+v1.4.0 cap explicitement `model.max_tokens` à **8000** dans `~/.hermes/config.yaml` dès qu'un modèle `:free` est sélectionné dans le picker (marge confortable sous le plancher). Si tu reviens sur un modèle payant, l'override est retiré et Hermes reprend son calcul naturel à partir du context_length. Les users qui upgradent depuis pre-v1.4.0 et qui étaient déjà sur un `:free` se voient appliquer la cap au prochain boot (uniquement si `max_tokens` n'est pas déjà posé manuellement — un override explicite est respecté).
+
+## Pour mettre à jour
 
 Sparkle te proposera v1.4.0 automatiquement. À la première ouverture après update, NotchNotch détecte qu'il n'y a pas encore de LaunchAgent et tu auras une option *Installer* dans Réglages → Hermes (ou ça s'installera tout seul au premier toast "Hermes ne répond pas" cliquable).
 

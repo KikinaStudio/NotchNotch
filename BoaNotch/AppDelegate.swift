@@ -44,7 +44,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // case where the user nuked the LaunchAgent manually, or NotchNotch
         // updated to a new plist version that needs re-bootstrapping.
         _ = HermesGatewayLauncher.shared
+        ensureApiServerEnvVars()
         reinstallLaunchAgentIfNeeded()
+
+        // Kick off a background refresh of OpenRouter's live :free model list.
+        // The catalog's init() already populated `freeModels` from the
+        // UserDefaults cache, so the picker is hot on second launch — this
+        // task just refreshes the cache when it's >24h old. Silent on
+        // network failure.
+        Task.detached {
+            await OpenRouterCatalog.shared.refreshIfStale()
+        }
 
         ensureBrainDirectories()
 
@@ -83,6 +93,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UpdaterService.shared.presentPostUpdateGatekeeperHintIfNeeded()
 
         applyHermesLocaleOnce()
+        applyMaxTokensCapIfFreeModel()
+    }
+
+    /// Boot-time safety net for users upgrading from a pre-v1.4.0 install
+    /// whose `model.default` is already a `:free` ID but who never went
+    /// through `switchModel` since the cap was added. Without this, their
+    /// first message after upgrade would still HTTP 402.
+    ///
+    /// Conservative: only writes the cap when `model.max_tokens` is absent
+    /// in config.yaml. If the user explicitly set a value (any value), we
+    /// respect it and don't override.
+    private func applyMaxTokensCapIfFreeModel() {
+        let modelDefault = hermesConfig.modelDefault
+        guard modelDefault.hasSuffix(":free") else { return }
+        guard hermesConfig.readKey("model.max_tokens") == nil else { return }
+        hermesConfig.setImmediate("model.max_tokens", value: 8000)
+        os_log("[notchnotch] Applied max_tokens=8000 at boot for :free model %{public}@",
+               type: .info, modelDefault)
     }
 
     /// Re-load the LaunchAgent plist if it exists but isn't loaded. Covers
@@ -110,6 +138,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 os_log("[notchnotch] LaunchAgent re-load failed: %{public}@",
                        type: .info,
                        error.localizedDescription)
+            }
+        }
+    }
+
+    /// Idempotent: ensure `API_SERVER_ENABLED=true` is in ~/.hermes/.env so
+    /// Hermes opens port 8642. Covers the upgrade path from pre-v1.4.0 (where
+    /// users may have Hermes installed without these env vars) and the case
+    /// where a user nuked `.env` between launches. Detection is presence-only —
+    /// if the user set `API_SERVER_ENABLED=false` explicitly we respect it
+    /// and don't overwrite.
+    ///
+    /// If we wrote anything AND the LaunchAgent is currently loaded, we
+    /// kickstart so Hermes re-reads `.env`. Otherwise it would keep running
+    /// in cron-only mode until the next launch.
+    private func ensureApiServerEnvVars() {
+        let homeDir = NSHomeDirectory()
+        let configPath = "\(homeDir)/.hermes/config.yaml"
+        // Don't create an orphan .env when Hermes isn't even installed yet.
+        guard FileManager.default.fileExists(atPath: configPath) else { return }
+
+        let envPath = "\(homeDir)/.hermes/.env"
+        let envContent = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
+        let hasEnabled = envContent.range(of: #"(?m)^API_SERVER_ENABLED="#, options: .regularExpression) != nil
+        let hasCors = envContent.range(of: #"(?m)^API_SERVER_CORS_ORIGINS="#, options: .regularExpression) != nil
+
+        guard !hasEnabled || !hasCors else { return }
+
+        if !hasEnabled {
+            hermesConfig.writeRawEnv(key: "API_SERVER_ENABLED", value: "true")
+        }
+        if !hasCors {
+            hermesConfig.writeRawEnv(key: "API_SERVER_CORS_ORIGINS", value: "*")
+        }
+
+        os_log("[notchnotch] Wrote missing API_SERVER env vars to ~/.hermes/.env", type: .info)
+
+        // Kickstart so a running gateway picks up the new env on next boot.
+        Task { @MainActor in
+            let launcher = HermesGatewayLauncher.shared
+            launcher.refreshState()
+            if launcher.state == .installedAndLoaded {
+                launcher.kickstart()
+                os_log("[notchnotch] Kickstarted gateway to apply new API_SERVER env vars", type: .info)
             }
         }
     }
