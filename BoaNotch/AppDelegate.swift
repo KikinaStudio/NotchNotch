@@ -38,6 +38,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // AppDelegate class-level init.
         _ = ComputerUseService.shared
 
+        // Same dance for HermesGatewayLauncher: its init refreshes state
+        // (plist on disk + launchctl loaded?) so it's ready before the
+        // first chat send. Then re-load the plist if needed — covers the
+        // case where the user nuked the LaunchAgent manually, or NotchNotch
+        // updated to a new plist version that needs re-bootstrapping.
+        _ = HermesGatewayLauncher.shared
+        reinstallLaunchAgentIfNeeded()
+
         ensureBrainDirectories()
 
         chatVM.notchVM = notchVM
@@ -75,6 +83,35 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         UpdaterService.shared.presentPostUpdateGatekeeperHintIfNeeded()
 
         applyHermesLocaleOnce()
+    }
+
+    /// Re-load the LaunchAgent plist if it exists but isn't loaded. Covers
+    /// two scenarios: (1) the user unloaded it manually with `launchctl
+    /// bootout` and didn't reboot, (2) a NotchNotch update changed the
+    /// plist template and the on-disk file needs replacing.
+    ///
+    /// `.notInstalled` is intentionally a no-op here — touching the
+    /// LaunchAgent without user consent at boot would be invasive. The
+    /// actionable "Hermes ne répond pas" toast handles that case lazily,
+    /// only when the user actually tries to chat and hits the failure.
+    ///
+    /// `.installedAndLoaded` is also a no-op — the gateway is up. If it's
+    /// up-but-silent (process stuck), the same toast handles it via
+    /// `kickstart` in `repairAndRetry`.
+    private func reinstallLaunchAgentIfNeeded() {
+        Task { @MainActor in
+            let launcher = HermesGatewayLauncher.shared
+            launcher.refreshState()
+            guard launcher.state == .installedNotLoaded else { return }
+            do {
+                try launcher.install()
+                os_log("[notchnotch] LaunchAgent re-loaded at launch", type: .info)
+            } catch {
+                os_log("[notchnotch] LaunchAgent re-load failed: %{public}@",
+                       type: .info,
+                       error.localizedDescription)
+            }
+        }
     }
 
     /// One-shot, idempotent: write `display.language: fr` to ~/.hermes/config.yaml

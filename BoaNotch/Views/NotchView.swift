@@ -68,6 +68,15 @@ struct NotchView: View {
                             removal: .opacity
                         ))
                         .onTapGesture {
+                            // Actionable toasts (e.g. unreachable Hermes →
+                            // install LaunchAgent) take priority: run their
+                            // closure and do NOT auto-open the notch, since
+                            // the action owns its own follow-up UI.
+                            if let action = notchVM.pendingToastAction {
+                                notchVM.pendingToastAction = nil
+                                action()
+                                return
+                            }
                             if let pending = notchVM.pendingCronOutput {
                                 notchVM.pendingCronOutput = nil
                                 chatVM.messages.append(ChatMessage(

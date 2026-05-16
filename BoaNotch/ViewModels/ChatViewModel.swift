@@ -269,6 +269,10 @@ class ChatViewModel: ObservableObject {
                     if let hermesError = error as? HermesError,
                        case .unreachable = hermesError {
                         connectionError = hermesError.errorDescription
+                        // Surface an actionable toast on top of the in-bubble
+                        // error. Bubble carries the explanation; toast carries
+                        // the one-tap repair (install LaunchAgent / kickstart).
+                        offerHermesRepair()
                     } else if let hermesError = error as? HermesError,
                               case .streamInterrupted = hermesError {
                         connectionError = hermesError.errorDescription
@@ -277,6 +281,7 @@ class ChatViewModel: ObservableObject {
                         connectionError = hermesError.errorDescription
                     } else if desc.contains("Could not connect") || desc.contains("Connection refused") {
                         connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
+                        offerHermesRepair()
                     } else if desc.contains("timed out") || desc.contains("Timeout") {
                         connectionError = "Hermes took too long to respond. Try reducing max iterations in settings, or check if the agent is stuck (hermes logs)"
                     } else if let hermesError = error as? HermesError,
@@ -314,6 +319,95 @@ class ChatViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Surface an actionable toast that says "tap to fix" — when tapped,
+    /// installs (or kickstarts) the LaunchAgent that auto-starts Hermes,
+    /// waits up to 10s for `/health`, then retries the last user message.
+    /// Inline `connectionError` stays in the bubble for context; the toast
+    /// is the one-tap recovery path for users who shouldn't have to know
+    /// what a gateway is.
+    @MainActor
+    func offerHermesRepair() {
+        // The closure captures notchVM/self weakly; toast tap-only triggers
+        // the work (we don't fire it eagerly to avoid running on transient
+        // network blips that resolve on their own).
+        notchVM?.showActionableToast(
+            "Hermes ne répond pas. Tape pour réparer.",
+            kind: .error
+        ) { [weak self] in
+            Task { @MainActor in
+                await self?.repairAndRetry()
+            }
+        }
+    }
+
+    /// Run the LaunchAgent repair appropriate to the current state, then
+    /// retry the last user message once /health responds. Fires progress /
+    /// outcome toasts at each step. Best-effort — surfaces a final error
+    /// toast and bails if the repair fails or `/health` never comes up.
+    @MainActor
+    private func repairAndRetry() async {
+        let launcher = HermesGatewayLauncher.shared
+        launcher.refreshState()
+
+        notchVM?.showToast("Réparation d'Hermes…", kind: .info)
+
+        switch launcher.state {
+        case .notInstalled, .installedNotLoaded:
+            do {
+                try launcher.install()
+            } catch {
+                notchVM?.showToast(
+                    "Échec de la réparation : \(error.localizedDescription)",
+                    kind: .error
+                )
+                return
+            }
+        case .installedAndLoaded:
+            // LaunchAgent reports loaded but /health was silent — the
+            // gateway process is stuck. Force-restart it.
+            launcher.kickstart()
+        }
+
+        // Poll /health for up to 10s. Hermes takes a few seconds to import
+        // all the Python modules and bind the socket — anything under 10s
+        // is normal.
+        var becameReachable = false
+        for _ in 0..<10 {
+            if await launcher.isHermesReachable() {
+                becameReachable = true
+                break
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+
+        guard becameReachable else {
+            notchVM?.showToast(
+                "Hermes ne démarre pas. Regarde ~/.hermes/logs/gateway.error.log.",
+                kind: .error
+            )
+            return
+        }
+
+        // Clear the inline error and retry the last user message. If there
+        // isn't one (edge case — toast tapped after manual cancel), at
+        // least the user is back to a working state.
+        connectionError = nil
+        notchVM?.showToast("Hermes redémarré ✓", kind: .success)
+        retryLastUserMessage()
+    }
+
+    /// Replay the last user message in the current conversation. The catch
+    /// block in `startRequest` strips the empty assistant placeholder on
+    /// error, so we just append a fresh placeholder + start a new request
+    /// with the same input. No-op if there's no user message to retry, or
+    /// if a stream is currently in flight.
+    @MainActor
+    func retryLastUserMessage() {
+        guard !isStreaming else { return }
+        guard let lastUser = messages.last(where: { $0.role == .user }) else { return }
+        startRequest(input: lastUser.content)
     }
 
     /// Fire-and-forget LLM title generation, gated to the first exchange and

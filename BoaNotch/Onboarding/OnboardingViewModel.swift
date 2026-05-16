@@ -162,6 +162,12 @@ class OnboardingViewModel: ObservableObject {
                     installStatus = "Configuring..."
                     let _ = try? await ShellRunner.run("\(NSHomeDirectory())/.local/bin/hermes init --non-interactive")
                 }
+                // Ensure the gateway auto-starts at login. Even if Hermes
+                // was already installed, an existing user may have it
+                // running only via a Terminal window (or not at all). The
+                // LaunchAgent makes the chat work after every reboot
+                // without any manual command. Idempotent.
+                await ensureLaunchAgentAndAwaitHealth()
                 installStatus = "Done!"
                 isInstalling = false
                 advance()
@@ -219,6 +225,11 @@ class OnboardingViewModel: ObservableObject {
                     // Verify config.yaml was created
                     let configExists = FileManager.default.fileExists(atPath: "\(hermesHome)/config.yaml")
                     if configExists {
+                        // Auto-start Hermes at login + wait for /health so
+                        // the chat actually works on the very first message.
+                        // The 10s poll is the typical cold-start window.
+                        installStatus = "Starting Hermes..."
+                        await ensureLaunchAgentAndAwaitHealth()
                         installStatus = "Done!"
                         isInstalling = false
                         advance()
@@ -262,6 +273,32 @@ class OnboardingViewModel: ObservableObject {
         UserDefaults.standard.removeObject(forKey: "onboardingStep")
         needsOnboarding = false
         notchVM?.suppressAutoClose = false
+    }
+
+    // MARK: - LaunchAgent + health bridge
+
+    /// Idempotently install the LaunchAgent and wait up to 10s for the
+    /// gateway to answer `/health`. The 10s window covers Hermes's normal
+    /// cold-start (Python import + socket bind). Any failure here is
+    /// soft — we still advance so the user can keep onboarding; the
+    /// actionable "Hermes ne répond pas" toast handles the retry path on
+    /// the chat side if we couldn't bring it up here.
+    @MainActor
+    private func ensureLaunchAgentAndAwaitHealth() async {
+        let launcher = HermesGatewayLauncher.shared
+        do {
+            try launcher.install()
+        } catch {
+            // Hermes binary missing or launchctl refused — log and bail.
+            // The chat-side actionable toast covers this case on first
+            // unreachable response.
+            print("[notchnotch] LaunchAgent install during onboarding failed: \(error.localizedDescription)")
+            return
+        }
+        for _ in 0..<10 {
+            if await launcher.isHermesReachable() { return }
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 
     // MARK: - Helpers

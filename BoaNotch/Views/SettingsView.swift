@@ -12,11 +12,17 @@ struct SettingsView: View {
     var onPrefillChat: ((String) -> Void)?
     @StateObject private var googleConnection = GoogleConnectionState()
     @ObservedObject private var computerUseService = ComputerUseService.shared
+    @ObservedObject private var hermesLauncher = HermesGatewayLauncher.shared
     @State private var apiKey = ""
     @State private var customBaseURL: String = ""
     @State private var showCustomModelSheet: Bool = false
     @State private var isOpenRouterConnecting: Bool = false
     @State private var openRouterError: String?
+    /// Tracks whether GET /health succeeds (fast 1s probe). Refreshed on
+    /// appear and after every launcher state change so the Hermes section
+    /// can distinguish "loaded AND responding" from "loaded but stuck".
+    @State private var isHermesHealthy: Bool = false
+    @State private var isHermesActionInFlight: Bool = false
     /// Mirrors `~/.hermes/config.yaml` → `approvals.mode`. Legal values:
     /// `manual` / `smart` / `off`. Seeded on `onAppear` and rewritten via
     /// `HermesConfig.setImmediate` on segment tap.
@@ -131,6 +137,13 @@ struct SettingsView: View {
                 // ── Memory ──
                 settingsSection("Memory") {
                     MemoryProviderSection()
+                }
+
+                sectionDivider
+
+                // ── Hermes ──
+                settingsSection("Hermes") {
+                    hermesGatewaySection
                 }
 
                 sectionDivider
@@ -333,7 +346,167 @@ struct SettingsView: View {
             // up next time the user opens Settings. The Hermes default if
             // the key is absent is "manual".
             approvalMode = HermesConfig.shared.readKey("approvals.mode") ?? "manual"
+            // Refresh Hermes launcher state + probe /health so the status
+            // pill is accurate the moment the user opens Settings.
+            hermesLauncher.refreshState()
+            Task { isHermesHealthy = await hermesLauncher.isHermesReachable() }
         }
+    }
+
+    // MARK: - Hermes gateway section
+
+    /// Lets the user inspect and control the launchd job that keeps the
+    /// Hermes gateway running. Status pill mirrors the actual state, action
+    /// button changes based on what's wrong (or right). Everything is a
+    /// structured UI affordance — no chat round-trip, no Terminal command
+    /// for the user to type. See CLAUDE.md "Documented exception".
+    @ViewBuilder
+    private var hermesGatewaySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Démarrage automatique")
+                        .font(DS.Text.caption)
+                        .foregroundStyle(.secondary)
+                    Text(hermesStateDetail)
+                        .font(DS.Text.micro)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                hermesStatusDot
+                hermesActionButtons
+            }
+
+            // Secondary actions (logs, restart, uninstall) only show when
+            // there's something to act on.
+            if hermesLauncher.state != .notInstalled {
+                HStack(spacing: 8) {
+                    Button {
+                        hermesLauncher.revealLogs()
+                    } label: {
+                        Text("Voir les logs")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+
+                    if hermesLauncher.state == .installedAndLoaded {
+                        Text("·")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(.tertiary)
+                        Button {
+                            hermesLauncher.kickstart()
+                            Task {
+                                try? await Task.sleep(for: .seconds(2))
+                                hermesLauncher.refreshState()
+                                isHermesHealthy = await hermesLauncher.isHermesReachable()
+                            }
+                        } label: {
+                            Text("Redémarrer")
+                                .font(DS.Text.micro)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                    }
+
+                    Text("·")
+                        .font(DS.Text.micro)
+                        .foregroundStyle(.tertiary)
+                    Button {
+                        try? hermesLauncher.uninstall()
+                        Task {
+                            isHermesHealthy = await hermesLauncher.isHermesReachable()
+                        }
+                    } label: {
+                        Text("Désinstaller le démarrage auto")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var hermesStateDetail: String {
+        switch hermesLauncher.state {
+        case .notInstalled:
+            return "Hermes ne démarrera pas tout seul"
+        case .installedNotLoaded:
+            return "LaunchAgent en pause"
+        case .installedAndLoaded:
+            return isHermesHealthy ? "Actif" : "Démarrage en cours…"
+        }
+    }
+
+    /// 8pt circle whose fill maps the launcher state + health probe to a
+    /// semantic colour: green = healthy, amber = installed but /health
+    /// silent, red = not installed. Matches the per-toast tint palette so
+    /// the same colour means the same thing across the app.
+    private var hermesStatusDot: some View {
+        let color: Color
+        switch hermesLauncher.state {
+        case .notInstalled:
+            color = Color(red: 0.95, green: 0.45, blue: 0.45) // coral red
+        case .installedNotLoaded:
+            color = Color(red: 0.97, green: 0.70, blue: 0.30) // amber
+        case .installedAndLoaded:
+            color = isHermesHealthy
+                ? Color(red: 0.50, green: 0.85, blue: 0.55) // green
+                : Color(red: 0.97, green: 0.70, blue: 0.30) // amber
+        }
+        return Circle()
+            .fill(color)
+            .frame(width: 8, height: 8)
+    }
+
+    @ViewBuilder
+    private var hermesActionButtons: some View {
+        if isHermesActionInFlight {
+            ProgressView()
+                .controlSize(.mini)
+                .scaleEffect(0.7)
+                .frame(width: 16, height: 16)
+        } else {
+            switch hermesLauncher.state {
+            case .notInstalled, .installedNotLoaded:
+                settingsActionButton(label: "Installer") {
+                    Task { await runHermesInstall() }
+                }
+            case .installedAndLoaded:
+                EmptyView()
+            }
+        }
+    }
+
+    @MainActor
+    private func runHermesInstall() async {
+        isHermesActionInFlight = true
+        defer { isHermesActionInFlight = false }
+        do {
+            try hermesLauncher.install()
+        } catch {
+            notchVM.showToast(
+                "Installation échouée : \(error.localizedDescription)",
+                kind: .error
+            )
+            return
+        }
+        // Poll briefly so the status pill flips from amber→green in-place.
+        for _ in 0..<8 {
+            if await hermesLauncher.isHermesReachable() {
+                isHermesHealthy = true
+                notchVM.showToast("Hermes prêt ✓", kind: .success)
+                return
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+        isHermesHealthy = false
     }
 
     // MARK: - Computer Use section

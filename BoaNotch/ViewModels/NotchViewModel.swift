@@ -101,6 +101,13 @@ class NotchViewModel: ObservableObject {
     /// stable `routineId` (drives the "Affine" button on the bubble).
     var pendingCronOutput: (jobId: String, jobName: String, fullContent: String)?
 
+    /// When set, a tap on the current toast invokes this closure instead of
+    /// opening the notch. Used for actionable error toasts (e.g. "Hermes ne
+    /// répond pas. Tape pour réparer.") — the closure performs the repair
+    /// (install LaunchAgent / kickstart) and orchestrates the retry. Cleared
+    /// whenever a new toast replaces it or the action fires.
+    var pendingToastAction: (() -> Void)?
+
     var currentWidth: CGFloat {
         if isOpen { return openSize.width }
         return isThinkingClosed ? closedSize.width + 36 : closedSize.width
@@ -167,6 +174,7 @@ class NotchViewModel: ObservableObject {
     func showToast(_ message: String, kind: ToastKind = .info) {
         toastTask?.cancel()
         pendingCronOutput = nil
+        pendingToastAction = nil
         let truncated = String(message.prefix(100))
         let next: NotchState = .toast(truncated, kind)
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
@@ -182,6 +190,18 @@ class NotchViewModel: ObservableObject {
             }
             self.onStateChange?(.closed)
         }
+    }
+
+    /// Show a toast whose tap fires `action` instead of opening the notch.
+    /// Use for repairable error states (e.g. unreachable Hermes — tap to
+    /// install the LaunchAgent). The action closure owns the entire repair
+    /// flow including any follow-up toasts; the tap handler does NOT also
+    /// open the notch.
+    func showActionableToast(_ message: String, kind: ToastKind, action: @escaping () -> Void) {
+        showToast(message, kind: kind)
+        // showToast clears pendingToastAction; reassign after so the tap
+        // wires through to the action (same pattern as showCronToast).
+        pendingToastAction = action
     }
 
     /// Present a cron-job completion toast. Stores the full content so a tap

@@ -907,7 +907,7 @@ enum HermesError: LocalizedError {
         case .httpError(let code): return "HTTP \(code)"
         case .httpErrorWithBody(let code, let body): return "HTTP \(code): \(body)"
         case .unreachable:
-            return "Hermes ne répond pas. Vérifie qu'il tourne (~/.hermes/hermes-agent && ./venv/bin/python3 hermes gateway run)."
+            return "Hermes ne répond pas. Touche le toast \"Tape pour réparer\" pour le relancer, ou ouvre Réglages → Hermes."
         case .serverError(let code):
             return "Hermes a renvoyé une erreur (code \(code)). Réessaye dans un instant."
         case .streamInterrupted:
