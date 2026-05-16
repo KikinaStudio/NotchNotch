@@ -71,11 +71,33 @@ class HermesConfig: ObservableObject {
                     ("claude-opus-4-6-20250514", "opus 4.6"),
                 ]
             case "openrouter":
+                // Curated short-list of OpenRouter `:free` models. Verified
+                // live against https://openrouter.ai/api/v1/models — the
+                // previous list (claude-sonnet-4.6, gemini-3-flash-preview,
+                // minimax-m2.7, qwen-3.6-plus-preview) was hardcoded as
+                // "popular paid", which broke fresh free-tier users with
+                // HTTP 402 on their first message ("requires more credits,
+                // or fewer max_tokens").
+                //
+                // Free models have rate limits (typically 50-200 req/day)
+                // but no per-token charge. Users with credits can still
+                // pick any paid model via Advanced → Add custom model ID.
+                //
+                // TODO(post-v1.4.0): fetch this list live from
+                // /api/v1/models at launch + cache for 24h, then filter
+                // on `pricing.prompt == "0"` or `:free` suffix. Free
+                // model availability changes weekly and a hardcoded list
+                // will go stale within months. See also the max_tokens
+                // problem below — Hermes's anthropic_adapter computes
+                // max_tokens from context_length and free-tier OpenRouter
+                // rejects with HTTP 402; we need to cap it for `:free`
+                // models specifically.
                 return [
-                    ("anthropic/claude-sonnet-4.6", "sonnet 4.6"),
-                    ("google/gemini-3-flash-preview", "gemini flash"),
-                    ("minimax/minimax-m2.7", "minimax m2.7"),
-                    ("qwen/qwen-3.6-plus-preview", "qwen 3.6+"),
+                    ("nvidia/nemotron-3-super-120b-a12b:free", "nemotron 120b"),
+                    ("qwen/qwen3-coder:free", "qwen3 coder"),
+                    ("deepseek/deepseek-v4-flash:free", "deepseek v4 flash"),
+                    ("meta-llama/llama-3.3-70b-instruct:free", "llama 3.3 70b"),
+                    ("nousresearch/hermes-3-llama-3.1-405b:free", "hermes 3 405b"),
                 ]
             case "minimax":
                 return [
