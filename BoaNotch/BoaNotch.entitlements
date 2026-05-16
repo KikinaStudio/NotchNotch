@@ -6,5 +6,18 @@
     <true/>
     <key>com.apple.security.network.server</key>
     <true/>
+    <!--
+        Required for ad-hoc-signed apps to load embedded frameworks (Sparkle).
+        Under hardened runtime, library validation requires the framework's
+        Team ID to match the app's. Two ad-hoc-signed binaries both have
+        empty TeamID, but empty is NOT treated as "same Team ID" — macOS
+        Tahoe rejects the load with "different Team IDs". This entitlement
+        disables that check, letting Sparkle (or any embedded framework)
+        load regardless of signing identity. The Sandbox is still off, and
+        the hardened runtime is still on — only library validation is
+        relaxed. Standard Sparkle workaround for non-notarized distros.
+    -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
 </dict>
 </plist>
