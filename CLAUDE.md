@@ -30,12 +30,18 @@ Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes
   Surface assumptions, confirm signatures, list impacted files, THEN code.
 - Match the signature style of existing callbacks in the same file 
   (e.g. `{ _, newValue in }` in `.onChange` if that's the local pattern)
-- Prefer **structured UI + direct REST** when 
+- Prefer **structured UI + direct REST / file write** when 
   Hermes exposes a deterministic endpoint and the data has a fixed shape — 
   the user explicitly chose this for routine editing (2026-04-26) because 
-  chat-driven edits hid *what* was editable. Each direct-REST call must 
-  be listed under "Documented exception" with rationale. Current set: 
-  cron pause / resume / edit (see below). Do not silently add new 
+  chat-driven edits hid *what* was editable. Each non-chat path must 
+  be listed under "Documented exception" with rationale. Current set 
+  (search "Documented exception —" for the full block of each): 
+  `~/.hermes/google_token.json` write, cron pause/resume/edit direct 
+  REST, memory provider direct config write, Skills Hub catalogue 
+  (browse/inspect/install) subprocess, `hermes computer-use install` 
+  subprocess + macOS privacy-panel deeplinks, `approvals.mode` direct 
+  config write, LaunchAgent for hermes gateway, `API_SERVER_ENABLED` 
+  + `model.max_tokens` direct writes. Do not silently add new 
   exceptions — write the doc edit in the same diff.
 
 ### After
