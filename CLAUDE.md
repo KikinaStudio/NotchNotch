@@ -617,6 +617,41 @@ in `SettingsView` is separated from the next by a full-width
 Each section has 14pt vertical padding internally. The outer VStack 
 spacing is 0 (the dividers + padding handle the rhythm).
 
+**Settings section order (2026-05-17)**: top-level order is AI Provider · 
+Computer Use · Google Workspace · Session · Appearance · Startup · Updates · 
+**Avancé** (a `DisclosureGroup` collapsed by default, gated by 
+`isAdvancedExpanded: Bool = false` `@State`). Inside Avancé: Memory · 
+Agent · Execution · Hermes, with `sectionDivider` between each. The label 
+"AVANCÉ" reuses the `DS.Text.sectionHead` styling (uppercase mono tracking 
+1.5, `.tertiary`) of regular section headers; the DisclosureGroup body 
+contains nested `settingsSection(...)` calls so each inner section keeps 
+its own header + 14pt vertical rhythm. Rationale: for non-tech users, 
+Memory provider / max iterations / streaming / terminal backend / Hermes 
+LaunchAgent are cognitive noise — bury them but don't hide them. The old 
+inner "Advanced" DisclosureGroup inside AI Provider (custom URL + custom 
+model ID) was REMOVED in the same change — those affordances are reached 
+via the "Custom" provider pill higher up in the same section.
+
+**Settings action button style (2026-05-17)**: every Settings-level action 
+button (Installer, Réglages, Tester, Déconnecter, etc.) goes through the 
+`settingsActionButton(label:action:)` helper — padding `.horizontal 10`, 
+`.vertical 5`, `RoundedRectangle(cornerRadius: 8).fill(.quaternary)`. Do 
+not reinvent the style inline (the Google "Disconnect" button previously 
+shipped with V4 padding + `.captionMedium` font and stood out as visually 
+inconsistent next to the V5 "Installer" — fixed 2026-05-17 by routing 
+through `settingsActionButton`). Same rule for copy: action labels in 
+Settings are French throughout (Installer / Réglages / Tester / 
+Déconnecter / Connecter Google / Connexion… / Voir les logs / Redémarrer 
+/ Désinstaller le démarrage auto). Don't mix English action labels in.
+
+**Provider API-key link (2026-05-17)**: `providerKeyLink` renders 
+"Récupérer ma clé sur {host} →" in `DS.Text.nano` + 
+`AppColors.accent.opacity(0.7)` below the API key field, sourced from 
+`OnboardingViewModel.providerKeyURLs[provider]`. Gemini ("gemini") is in 
+the map (`https://aistudio.google.com/apikey`) and gets a friendlier 
+label "Récupérer ma clé sur Google AI Studio →" (special-cased; other 
+providers show the URL host). Opens via `NSWorkspace.shared.open(url)`.
+
 **Liquid Glass (macOS 26+) policy**: `.glassEffect()` DOES ship on 
 macOS 26 (Tahoe). NotchNotch deployment target is 14, so glass usage 
 MUST go through `nnGlass()` / `nnGlass(in:)` / `NNGlassContainer` 

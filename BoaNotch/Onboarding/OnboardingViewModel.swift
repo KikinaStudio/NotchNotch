@@ -43,6 +43,7 @@ class OnboardingViewModel: ObservableObject {
         "openai":     "https://platform.openai.com/api-keys",
         "anthropic":  "https://console.anthropic.com/settings/keys",
         "minimax":    "https://www.minimax.io/platform/user-center/basic-information/interface-key",
+        "gemini":     "https://aistudio.google.com/apikey",
     ]
 
     // Reference to notchVM for suppressing auto-close

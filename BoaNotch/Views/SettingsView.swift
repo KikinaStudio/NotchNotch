@@ -27,6 +27,7 @@ struct SettingsView: View {
     /// `manual` / `smart` / `off`. Seeded on `onAppear` and rewritten via
     /// `HermesConfig.setImmediate` on segment tap.
     @State private var approvalMode: String = "manual"
+    @State private var isAdvancedExpanded: Bool = false
 
     var body: some View {
         bodyContent
@@ -89,61 +90,7 @@ struct SettingsView: View {
                             }
                         }
 
-                        DisclosureGroup {
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text("URL")
-                                        .font(DS.Text.caption)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 35, alignment: .leading)
-                                    TextField(
-                                        HermesConfig.defaultBaseURL(for: hermesConfig.modelProvider) ?? "https://...",
-                                        text: $customBaseURL
-                                    )
-                                    .textFieldStyle(.plain)
-                                    .font(DS.Text.caption)
-                                    .foregroundStyle(.primary)
-                                    .onSubmit {
-                                        if !customBaseURL.isEmpty {
-                                            hermesConfig.setImmediate("model.base_url", value: customBaseURL)
-                                        }
-                                    }
-                                }
-                                Button {
-                                    showCustomModelSheet = true
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "plus.circle")
-                                        Text("Add custom model ID")
-                                    }
-                                    .font(DS.Text.micro)
-                                    .foregroundStyle(AppColors.accent.opacity(0.7))
-                                }
-                                .buttonStyle(.plain)
-                                .pointingHandCursor()
-                            }
-                            .padding(.leading, 8)
-                            .padding(.top, 4)
-                        } label: {
-                            Text("Advanced")
-                                .font(DS.Text.micro)
-                                .foregroundStyle(.secondary)
-                        }
                     }
-                }
-
-                sectionDivider
-
-                // ── Memory ──
-                settingsSection("Memory") {
-                    MemoryProviderSection()
-                }
-
-                sectionDivider
-
-                // ── Hermes ──
-                settingsSection("Hermes") {
-                    hermesGatewaySection
                 }
 
                 sectionDivider
@@ -158,123 +105,6 @@ struct SettingsView: View {
                 // ── Google Workspace ──
                 settingsSection("Google Workspace") {
                     googleWorkspaceSection
-                }
-
-                sectionDivider
-
-                // ── Agent ──
-                settingsSection("Agent") {
-                    // Max iterations
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Max iterations")
-                            .font(DS.Text.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 4) {
-                            ForEach([("Quick", 15), ("Normal", 50), ("Deep", 90)], id: \.1) { label, val in
-                                segmentedButton(label: label, isSelected: hermesConfig.maxIterations == val) {
-                                    hermesConfig.maxIterations = val
-                                    hermesConfig.setImmediate("agent.max_iterations", value: val)
-                                }
-                            }
-
-                            Spacer()
-
-                            // Native stepper for fine-grained control
-                            HStack(spacing: 6) {
-                                Text("\(hermesConfig.maxIterations)")
-                                    .font(DS.Text.caption.monospacedDigit())
-                                    .foregroundStyle(.primary)
-                                    .frame(width: 24)
-                                Stepper(
-                                    "",
-                                    value: Binding(
-                                        get: { hermesConfig.maxIterations },
-                                        set: { val in
-                                            hermesConfig.maxIterations = val
-                                            hermesConfig.set("agent.max_iterations", value: val)
-                                        }
-                                    ),
-                                    in: 5...200,
-                                    step: 5
-                                )
-                                .labelsHidden()
-                                .controlSize(.mini)
-                            }
-                        }
-                    }
-
-                    // Streaming toggle
-                    HStack {
-                        Text("Stream responses")
-                            .font(DS.Text.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        StatusDotButton(isOn: hermesConfig.streaming) {
-                            let newValue = !hermesConfig.streaming
-                            hermesConfig.streaming = newValue
-                            hermesConfig.setImmediate("display.streaming", value: newValue)
-                        }
-                        .accessibilityLabel("Stream responses")
-                    }
-                }
-
-                sectionDivider
-
-                // ── Execution ──
-                settingsSection("Execution") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Terminal backend")
-                            .font(DS.Text.caption)
-                            .foregroundStyle(.secondary)
-
-                        HStack(spacing: 4) {
-                            ForEach(["local", "docker", "ssh"], id: \.self) { backend in
-                                segmentedButton(label: backend, isSelected: hermesConfig.terminalBackend == backend) {
-                                    hermesConfig.terminalBackend = backend
-                                    hermesConfig.setImmediate("terminal.backend", value: backend)
-                                }
-                            }
-                        }
-
-                        // Conditional sub-fields
-                        if hermesConfig.terminalBackend == "ssh" {
-                            VStack(spacing: 4) {
-                                configTextField("Host", text: Binding(
-                                    get: { hermesConfig.sshHost },
-                                    set: { hermesConfig.sshHost = $0; hermesConfig.set("terminal.ssh_host", value: $0) }
-                                ))
-                                configTextField("User", text: Binding(
-                                    get: { hermesConfig.sshUser },
-                                    set: { hermesConfig.sshUser = $0; hermesConfig.set("terminal.ssh_user", value: $0) }
-                                ))
-                                HStack {
-                                    Text("Port")
-                                        .font(DS.Text.caption)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 35, alignment: .leading)
-                                    TextField("", value: Binding(
-                                        get: { hermesConfig.sshPort },
-                                        set: { hermesConfig.sshPort = $0; hermesConfig.set("terminal.ssh_port", value: $0) }
-                                    ), format: .number)
-                                    .textFieldStyle(.plain)
-                                    .font(DS.Text.caption)
-                                    .foregroundStyle(.primary)
-                                }
-                            }
-                            .padding(.leading, 8)
-                            .transition(.opacity)
-                        }
-
-                        if hermesConfig.terminalBackend == "docker" {
-                            configTextField("Image", text: Binding(
-                                get: { hermesConfig.dockerImage },
-                                set: { hermesConfig.dockerImage = $0; hermesConfig.set("terminal.docker_image", value: $0) }
-                            ))
-                            .padding(.leading, 8)
-                            .transition(.opacity)
-                        }
-                    }
                 }
 
                 sectionDivider
@@ -338,6 +168,11 @@ struct SettingsView: View {
                 settingsSection("Updates") {
                     updatesRow
                 }
+
+                sectionDivider
+
+                // ── Avancé (collapsable) ──
+                advancedSection
             }
         }
         .onAppear {
@@ -350,6 +185,146 @@ struct SettingsView: View {
             // pill is accurate the moment the user opens Settings.
             hermesLauncher.refreshState()
             Task { isHermesHealthy = await hermesLauncher.isHermesReachable() }
+        }
+    }
+
+    // MARK: - Advanced (collapsable)
+
+    @ViewBuilder
+    private var advancedSection: some View {
+        DisclosureGroup(isExpanded: $isAdvancedExpanded) {
+            VStack(alignment: .leading, spacing: 0) {
+                settingsSection("Memory") {
+                    MemoryProviderSection()
+                }
+                sectionDivider
+                settingsSection("Agent") {
+                    agentSectionContent
+                }
+                sectionDivider
+                settingsSection("Execution") {
+                    executionSectionContent
+                }
+                sectionDivider
+                settingsSection("Hermes") {
+                    hermesGatewaySection
+                }
+            }
+        } label: {
+            Text("AVANCÉ")
+                .font(DS.Text.sectionHead)
+                .foregroundStyle(.tertiary)
+                .tracking(1.5)
+        }
+        .padding(.vertical, 14)
+    }
+
+    @ViewBuilder
+    private var agentSectionContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Max iterations")
+                .font(DS.Text.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 4) {
+                ForEach([("Quick", 15), ("Normal", 50), ("Deep", 90)], id: \.1) { label, val in
+                    segmentedButton(label: label, isSelected: hermesConfig.maxIterations == val) {
+                        hermesConfig.maxIterations = val
+                        hermesConfig.setImmediate("agent.max_iterations", value: val)
+                    }
+                }
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    Text("\(hermesConfig.maxIterations)")
+                        .font(DS.Text.caption.monospacedDigit())
+                        .foregroundStyle(.primary)
+                        .frame(width: 24)
+                    Stepper(
+                        "",
+                        value: Binding(
+                            get: { hermesConfig.maxIterations },
+                            set: { val in
+                                hermesConfig.maxIterations = val
+                                hermesConfig.set("agent.max_iterations", value: val)
+                            }
+                        ),
+                        in: 5...200,
+                        step: 5
+                    )
+                    .labelsHidden()
+                    .controlSize(.mini)
+                }
+            }
+        }
+
+        HStack {
+            Text("Stream responses")
+                .font(DS.Text.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            StatusDotButton(isOn: hermesConfig.streaming) {
+                let newValue = !hermesConfig.streaming
+                hermesConfig.streaming = newValue
+                hermesConfig.setImmediate("display.streaming", value: newValue)
+            }
+            .accessibilityLabel("Stream responses")
+        }
+    }
+
+    @ViewBuilder
+    private var executionSectionContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Terminal backend")
+                .font(DS.Text.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 4) {
+                ForEach(["local", "docker", "ssh"], id: \.self) { backend in
+                    segmentedButton(label: backend, isSelected: hermesConfig.terminalBackend == backend) {
+                        hermesConfig.terminalBackend = backend
+                        hermesConfig.setImmediate("terminal.backend", value: backend)
+                    }
+                }
+            }
+
+            if hermesConfig.terminalBackend == "ssh" {
+                VStack(spacing: 4) {
+                    configTextField("Host", text: Binding(
+                        get: { hermesConfig.sshHost },
+                        set: { hermesConfig.sshHost = $0; hermesConfig.set("terminal.ssh_host", value: $0) }
+                    ))
+                    configTextField("User", text: Binding(
+                        get: { hermesConfig.sshUser },
+                        set: { hermesConfig.sshUser = $0; hermesConfig.set("terminal.ssh_user", value: $0) }
+                    ))
+                    HStack {
+                        Text("Port")
+                            .font(DS.Text.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 35, alignment: .leading)
+                        TextField("", value: Binding(
+                            get: { hermesConfig.sshPort },
+                            set: { hermesConfig.sshPort = $0; hermesConfig.set("terminal.ssh_port", value: $0) }
+                        ), format: .number)
+                        .textFieldStyle(.plain)
+                        .font(DS.Text.caption)
+                        .foregroundStyle(.primary)
+                    }
+                }
+                .padding(.leading, 8)
+                .transition(.opacity)
+            }
+
+            if hermesConfig.terminalBackend == "docker" {
+                configTextField("Image", text: Binding(
+                    get: { hermesConfig.dockerImage },
+                    set: { hermesConfig.dockerImage = $0; hermesConfig.set("terminal.docker_image", value: $0) }
+                ))
+                .padding(.leading, 8)
+                .transition(.opacity)
+            }
         }
     }
 
@@ -720,25 +695,16 @@ struct SettingsView: View {
                     Image(systemName: "checkmark.seal.fill")
                         .font(DS.Text.caption)
                         .foregroundStyle(AppColors.accent)
-                    Text("Connected as ")
+                    Text("Connecté en tant que ")
                         .font(DS.Text.caption)
                         .foregroundStyle(.secondary)
                     + Text(email)
                         .font(DS.Text.captionMedium)
                         .foregroundStyle(.primary)
                     Spacer()
-                    Button {
+                    settingsActionButton(label: "Déconnecter") {
                         googleConnection.disconnect()
-                    } label: {
-                        Text("Disconnect")
-                            .font(DS.Text.captionMedium)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
                     }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
                 }
             } else {
                 HStack(spacing: 8) {
@@ -752,7 +718,7 @@ struct SettingsView: View {
                                     .scaleEffect(0.7)
                                     .frame(width: 10, height: 10)
                             }
-                            Text(googleConnection.isConnecting ? "Connecting…" : "Connect Google")
+                            Text(googleConnection.isConnecting ? "Connexion…" : "Connecter Google")
                                 .font(DS.Text.caption.weight(.semibold))
                                 .foregroundStyle(googleConnection.isConnecting ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
                         }
@@ -764,7 +730,7 @@ struct SettingsView: View {
                     .disabled(googleConnection.isConnecting)
                     .pointingHandCursor()
 
-                    Text("Gmail, Calendar, Drive, and more")
+                    Text("Gmail, Calendar, Drive et plus")
                         .font(DS.Text.micro)
                         .foregroundStyle(.secondary)
                 }
@@ -831,12 +797,18 @@ struct SettingsView: View {
     private var providerKeyLink: some View {
         if let urlString = OnboardingViewModel.providerKeyURLs[hermesConfig.modelProvider],
            let url = URL(string: urlString) {
+            let label: String = {
+                if hermesConfig.modelProvider == "gemini" {
+                    return "Récupérer ma clé sur Google AI Studio →"
+                }
+                return "Récupérer ma clé sur \(url.host ?? urlString) →"
+            }()
             Button {
                 NSWorkspace.shared.open(url)
             } label: {
-                Text("Get a key at \(url.host ?? urlString)")
+                Text(label)
                     .font(DS.Text.nano)
-                    .foregroundStyle(AppColors.accent.opacity(0.55))
+                    .foregroundStyle(AppColors.accent.opacity(0.7))
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
