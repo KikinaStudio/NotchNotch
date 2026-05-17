@@ -27,12 +27,19 @@ struct ComputerUseStep: View {
         Group {
             if service.installError != nil {
                 errorPhase
-            } else if service.isInstalling {
+            } else if service.isInstalling || service.state == .installing {
+                // Couvre aussi la fenêtre entre `isInstalling = false` et
+                // `await refreshState()` (cf. ComputerUseService.install) :
+                // sans ce second prédicat, le state machine traverse
+                // pitchPhase quelques ms et la transition était perçue par
+                // l'user comme "la section ferme puis revient".
                 installingPhase
             } else {
                 switch service.state {
-                case .notInstalled, .installing:
+                case .notInstalled:
                     pitchPhase
+                case .installing:
+                    installingPhase // unreachable en pratique (couvert au-dessus), pour exhaustivité
                 case .installedPendingPermissions:
                     permissionsPhase
                 case .ready:
@@ -86,22 +93,33 @@ struct ComputerUseStep: View {
 
     // MARK: - Phase: installing
 
+    /// Layout aligné sur pitchPhase (titre top-leading + description sous le
+    /// titre) pour que la transition pitch → installing ne se traduise PAS
+    /// par un saut visuel "titre qui passe du haut au centre" — feedback
+    /// user 2026-05-17.
     private var installingPhase: some View {
-        VStack(spacing: 16) {
-            Spacer()
-
+        VStack(alignment: .leading, spacing: 0) {
             Text("Donner les commandes du Mac à ton agent")
                 .font(DS.Text.titleSmall)
                 .foregroundStyle(DS.Surface.primary)
+                .padding(.bottom, 6)
 
-            SpinningRing()
-
-            Text(service.installProgress)
+            Text("Téléchargement de cua-driver en cours… Cela peut prendre une minute.")
                 .font(DS.Text.caption)
                 .foregroundStyle(DS.Surface.tertiary)
-                .animation(.easeInOut(duration: 0.3), value: service.installProgress)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 14)
 
-            Spacer()
+            VStack(alignment: .center, spacing: 12) {
+                Spacer()
+                SpinningRing()
+                Text(service.installProgress)
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.quaternary)
+                    .animation(.easeInOut(duration: 0.3), value: service.installProgress)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 

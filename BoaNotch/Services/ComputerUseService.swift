@@ -96,7 +96,22 @@ final class ComputerUseService: ObservableObject {
                     ? "Échec de l'installation (code \(result.exitCode))"
                     : String(raw.prefix(500))
             } else {
-                HermesConfig.shared.setImmediate("approvals.mode", value: "manual")
+                // Hermes CLI exit-0 ≠ install réussie : `cmd_computer_use`
+                // dans hermes_cli/main.py:11351 ignore la valeur de retour de
+                // `install_cua_driver()` et exit toujours 0. Si l'upstream
+                // install.sh a échoué silencieusement (réseau, curl manquant,
+                // permission de download), le binaire n'est pas sur PATH et
+                // l'user retombait sur pitchPhase "comme s'il n'avait pas
+                // cliqué". On re-vérifie le binaire et on synthétise une
+                // erreur explicite si absent.
+                let exists = await ShellRunner.commandExists("cua-driver")
+                if exists {
+                    HermesConfig.shared.setImmediate("approvals.mode", value: "manual")
+                } else {
+                    let raw = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let suffix = raw.isEmpty ? "" : "\n\n\(String(raw.prefix(400)))"
+                    installError = "L'installation s'est terminée sans réussir à poser cua-driver sur ton PATH. Vérifie ta connexion et réessaie, ou consulte la doc.\(suffix)"
+                }
             }
         } catch {
             installError = error.localizedDescription
