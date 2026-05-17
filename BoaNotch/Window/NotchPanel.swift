@@ -45,3 +45,24 @@ extension NSOpenPanel {
         NSApp.activate(ignoringOtherApps: true)
     }
 }
+
+extension NotchPanel {
+    /// Temporarily drops every NotchPanel window level to `.normal` so a
+    /// system TCC prompt (mic, speech recognition, Accessibility, etc.)
+    /// renders ABOVE the notch instead of being hidden behind our
+    /// `.mainMenu + 3` panel. Restores `.mainMenu + 3` after the block.
+    /// `NSApp.activate(ignoringOtherApps:)` mirrors the `presentAboveNotch`
+    /// pattern so the prompt receives keyboard focus.
+    ///
+    /// No-op overhead when the OS doesn't actually present a prompt (already
+    /// authorized / already denied) — the block returns instantly.
+    @MainActor
+    static func withLoweredLevel<T>(_ block: () async -> T) async -> T {
+        let panels = NSApp.windows.compactMap { $0 as? NotchPanel }
+        for p in panels { p.level = .normal }
+        NSApp.activate(ignoringOtherApps: true)
+        let result = await block()
+        for p in panels { p.level = .mainMenu + 3 }
+        return result
+    }
+}

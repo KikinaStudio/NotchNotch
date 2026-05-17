@@ -3,6 +3,22 @@ import SwiftUI
 struct InstallHermesStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
 
+    /// Cosmetic-deterministic progress. The upstream installer (curl | bash)
+    /// emits a single bulk output buffer at exit (see ShellRunner) so we
+    /// can't stream real per-line progress. Five known status milestones
+    /// land at 0, 18, 36, 54, 72s; we interpolate between them at 0.5s
+    /// granularity. After 90s we cap at 95% so we never lie about 100%
+    /// before the subprocess actually finishes; the jump to 100% happens
+    /// when `installStatus == "Done!"`.
+    @State private var progress: Double = 0
+    @State private var elapsedSeconds: Double = 0
+    @State private var progressTimer: Timer?
+
+    private static let milestoneInterval: Double = 18
+    private static let milestoneCount: Int = 5
+    private static let capAfterSeconds: Double = 90
+    private static let patientMessageAfterSeconds: Double = 120
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -52,14 +68,67 @@ struct InstallHermesStep: View {
     }
 
     private var installingView: some View {
-        VStack(spacing: 14) {
-            SpinningRing()
+        VStack(spacing: 12) {
+            ProgressView(value: progress)
+                .progressViewStyle(.linear)
+                .tint(AppColors.accent)
+                .frame(maxWidth: 280)
+                .animation(.easeInOut(duration: 0.4), value: progress)
 
             Text(onboardingVM.installStatus)
                 .font(DS.Text.caption)
                 .foregroundStyle(DS.Surface.tertiary)
                 .animation(.easeInOut(duration: 0.3), value: onboardingVM.installStatus)
+
+            if elapsedSeconds >= Self.patientMessageAfterSeconds {
+                Text("Encore un peu de patience, l'installation prend parfois plus de temps sur les premières fois.")
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.quaternary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .transition(.opacity)
+            }
         }
+        .onAppear { startProgressTimer() }
+        .onDisappear { stopProgressTimer() }
+        .onChange(of: onboardingVM.installStatus) { _, newStatus in
+            if newStatus == "Done!" {
+                progress = 1.0
+                stopProgressTimer()
+            }
+        }
+        .onChange(of: onboardingVM.isInstalling) { _, installing in
+            if !installing {
+                if onboardingVM.installError == nil {
+                    progress = 1.0
+                }
+                stopProgressTimer()
+            }
+        }
+    }
+
+    private func startProgressTimer() {
+        stopProgressTimer()
+        elapsedSeconds = 0
+        progress = 0
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            Task { @MainActor in
+                elapsedSeconds += 0.5
+                let raw = elapsedSeconds / (Self.milestoneInterval * Double(Self.milestoneCount))
+                // Cap at 95% so we never show a fake 100% before the
+                // subprocess actually returns. The terminal transition
+                // bumps to 1.0 in onChange(installStatus == "Done!").
+                progress = min(0.95, raw)
+            }
+        }
+        progressTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
     }
 
     private func errorView(_ error: String) -> some View {

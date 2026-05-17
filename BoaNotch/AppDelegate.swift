@@ -300,8 +300,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     _ = self.audioRecorder.stopRecording()
                     self.notchVM.isRecording = false
                 } else {
-                    self.audioRecorder.startRecording()
                     self.notchVM.isRecording = true
+                    Task { @MainActor in
+                        await self.audioRecorder.startRecordingWithPermission()
+                    }
                 }
             }
         }

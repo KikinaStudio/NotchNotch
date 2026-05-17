@@ -100,6 +100,7 @@ struct NotchView: View {
             if !onboardingVM.needsOnboarding
                 && !hasCompletedBrainOnboarding
                 && Self.wikiHasNoMarkdown
+                && Self.hermesProviderConfigured()
                 && !didEvaluateBrainOnboarding {
                 didEvaluateBrainOnboarding = true
                 showBrainOnboarding = true
@@ -109,6 +110,7 @@ struct NotchView: View {
             if !needsIt
                 && !hasCompletedBrainOnboarding
                 && Self.wikiHasNoMarkdown
+                && Self.hermesProviderConfigured()
                 && !didEvaluateBrainOnboarding {
                 didEvaluateBrainOnboarding = true
                 showBrainOnboarding = true
@@ -117,6 +119,19 @@ struct NotchView: View {
         .sheet(isPresented: $showBrainOnboarding) {
             BrainOnboardingView(chatVM: chatVM)
         }
+    }
+
+    /// Guard for the BrainOnboarding sheet: it triggers Hermes via
+    /// `setupBrainPipeline` (skill install + cron creation), which silently
+    /// no-ops or errors if the LLM provider isn't configured yet. We require
+    /// BOTH a non-empty `model.provider` AND a `model.default` in config.yaml
+    /// before presenting. If either is missing the sheet is skipped this
+    /// launch and re-evaluated next time the user opens the app.
+    private static func hermesProviderConfigured() -> Bool {
+        let cfg = HermesConfig.shared
+        guard !cfg.modelProvider.isEmpty else { return false }
+        guard let model = cfg.readKey("model.default"), !model.isEmpty else { return false }
+        return true
     }
 
     private static var wikiHasNoMarkdown: Bool {

@@ -1,11 +1,18 @@
 import Foundation
 import Speech
+import AppKit
 
 class SpeechTranscriber {
     static func transcribe(audioURL: URL) async -> String? {
-        let status = await withCheckedContinuation { cont in
-            SFSpeechRecognizer.requestAuthorization { status in
-                cont.resume(returning: status)
+        // Wrap the TCC prompt with `withLoweredLevel` so the system permission
+        // dialog renders above NotchPanel (`.mainMenu + 3`) instead of behind
+        // it on first authorization. After auth is granted/denied the call
+        // returns instantly and the lowering is effectively a no-op.
+        let status = await NotchPanel.withLoweredLevel {
+            await withCheckedContinuation { cont in
+                SFSpeechRecognizer.requestAuthorization { status in
+                    cont.resume(returning: status)
+                }
             }
         }
         guard status == .authorized else {

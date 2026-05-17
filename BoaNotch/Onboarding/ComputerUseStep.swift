@@ -23,16 +23,23 @@ struct ComputerUseStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
     @ObservedObject private var service = ComputerUseService.shared
 
+    /// Sticky once the user taps "Activer". Without it, the brief window
+    /// between `isInstalling = false` and `await refreshState()` finishing
+    /// (cf. ComputerUseService.install) can re-render pitchPhase if state
+    /// transitions back to `.notInstalled` before the UI has a terminal
+    /// signal (error / ready / pendingPermissions). Reset on Retry; never
+    /// reset on success — the terminal phases handle their own rendering.
+    @State private var installAttemptedInThisStep = false
+
     var body: some View {
         Group {
             if service.installError != nil {
                 errorPhase
-            } else if service.isInstalling || service.state == .installing {
-                // Couvre aussi la fenêtre entre `isInstalling = false` et
-                // `await refreshState()` (cf. ComputerUseService.install) :
-                // sans ce second prédicat, le state machine traverse
-                // pitchPhase quelques ms et la transition était perçue par
-                // l'user comme "la section ferme puis revient".
+            } else if service.isInstalling
+                        || service.state == .installing
+                        || (installAttemptedInThisStep
+                            && service.state != .ready
+                            && service.state != .installedPendingPermissions) {
                 installingPhase
             } else {
                 switch service.state {
@@ -84,6 +91,7 @@ struct ComputerUseStep: View {
                 Spacer()
 
                 OnboardingButton("Activer") {
+                    installAttemptedInThisStep = true
                     Task { await ComputerUseService.shared.install() }
                 }
             }
@@ -160,6 +168,7 @@ struct ComputerUseStep: View {
                 Spacer()
 
                 OnboardingButton("Réessayer") {
+                    installAttemptedInThisStep = true
                     Task {
                         ComputerUseService.shared.installError = nil
                         await ComputerUseService.shared.install()

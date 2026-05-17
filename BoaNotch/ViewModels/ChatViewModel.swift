@@ -678,8 +678,10 @@ class ChatViewModel: ObservableObject {
     func toggleVoiceRecord() {
         switch voiceState {
         case .idle:
-            audioRecorder?.startRecording()
             voiceState = .recording
+            Task { @MainActor in
+                await audioRecorder?.startRecordingWithPermission()
+            }
         case .recording:
             guard let url = audioRecorder?.stopRecording() else {
                 voiceState = .idle
