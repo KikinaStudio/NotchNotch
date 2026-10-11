@@ -164,6 +164,9 @@ class HermesClient {
         // /v1/responses HTTP endpoint. See CLAUDE.md for the trade-off.
         let backoffNanoseconds: [UInt64] = [0, 1_000_000_000, 2_000_000_000, 4_000_000_000]
         var lastRetryableError: Error? = nil
+        // Transport picked once per turn: `/health` reports `version` from v0.21.6, the first
+        // gateway streaming approvals on /v1/chat/completions. Older or unreachable → /v1/responses.
+        let useChatCompletions = await gatewayReportsVersion()
 
         for attempt in 0...3 {
             if attempt > 0 {
@@ -173,6 +176,9 @@ class HermesClient {
                 onEvent(.retryStarted(attempt: attempt))
             }
             do {
+                if useChatCompletions {
+                    return try await performChatAttempt(input: input, systemContext: systemContext, onEvent: onEvent)
+                }
                 return try await performStreamAttempt(
                     input: input,
                     systemContext: systemContext,
@@ -248,23 +254,7 @@ class HermesClient {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HermesError.invalidResponse
-        }
-
-        if httpResponse.statusCode != 200 {
-            var accum = Data()
-            for try await byte in bytes {
-                accum.append(byte)
-                if accum.count > 16_384 { break }
-            }
-            let bodyString = String(data: accum, encoding: .utf8) ?? ""
-            if bodyString.isEmpty {
-                throw HermesError.httpError(httpResponse.statusCode)
-            }
-            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
-        }
+        let (bytes, httpResponse) = try await openStream(request)
 
         let contentType = httpResponse.value(forHTTPHeaderField: "Content-Type") ?? ""
         let isSSE = contentType.lowercased().contains("text/event-stream")
@@ -330,21 +320,7 @@ class HermesClient {
                         inReasoningChannel = false
                         onEvent(.thinkingEnded)
                     }
-                    let routed = thinkSplitter.feed(delta)
-                    for tagEvent in routed.events {
-                        switch tagEvent {
-                        case .thinkingStarted: onEvent(.thinkingStarted)
-                        case .thinkingEnded: onEvent(.thinkingEnded)
-                        }
-                    }
-                    if !routed.text.isEmpty {
-                        content += routed.text
-                        onEvent(.textDelta(routed.text))
-                    }
-                    if !routed.thinking.isEmpty {
-                        thinkingContent += routed.thinking
-                        onEvent(.thinkingDelta(routed.thinking))
-                    }
+                    Self.routeText(delta, splitter: &thinkSplitter, content: &content, thinking: &thinkingContent, onEvent: onEvent)
                 }
 
             case "response.reasoning_text.delta",
@@ -392,10 +368,7 @@ class HermesClient {
             case "response.completed":
                 // Drain any chars still held back by the tag splitter
                 // (e.g. trailing ambiguous fragment that never completed).
-                let flushed = thinkSplitter.flush()
-                if !flushed.text.isEmpty { content += flushed.text; onEvent(.textDelta(flushed.text)) }
-                if !flushed.thinking.isEmpty { thinkingContent += flushed.thinking; onEvent(.thinkingDelta(flushed.thinking)) }
-                if thinkSplitter.insideThink { onEvent(.thinkingEnded) }
+                Self.flushText(splitter: &thinkSplitter, content: &content, thinking: &thinkingContent, onEvent: onEvent)
                 if inReasoningChannel {
                     inReasoningChannel = false
                     onEvent(.thinkingEnded)
@@ -461,6 +434,188 @@ class HermesClient {
         // outer retry loop can decide whether to retry or surface the
         // streamInterrupted error.
         throw StreamAttemptError.eofWithoutCompletion
+    }
+
+    /// Single `/v1/chat/completions` attempt (Hermes v0.21.6+), same StreamEvents and retry
+    /// contract as `performStreamAttempt`. Hermes loads the history from the state.db row named
+    /// by `X-Hermes-Session-Id`, so only the new user message (+ routine context, an ephemeral
+    /// system prompt) is sent. Unlike /v1/responses, this stream carries live reasoning,
+    /// `hermes.status`, tool progress, `approval.request` and a real failure status.
+    private func performChatAttempt(
+        input: String,
+        systemContext: String?,
+        onEvent: @escaping (StreamEvent) -> Void
+    ) async throws -> ResponseResult {
+        guard let url = URL(string: "\(baseURL)/v1/chat/completions") else {
+            throw HermesError.invalidURL
+        }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        // This endpoint follows the row id, not the key: a key alone starts a fresh session each
+        // turn. The key's latest row covers H2a conversations (Hermes-minted ids) and compression;
+        // otherwise the key itself names a new row (new conversation) or is already a row id (resume).
+        let key = ensureSessionId()
+        request.setValue(SessionStore.latestRowId(sessionKey: key) ?? key, forHTTPHeaderField: "X-Hermes-Session-Id")
+        if request.value(forHTTPHeaderField: "Authorization") != nil {
+            request.setValue(key, forHTTPHeaderField: "X-Hermes-Session-Key")
+        }
+
+        var messages: [[String: String]] = []
+        if let systemContext { messages.append(["role": "system", "content": systemContext]) }
+        messages.append(["role": "user", "content": input])
+        let body: [String: Any] = ["model": "hermes-agent", "messages": messages, "stream": true]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (bytes, _) = try await openStream(request)
+
+        var content = ""
+        var thinkingContent = ""
+        var toolCallsAccumulated = ""
+        var callNames: [String: String] = [:]
+        var thinkSplitter = ThinkTagSplitter()
+        var inReasoningChannel = false
+        var finalChunk: [String: Any]? = nil
+        func closeReasoning() {
+            if inReasoningChannel { inReasoningChannel = false; onEvent(.thinkingEnded) }
+        }
+
+        for try await event in SSEStream(bytes: bytes) {
+            if event.data == "[DONE]" { break }
+            guard let payloadData = event.data.data(using: .utf8),
+                  let payload = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any]
+            else { continue }
+
+            switch event.name ?? "" {
+            case "":
+                guard let choice = (payload["choices"] as? [[String: Any]])?.first else { break }
+                let delta = choice["delta"] as? [String: Any] ?? [:]
+                if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
+                    if !inReasoningChannel { inReasoningChannel = true; onEvent(.thinkingStarted) }
+                    thinkingContent += reasoning
+                    onEvent(.thinkingDelta(reasoning))
+                }
+                if let text = delta["content"] as? String, !text.isEmpty {
+                    closeReasoning()
+                    Self.routeText(text, splitter: &thinkSplitter, content: &content, thinking: &thinkingContent, onEvent: onEvent)
+                }
+                if choice["finish_reason"] is String { finalChunk = payload }
+
+            case "hermes.status":
+                if let text = payload["text"] as? String, !text.isEmpty {
+                    os_log("[notchnotch] hermes.status kind=%{public}@", type: .info, payload["kind"] as? String ?? "")
+                    onEvent(.status(text))
+                }
+
+            case "hermes.tool.progress":
+                closeReasoning()
+                let callId = payload["toolCallId"] as? String ?? ""
+                let name = payload["tool"] as? String ?? "tool"
+                if payload["status"] as? String == "completed" {
+                    toolCallsAccumulated += "✓ \(callNames[callId] ?? name)\n"
+                    onEvent(.toolCallCompleted(id: callId, name: name, resultPreview: ""))
+                } else {
+                    // `label` is Hermes's preview of the raw args (falls back to the tool name).
+                    // Through the `tool_call` bridge it previews the wrapped tool, maybe a terminal
+                    // command that toolArgsPreview could not mask: show no preview there.
+                    let label = payload["label"] as? String ?? ""
+                    let preview = (label == name || name == "tool_call") ? "" : Self.toolArgsPreview(toolName: name, rawArgs: label)
+                    callNames[callId] = name
+                    toolCallsAccumulated += preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
+                    onEvent(.toolCallStarted(id: callId, name: name, argsPreview: preview))
+                }
+
+            default:
+                os_log("[notchnotch] chat SSE unknown event: %{public}@", type: .info, event.name ?? "")
+            }
+        }
+
+        // EOF (or [DONE]) without a finish_reason chunk: the gateway died mid-turn.
+        guard let finalChunk else { throw StreamAttemptError.eofWithoutCompletion }
+
+        Self.flushText(splitter: &thinkSplitter, content: &content, thinking: &thinkingContent, onEvent: onEvent)
+        closeReasoning()
+
+        let usage = finalChunk["usage"] as? [String: Any]
+        let promptTokens = usage?["prompt_tokens"] as? Int
+        let completionTokens = usage?["completion_tokens"] as? Int
+        let finishReason = (finalChunk["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String
+        // "length" (truncated) keeps its text and completes; only "error" is a failed turn. A crash
+        // mid-stream sends "error" without `error`, hence the fallback.
+        if finishReason == "error" {
+            let message = (finalChunk["error"] as? [String: Any])?["message"] as? String ?? ""
+            let reason = message.isEmpty ? "Hermes n'a pas pu terminer la réponse." : message
+            onEvent(.failed(reason))
+            throw HermesError.agentFailed(reason)
+        }
+        onEvent(.completed(promptTokens: promptTokens, completionTokens: completionTokens))
+        return ResponseResult(
+            content: content,
+            thinkingContent: thinkingContent,
+            toolCalls: toolCallsAccumulated,
+            promptTokens: promptTokens,
+            completionTokens: completionTokens
+        )
+    }
+
+    /// POST and open the byte stream; a non-200 is read (16 KB max) and thrown as HermesError.
+    private func openStream(_ request: URLRequest) async throws -> (URLSession.AsyncBytes, HTTPURLResponse) {
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        if httpResponse.statusCode != 200 {
+            var accum = Data()
+            for try await byte in bytes {
+                accum.append(byte)
+                if accum.count > 16_384 { break }
+            }
+            let bodyString = String(data: accum, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
+        }
+        return (bytes, httpResponse)
+    }
+
+    /// Route an answer-text delta through the `<think>` splitter into text / thinking events.
+    private static func routeText(
+        _ delta: String,
+        splitter: inout ThinkTagSplitter,
+        content: inout String,
+        thinking: inout String,
+        onEvent: (StreamEvent) -> Void
+    ) {
+        let routed = splitter.feed(delta)
+        for tagEvent in routed.events {
+            switch tagEvent {
+            case .thinkingStarted: onEvent(.thinkingStarted)
+            case .thinkingEnded: onEvent(.thinkingEnded)
+            }
+        }
+        if !routed.text.isEmpty {
+            content += routed.text
+            onEvent(.textDelta(routed.text))
+        }
+        if !routed.thinking.isEmpty {
+            thinking += routed.thinking
+            onEvent(.thinkingDelta(routed.thinking))
+        }
+    }
+
+    /// Drain chars still held back by the splitter (trailing ambiguous fragment) at end of turn.
+    private static func flushText(
+        splitter: inout ThinkTagSplitter,
+        content: inout String,
+        thinking: inout String,
+        onEvent: (StreamEvent) -> Void
+    ) {
+        let flushed = splitter.flush()
+        if !flushed.text.isEmpty { content += flushed.text; onEvent(.textDelta(flushed.text)) }
+        if !flushed.thinking.isEmpty { thinking += flushed.thinking; onEvent(.thinkingDelta(flushed.thinking)) }
+        if splitter.insideThink { onEvent(.thinkingEnded) }
     }
 
     /// function_call_output.output is `[{"type":"input_text","text":"..."}, ...]`.
@@ -673,6 +828,18 @@ class HermesClient {
     }
 
     // MARK: - Health check
+
+    /// True when `/health` carries a `version` field (v0.21.6+). Any failure → false, so the
+    /// turn falls back to /v1/responses and its own retry / repair handling.
+    private func gatewayReportsVersion() async -> Bool {
+        guard let url = URL(string: "\(baseURL)/health") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return json["version"] != nil
+    }
 
     func healthCheck() async -> Bool {
         guard let url = URL(string: "\(baseURL)/health") else { return false }
@@ -910,6 +1077,9 @@ enum HermesError: LocalizedError {
     /// SSE stream closed mid-flight after exhausting retries (gateway
     /// died and didn't come back, or transient drops kept happening).
     case streamInterrupted
+    /// The agent turn failed on /v1/chat/completions (`finish_reason: "error"`): provider
+    /// error (402, offline) or crash. Carries Hermes's `error.message`, shown verbatim.
+    case agentFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -923,6 +1093,8 @@ enum HermesError: LocalizedError {
             return "Hermes a renvoyé une erreur (code \(code)). Réessaye dans un instant."
         case .streamInterrupted:
             return "Connexion à Hermes interrompue après 3 tentatives. Réessaye."
+        case .agentFailed(let message):
+            return message
         }
     }
 }

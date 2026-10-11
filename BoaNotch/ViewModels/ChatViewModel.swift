@@ -280,6 +280,10 @@ class ChatViewModel: ObservableObject {
                     } else if let hermesError = error as? HermesError,
                               case .serverError = hermesError {
                         connectionError = hermesError.errorDescription
+                    } else if let hermesError = error as? HermesError,
+                              case .agentFailed = hermesError {
+                        // Hermes's own failure message (provider error, crash), verbatim.
+                        connectionError = hermesError.errorDescription
                     } else if desc.contains("Could not connect") || desc.contains("Connection refused") {
                         connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
                         offerHermesRepair()

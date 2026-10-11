@@ -188,6 +188,25 @@ class SessionStore: ObservableObject {
         return results
     }
 
+    /// Id of the most recent state.db row whose `session_key` is `sessionKey` (read-only), nil if
+    /// none or if the schema predates `session_key`. /v1/chat/completions addresses rows by id.
+    static func latestRowId(sessionKey: String) -> String? {
+        let path = FileManager.default.homeDirectoryForCurrentUser.path + "/.hermes/state.db"
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            sqlite3_close(db)
+            return nil
+        }
+        defer { sqlite3_close(db) }
+        var stmt: OpaquePointer?
+        let sql = "SELECT id FROM sessions WHERE session_key = ? ORDER BY started_at DESC LIMIT 1"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        sqlite3_bind_text(stmt, 1, (sessionKey as NSString).utf8String, -1, nil)
+        guard sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) else { return nil }
+        return String(cString: text)
+    }
+
     private func openDB() -> OpaquePointer? {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else { return nil }
