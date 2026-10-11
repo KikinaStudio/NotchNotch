@@ -40,6 +40,7 @@ struct ChatView: View {
                                     onRefine: (message.routineId != nil)
                                         ? { rid in chatVM.startRefine(routineId: rid) }
                                         : nil,
+                                    onApproval: { choice in chatVM.respondToApproval(messageId: message.id, choice: choice) },
                                     isChatStreaming: chatVM.isStreaming
                                 )
                                 .id(message.id)

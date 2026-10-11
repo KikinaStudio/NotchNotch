@@ -270,3 +270,19 @@ Le contenu prévu pour H2 et H3 n'étant pas dans le brief, les estimations ci-d
 5. Les 8 doublons `OPENROUTER_API_KEY` dans `.env` : d'où viennent-ils, et laquelle gagne ?
 6. `permissions status --json` renvoie `null` pour les droits TCC : faut-il que le daemon `cua-driver` tourne ?
 7. MiniMax en 402 : recharger, ou changer le modèle par défaut ? C'est ta décision ; aujourd'hui, toutes les routines échouent.
+
+## Probe /v1/chat/completions (H3, 2026-10-11)
+
+Curl sur v0.21.6 (`main` @ `97a9ae8`, `/health` → `0.21.6`), modèle par défaut `nvidia/nemotron-3.5-lightning:free`, clé en Bearer. Code lu : `gateway/platforms/api_server_openai_routes.py` (`_handle_chat_completions`, `_write_sse_chat_completion`, `_register_stream_approval`). Lignes `notchnotch-h3probe-*` laissées dans `state.db`.
+
+| Point | Résultat |
+|---|---|
+| Continuité par ID | `X-Hermes-Session-Id: notchnotch-h3probe-…` inconnu → ligne créée avec `id = session_key =` cette valeur ; « choisis un nombre au hasard » (739) puis « quel nombre as-tu dit ? » → 739. |
+| Clé seule | `X-Hermes-Session-Key` sans ID : une nouvelle ligne `api-…` par tour, le 2e tour ne connaît pas le 1er. |
+| Reprise H2a | ID = ligne `b858b6a4…` (clé `notchnotch-h2a-f9019…`, créée sur `/v1/responses`) → le contexte (« citron ») est là, le tour s'ajoute à la même ligne. |
+| Flux | 1er chunk `delta.role`, puis `delta.reasoning_content` (≈300 chunks sur un tour court), `delta.content`, frames nommées `hermes.status` et `hermes.tool.progress {tool, emoji, label, toolCallId, status}` (vrais noms d'outils vus : `execute_code`, `terminal` ; `label` = aperçu Hermes, la commande brute pour `terminal`). Fin : `finish_reason` + `usage {prompt_tokens, completion_tokens, total_tokens}`, puis `data: [DONE]`. `: keepalive` pendant les silences. |
+| `tool_call` | Le champ `tool` est le nom appelé par le modèle : via le pont `tool_call`, il vaut `tool_call` et `label` décrit l'outil enveloppé (`_preview_bridge_call`). NotchNotch garde le verbe par défaut et n'affiche pas d'aperçu. |
+| 402 MiniMax | `hermes.status` `warn` (titre auxiliaire) + `lifecycle` ❌, texte de facturation en `content`, puis `finish_reason: "error"`, `error {message: "HTTP 402: insufficient balance (1008)", type: agent_error}`, `hermes {failed: true, …}`, usage à 0. Un plantage en plein flux envoie `finish_reason: "error"` sans `error` (code, non déclenché). |
+| Approbation | `rm -rf /tmp/nn-h3probe-dir` : `hermes.tool.progress` running (`terminal`), puis `approval.request {command, description: "delete in root path", choices: [once, session, always, deny], run_id: chatcmpl-…, request_id, session_id}`. `POST /v1/runs/{run_id}/approval {"choice":"deny","request_id"}` → 200 `resolved: 1` ; 2e POST → 409 `approval_not_pending`. Dossier intact, la réponse dit que la commande a été bloquée. Sans réponse : refus au bout de `approvals.timeout` (60 s), dossier intact. Pas d'`approval.responded`. Après la fin du tour, la route répond 409 `approval_not_active` (lu dans le code, non déclenché). |
+| Arrêt | `curl -m 8` coupé en plein flux → `gateway.log` : « SSE client disconnected; interrupted agent task chatcmpl-… ». |
+| Retry | Après une coupure, le même message renvoyé avec le même ID **duplique le message utilisateur** : Hermes a déjà enregistré le tour coupé (user + assistant partiel), puis ajoute user + assistant vide + assistant. Non contourné (limite connue du retry, comme sur `/v1/responses`). |

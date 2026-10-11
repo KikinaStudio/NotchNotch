@@ -129,6 +129,9 @@ class HermesClient {
         /// agent turn server-side, so deltas repart from zero.
         /// `attempt` ∈ {1, 2, 3}.
         case retryStarted(attempt: Int)
+        /// `approval.request` (/v1/chat/completions only): Hermes blocks the turn until
+        /// `respondToApproval` answers or `approvals.timeout` denies it.
+        case approvalRequested(ApprovalRequest)
     }
 
     /// Sentinel thrown by `performStreamAttempt` when the SSE stream
@@ -526,6 +529,17 @@ class HermesClient {
                     onEvent(.toolCallStarted(id: callId, name: name, argsPreview: preview))
                 }
 
+            case "approval.request":
+                guard let runId = payload["run_id"] as? String, !runId.isEmpty,
+                      let requestId = payload["request_id"] as? String, !requestId.isEmpty else { break }
+                onEvent(.approvalRequested(ApprovalRequest(
+                    runId: runId,
+                    requestId: requestId,
+                    command: payload["command"] as? String ?? "",
+                    description: payload["description"] as? String ?? "",
+                    choices: payload["choices"] as? [String] ?? []
+                )))
+
             default:
                 os_log("[notchnotch] chat SSE unknown event: %{public}@", type: .info, event.name ?? "")
             }
@@ -765,6 +779,35 @@ class HermesClient {
             }
             throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
         }
+    }
+
+    // MARK: - Approvals (documented exception: user click only, never "always")
+
+    /// Answer a pending `approval.request` of a streaming chat turn (the chatcmpl id doubles as
+    /// the run id). `choice` is "once" or "deny". Returns false on 409 `approval_not_pending`:
+    /// Hermes no longer waits (timeout → denied, or the turn ended).
+    func respondToApproval(runId: String, requestId: String, choice: String) async throws -> Bool {
+        guard let encodedId = runId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(baseURL)/v1/runs/\(encodedId)/approval") else {
+            throw HermesError.invalidURL
+        }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["choice": choice, "request_id": requestId])
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw HermesError.invalidResponse
+        }
+        if httpResponse.statusCode == 409 { return false }
+        guard httpResponse.statusCode == 200 else {
+            let bodyString = String(data: data, encoding: .utf8) ?? ""
+            if bodyString.isEmpty {
+                throw HermesError.httpError(httpResponse.statusCode)
+            }
+            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
+        }
+        return true
     }
 
     // MARK: - Title generation (ChatGPT-style auto-name)
