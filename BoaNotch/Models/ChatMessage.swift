@@ -38,6 +38,22 @@ struct AgentEvent: Identifiable {
     }
 }
 
+/// Hermes waiting for the user's go-ahead on a dangerous command (`approval.request`, sent on
+/// /v1/chat/completions only). Answered via `POST /v1/runs/{runId}/approval`; without an answer
+/// Hermes denies it after `approvals.timeout` (fail-closed). Live-only.
+struct ApprovalRequest {
+    let runId: String
+    let requestId: String
+    /// Already redacted by Hermes. Shown in full.
+    let command: String
+    let description: String
+    /// Hermes's allowed answers; NotchNotch only offers "once" and "deny".
+    let choices: [String]
+    var state: State = .pending
+
+    enum State { case pending, sending, expired }
+}
+
 struct ChatMessage: Identifiable {
     let id: UUID
     let role: Role
@@ -51,6 +67,9 @@ struct ChatMessage: Identifiable {
     /// Last `hermes.status` text received while streaming. Cleared as soon as
     /// the turn makes progress (text, thinking, tool call). Live-only.
     var liveStatus: String? = nil
+    /// Pending approval card. Cleared once answered or at the end of the turn; an expired
+    /// one stays so the user sees why the command did not run.
+    var approval: ApprovalRequest? = nil
     var promptTokens: Int? = nil
     var completionTokens: Int? = nil
     /// When the message is a cron-job delivery injected via the toast tap,

@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Combine
+import os.log
 
 enum VoiceState {
     case idle
@@ -136,6 +137,11 @@ class ChatViewModel: ObservableObject {
                         case .textDelta(let d):
                             self.messages[lastIndex].content.append(d)
                             self.messages[lastIndex].liveStatus = nil  // progress makes the last status stale
+                            // The agent is blocked while it waits, so new text under an unanswered
+                            // card means Hermes timed out and denied it (fail-closed).
+                            if self.messages[lastIndex].approval?.state == .pending {
+                                self.messages[lastIndex].approval?.state = .expired
+                            }
 
                         case .thinkingDelta(let d):
                             // Append to the last in-progress thinking event.
@@ -220,6 +226,16 @@ class ChatViewModel: ObservableObject {
                             self.messages[lastIndex].content = ""
                             self.messages[lastIndex].events.removeAll()
                             self.messages[lastIndex].liveStatus = nil
+                            self.messages[lastIndex].approval = nil
+
+                        case .approvalRequested(let request):
+                            self.messages[lastIndex].liveStatus = nil
+                            self.messages[lastIndex].approval = request
+                            if let notchVM = self.notchVM, notchVM.isClosed {
+                                notchVM.showActionableToast("Hermes attend ton accord pour une commande. Tape pour voir.", kind: .info) { [weak notchVM] in
+                                    notchVM?.open()
+                                }
+                            }
                         }
                     }
                 }
@@ -250,6 +266,7 @@ class ChatViewModel: ObservableObject {
                 }
 
                 messages[lastIndex].isStreaming = false
+                clearApproval(at: lastIndex)
                 isStreaming = false
                 connectionError = nil
 
@@ -279,6 +296,10 @@ class ChatViewModel: ObservableObject {
                         connectionError = hermesError.errorDescription
                     } else if let hermesError = error as? HermesError,
                               case .serverError = hermesError {
+                        connectionError = hermesError.errorDescription
+                    } else if let hermesError = error as? HermesError,
+                              case .agentFailed = hermesError {
+                        // Hermes's own failure message (provider error, crash), verbatim.
                         connectionError = hermesError.errorDescription
                     } else if desc.contains("Could not connect") || desc.contains("Connection refused") {
                         connectionError = "Can't reach Hermes on localhost:8642. Make sure the gateway is running (hermes gateway) and API_SERVER_ENABLED=true is set in ~/.hermes/.env"
@@ -313,6 +334,7 @@ class ChatViewModel: ObservableObject {
                             }
                         }
                         messages[lastIndex].isStreaming = false
+                        clearApproval(at: lastIndex)
                         if messages[lastIndex].content.isEmpty && messages[lastIndex].events.isEmpty {
                             messages.removeLast()
                         }
@@ -474,8 +496,42 @@ class ChatViewModel: ObservableObject {
                 }
             }
             messages[lastIndex].isStreaming = false
+            clearApproval(at: lastIndex)
         }
         isStreaming = false
+    }
+
+    /// End of turn: Hermes no longer waits, so drop the card unless it shows the expiry.
+    private func clearApproval(at index: Int) {
+        if messages[index].approval?.state != .expired { messages[index].approval = nil }
+    }
+
+    /// Answer the approval card of message `messageId` ("once" or "deny", never "always").
+    /// 200 removes the card; 409 means Hermes stopped waiting (timeout → denied); a transport
+    /// error re-enables the buttons.
+    func respondToApproval(messageId: UUID, choice: String) {
+        guard let index = messages.firstIndex(where: { $0.id == messageId }),
+              let request = messages[index].approval, request.state == .pending else { return }
+        messages[index].approval?.state = .sending
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let result: Bool?
+            do {
+                result = try await self.client.respondToApproval(runId: request.runId, requestId: request.requestId, choice: choice)
+            } catch {
+                os_log("[notchnotch] approval response failed: %{public}@", type: .error, String(describing: error))
+                result = nil
+            }
+            guard let index = self.messages.firstIndex(where: { $0.id == messageId }),
+                  self.messages[index].approval?.requestId == request.requestId else { return }
+            switch result {
+            case true?: self.messages[index].approval = nil
+            case false?: self.messages[index].approval?.state = .expired
+            case nil:
+                self.messages[index].approval?.state = .pending
+                self.notchVM?.showToast("Impossible d'envoyer ta réponse à Hermes. Réessaye.", kind: .error)
+            }
+        }
     }
 
     func setupBrainPipeline(

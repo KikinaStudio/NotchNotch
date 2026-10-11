@@ -8,6 +8,8 @@ struct MessageBubble: View {
     var onRetry: (() -> Void)? = nil
     var onEdit: ((ChatMessage) -> Void)? = nil
     var onRefine: ((String) -> Void)? = nil
+    /// Answers the approval card ("once" / "deny").
+    var onApproval: ((String) -> Void)? = nil
     var isChatStreaming: Bool = false
     private var isUser: Bool { message.role == .user }
 
@@ -36,6 +38,10 @@ struct MessageBubble: View {
                 // synthetic recap once finished. Self-contained: hides
                 // itself when there's nothing to show.
                 EventTimeline(message: message)
+
+                if let approval = message.approval {
+                    ApprovalCard(approval: approval, onAnswer: onApproval)
+                }
 
                 // Message content with clickable file paths (final response only)
                 if !displayContent.isEmpty {
@@ -564,6 +570,54 @@ struct MessageBubble: View {
         return result
     }
 
+}
+
+// MARK: - Approval card
+//
+// Hermes blocks the turn on a dangerous command until the user answers.
+// Only "once" and "deny" are offered, each when Hermes lists it in `choices`
+// ("always" would write a permanent allowlist NotchNotch never shows). The
+// command is shown in full and selectable.
+
+private struct ApprovalCard: View {
+    let approval: ApprovalRequest
+    let onAnswer: ((String) -> Void)?
+
+    var body: some View {
+        CardCompact {
+            VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+                Text("Hermes veut lancer cette commande")
+                    .font(DS.Text.captionSemibold)
+                    .foregroundStyle(DS.Surface.secondary)
+                Text(approval.command)
+                    .font(DS.Text.captionMono)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !approval.description.isEmpty {
+                    Text(approval.description)
+                        .font(DS.Text.caption)
+                        .foregroundStyle(DS.Surface.tertiary)
+                }
+                if approval.state == .expired {
+                    Text("La demande a expiré et a été refusée.")
+                        .font(DS.Text.caption)
+                        .foregroundStyle(DS.Surface.tertiary)
+                } else {
+                    HStack(spacing: DS.Spacing.sm) {
+                        if approval.choices.contains("deny") {
+                            Button("Refuser") { onAnswer?("deny") }
+                                .buttonStyle(SegmentedButtonStyle(isSelected: false))
+                        }
+                        if approval.choices.contains("once") {
+                            Button("Autoriser") { onAnswer?("once") }
+                                .buttonStyle(PrimaryButtonStyle())
+                        }
+                    }
+                    .disabled(approval.state == .sending || onAnswer == nil)
+                }
+            }
+        }
+    }
 }
 
 // MARK: - Agent activity timeline
