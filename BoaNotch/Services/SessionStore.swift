@@ -11,6 +11,9 @@ struct SessionSummary: Identifiable {
     let firstUserMessage: String?
     let inputTokens: Int
     let outputTokens: Int
+    /// NotchNotch's `notchnotch-<uuid>` for this row (`sessions.session_key` on v0.21.6+, the row
+    /// id on older gateways), else the row id. Keys TitleStore and the active-session match.
+    let conversationKey: String
 
     var sourceIcon: String {
         switch source {
@@ -105,20 +108,23 @@ class SessionStore: ObservableObject {
         let cutoff = Date().timeIntervalSince1970 - (60 * 86_400)
 
         var stmt: OpaquePointer?
-        let sql = """
+        func sql(notchnotchKey: String) -> String { """
             SELECT s.id, s.source, s.title, s.model, s.started_at,
                    s.message_count, s.input_tokens, s.output_tokens,
                    (SELECT m.content FROM messages m
                     WHERE m.session_id = s.id AND m.role = 'user'
-                    ORDER BY m.timestamp ASC LIMIT 1) AS first_user_msg
+                    ORDER BY m.timestamp ASC LIMIT 1) AS first_user_msg,
+                   COALESCE(\(notchnotchKey), s.id) AS conversation_key
             FROM sessions s
             WHERE s.message_count >= 2
               AND s.started_at >= ?
               AND s.source != 'cron'
             ORDER BY s.started_at DESC
             LIMIT 30
-            """
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            """ }
+        // Schemas without sessions.session_key (pre-mid-2026 Hermes) fall back to the row id.
+        guard sqlite3_prepare_v2(db, sql(notchnotchKey: "CASE WHEN s.session_key LIKE 'notchnotch-%' THEN s.session_key END"), -1, &stmt, nil) == SQLITE_OK
+           || sqlite3_prepare_v2(db, sql(notchnotchKey: "NULL"), -1, &stmt, nil) == SQLITE_OK else {
             recentSessions = []
             return
         }
@@ -141,12 +147,14 @@ class SessionStore: ObservableObject {
             let outputTokens = Int(sqlite3_column_int64(stmt, 7))
             let firstUserMessage: String? = sqlite3_column_type(stmt, 8) != SQLITE_NULL
                 ? String(cString: sqlite3_column_text(stmt, 8)) : nil
+            let conversationKey = String(cString: sqlite3_column_text(stmt, 9))
 
             results.append(SessionSummary(
                 id: id, source: source, title: title, model: model,
                 startedAt: startedAt, messageCount: messageCount,
                 firstUserMessage: firstUserMessage,
-                inputTokens: inputTokens, outputTokens: outputTokens
+                inputTokens: inputTokens, outputTokens: outputTokens,
+                conversationKey: conversationKey
             ))
         }
         recentSessions = results
