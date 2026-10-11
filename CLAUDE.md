@@ -12,7 +12,7 @@ NotchNotch is a thin client over Hermes, a full agent platform (sessions, memory
 
 - Check latest releases for new features: `https://github.com/NousResearch/hermes-agent/releases`. Local state: `~/.hermes/config.yaml`, `sqlite3 ~/.hermes/state.db ".schema"`.
 - **Before trusting any field, tool, or API name cited in a task prompt, grep the local install:** `grep -r "<name>" ~/.hermes/hermes-agent --include="*.py"`. Prompts hallucinate fields even when citing real PRs (2026-04-24: a fictional `wake_agent` cron field sourced to real PRs).
-- **Confirm the installed version against two sources** before relying on a version-gated feature: `grep -m1 -iE '^version' ~/.hermes/hermes-agent/pyproject.toml` and `grep -E '__version__' ~/.hermes/hermes-agent/hermes_cli/__init__.py`; cross-check `gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name`. `/health` returns `"version"` since v0.21.6 (older gateways omit it): use it as a third source, not the only one.
+- **Confirm the installed version against two sources** before relying on a version-gated feature: `grep -m1 -iE '^version' ~/.hermes/hermes-agent/pyproject.toml` and `grep -E '__version__' ~/.hermes/hermes-agent/hermes_cli/__init__.py`; cross-check `gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name`. `/health` returns `"version"` since v0.21.6 (older gateways omit it): use it as a third source, not the only one. On a `main` checkout `pyproject.toml` says `0.0.0`: use `/health` and `git -C ~/.hermes/hermes-agent describe --tags` instead, and check a feature with `git merge-base --is-ancestor <commit> v0.21.6`.
 - Before trusting a REST path found by grepping Hermes, curl it: `hermes_cli/web_server.py` defines `/api/cron/jobs/...` but is NOT served by `hermes gateway run`; the real one is `/api/jobs/...` in `gateway/platforms/api_server.py`.
 
 ## Build & Run
@@ -67,7 +67,9 @@ hermes gateway run --replace    # foreground; stop the service first or KeepAliv
 - **Hermes v0.11.0 is the SSE floor** — keep the JSON fallback; older Hermes in the wild must keep working.
 - **Don't "fix" Hermes to stop emitting `<think>`** — models keep writing them; cleanup stays client-side.
 - **Server conversation history includes tool calls/results** — don't strip them from the response store.
-- **`/v1/responses` does not auto-title sessions** (only `/v1/runs` does) — NotchNotch generates titles itself (`TitleStore`).
+- **Hermes v0.21.6+ titles every session itself**, `/v1/responses` included (`maybe_auto_title` in `agent/turn_context.py`, `state.db` `title_source = llm`). Older gateways don't title `/v1/responses` sessions, so NotchNotch still generates its own (`generateTitle` → `TitleStore`); on v0.21.6+ it's a duplicate call kept for compatibility.
+- **Provider errors (402, offline) arrive as `response.completed`** on `/v1/responses`, with the error as assistant text and usage 0. `response.failed` only means "no final text" or a crash. Never detect failures by matching Hermes's text (translated, changes between versions); a real failure status comes with `/v1/runs` (H3a).
+- **`hermes.status` SSE event (v0.21.6+)** — `{kind, text}`, already redacted, mixed EN/FR. Shown verbatim as the bubble's live status line (`ChatMessage.liveStatus`), no toast; treat unknown kinds like the others.
 - **DropDelegate, not `.onDrop` closure** — the split drop zone needs `DropInfo.location`.
 - **NWListener**: in `ClipperListener`, don't `defer { connection.cancel() }` — cancel in the send completion handler.
 - **`NotchState` is switched exhaustively** in `NotchWindowController` — adding a case breaks the build there.

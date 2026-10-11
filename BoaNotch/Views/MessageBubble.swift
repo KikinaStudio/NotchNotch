@@ -586,6 +586,14 @@ private struct EventTimeline: View {
     var body: some View {
         if !message.hasEvents && !message.isStreaming {
             EmptyView()
+        } else if message.isStreaming, message.currentEvent == nil, let status = message.liveStatus {
+            // hermes.status (provider wait, fallback, provider error…) replaces
+            // the "Thinking…" placeholder: it says why the stream is silent.
+            Text(status)
+                .font(DS.Text.caption)
+                .foregroundStyle(DS.Surface.tertiary)
+                .lineLimit(2)
+                .padding(.vertical, 2)
         } else if !message.hasEvents && message.isStreaming {
             // Pre-first-event grace state: a fresh assistant message with
             // no events yet (e.g. the model is still warming up before
@@ -967,19 +975,29 @@ private enum AgentEventStyle {
     /// "Using" / "Used". `delegate_task` is included as a regular tool —
     /// no special UI for subagent activity (that distinction was the
     /// pre-refactor `subagentIndicator`, intentionally collapsed here).
-    /// Tools réellement émis par Hermes (cf. HermesClient.swift:318-332).
-    /// Pas d'alias spéculatifs — ajouter un case ici uniquement après
-    /// confirmation du nom exact côté serveur Hermes.
+    /// Noms = `name=` des outils enregistrés dans `~/.hermes/hermes-agent/tools/`
+    /// (vérifiés sur v0.21.6). `tool_call` n'arrive jamais ici : HermesClient
+    /// (`toolDisplay`) le remplace par le vrai outil. Pas d'alias spéculatifs —
+    /// ajouter un case ici uniquement après confirmation du nom exact côté Hermes.
     static func verbMapping(toolName: String) -> (icon: String, present: String, past: String) {
         switch toolName {
-        case "terminal":      return ("terminal",               "Running",           "Ran")
-        case "view":          return ("doc.text",               "Reading",           "Read")
-        case "str_replace":   return ("pencil",                 "Editing",           "Edited")
-        case "create_file":   return ("doc.badge.plus",         "Creating",          "Created")
-        case "web_search":    return ("magnifyingglass",        "Searching the web", "Searched the web")
-        case "web_fetch":     return ("globe",                  "Fetching",          "Fetched")
-        case "delegate_task": return ("person.2",               "Delegating",        "Delegated")
-        default:              return ("wrench.and.screwdriver", "Using",             "Used tool")
+        case "terminal":       return ("terminal",               "Running",            "Ran")
+        case "read_file":      return ("doc.text",               "Reading",            "Read")
+        case "write_file":     return ("doc.badge.plus",         "Writing",            "Wrote")
+        case "patch":          return ("pencil",                 "Editing",            "Edited")
+        case "search_files":   return ("doc.text.magnifyingglass", "Searching files",  "Searched files")
+        case "web_search":     return ("magnifyingglass",        "Searching the web",  "Searched the web")
+        case "web_extract":    return ("globe",                  "Fetching",           "Fetched")
+        case "delegate_task":  return ("person.2",               "Delegating",         "Delegated")
+        case "cronjob_manage": return ("clock",                  "Scheduling",         "Scheduled")
+        case "memory":         return ("brain.head.profile",     "Remembering",        "Remembered")
+        case "skill_view",
+             "skills_list":    return ("book",                   "Reading skills",     "Read skills")
+        case "skill_manage":   return ("book",                   "Updating skills",    "Updated skills")
+        case "computer_use":   return ("cursorarrow.click",      "Using the Mac",      "Used the Mac")
+        case "tool_search",
+             "tool_describe":  return ("magnifyingglass",        "Looking for a tool", "Looked for a tool")
+        default:               return ("wrench.and.screwdriver", "Using",              "Used tool")
         }
     }
 

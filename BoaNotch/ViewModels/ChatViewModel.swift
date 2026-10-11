@@ -135,6 +135,7 @@ class ChatViewModel: ObservableObject {
                         switch event {
                         case .textDelta(let d):
                             self.messages[lastIndex].content.append(d)
+                            self.messages[lastIndex].liveStatus = nil  // progress makes the last status stale
 
                         case .thinkingDelta(let d):
                             // Append to the last in-progress thinking event.
@@ -147,6 +148,7 @@ class ChatViewModel: ObservableObject {
                             self.messages[lastIndex].events[evIdx].detail.append(d)
 
                         case .thinkingStarted:
+                            self.messages[lastIndex].liveStatus = nil
                             self.messages[lastIndex].events.append(AgentEvent(
                                 id: UUID().uuidString,
                                 kind: .thinking,
@@ -168,6 +170,7 @@ class ChatViewModel: ObservableObject {
                             self.messages[lastIndex].events[evIdx].endedAt = Date()
 
                         case .toolCallStarted(let id, let name, let preview):
+                            self.messages[lastIndex].liveStatus = nil
                             self.messages[lastIndex].events.append(AgentEvent(
                                 id: id,
                                 kind: .tool(name: name, argsPreview: preview),
@@ -188,6 +191,9 @@ class ChatViewModel: ObservableObject {
                                 let sep = self.messages[lastIndex].events[evIdx].detail.isEmpty ? "" : "\n→ "
                                 self.messages[lastIndex].events[evIdx].detail.append(sep + resultPreview)
                             }
+
+                        case .status(let text):
+                            self.messages[lastIndex].liveStatus = text
 
                         case .completed(let pt, _):
                             if let pt { self.lastInputTokens = pt }
@@ -213,6 +219,7 @@ class ChatViewModel: ObservableObject {
                             // the visible content matches the surviving turn.
                             self.messages[lastIndex].content = ""
                             self.messages[lastIndex].events.removeAll()
+                            self.messages[lastIndex].liveStatus = nil
                         }
                     }
                 }

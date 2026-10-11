@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 
 class HermesClient {
     private let baseURL = "http://localhost:8642"
@@ -96,69 +97,6 @@ class HermesClient {
         let completionTokens: Int?
     }
 
-    func sendResponse(input: String, systemContext: String? = nil) async throws -> ResponseResult {
-        guard let url = URL(string: "\(baseURL)/v1/responses") else {
-            throw HermesError.invalidURL
-        }
-
-        var request = makeRequest(url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        setSessionHeaders(&request)
-
-        let inputValue: Any
-        if let systemContext {
-            inputValue = [
-                ["role": "system", "content": systemContext],
-                ["role": "user", "content": input]
-            ]
-        } else {
-            inputValue = input
-        }
-
-        let body: [String: Any] = [
-            "model": "hermes-agent",
-            "input": inputValue,
-            "conversation": conversationId,
-            "store": true,
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw HermesError.invalidResponse
-        }
-        guard httpResponse.statusCode == 200 else {
-            let bodyString = String(data: data, encoding: .utf8) ?? ""
-            if bodyString.isEmpty {
-                throw HermesError.httpError(httpResponse.statusCode)
-            }
-            throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let output = json["output"] as? [[String: Any]] else {
-            throw HermesError.invalidResponse
-        }
-
-        let parsed = Self.postProcessResult(parseOutput(output))
-
-        var promptTokens: Int? = nil
-        var completionTokens: Int? = nil
-        if let usage = json["usage"] as? [String: Any] {
-            promptTokens = usage["input_tokens"] as? Int
-            completionTokens = usage["output_tokens"] as? Int
-        }
-
-        return ResponseResult(
-            content: parsed.content,
-            thinkingContent: parsed.thinkingContent,
-            toolCalls: parsed.toolCalls,
-            promptTokens: promptTokens,
-            completionTokens: completionTokens
-        )
-    }
-
     // MARK: - Streaming conversation via /v1/responses (SSE)
 
     /// Live event surfaced by `streamResponse` to the caller. Text and
@@ -178,6 +116,10 @@ class HermesClient {
         case thinkingEnded
         case toolCallStarted(id: String, name: String, argsPreview: String)
         case toolCallCompleted(id: String, name: String, resultPreview: String)
+        /// `hermes.status` text (provider wait, fallback switch, provider
+        /// error…), already redacted by Hermes. Tells the user why the
+        /// stream is silent. Any `kind` is surfaced the same way.
+        case status(String)
         case completed(promptTokens: Int?, completionTokens: Int?)
         case failed(String)
         /// Fired when streamResponse retries the POST after a network-level
@@ -197,10 +139,10 @@ class HermesClient {
         case eofWithoutCompletion
     }
 
-    /// Streaming equivalent of `sendResponse`. Subscribes to Hermes's
+    /// Chat turn over `/v1/responses`. Subscribes to Hermes's
     /// OpenAI-Responses SSE stream, forwards live events to `onEvent`,
-    /// and returns the same `ResponseResult` the non-streaming path
-    /// would. If the server replies with `application/json` instead of
+    /// and returns the final `ResponseResult` (content, thinking, tool
+    /// calls, usage). If the server replies with `application/json` instead of
     /// `text/event-stream` (older Hermes builds silently ignore
     /// `stream: true`), falls back to batch parsing and emits a single
     /// synthetic `.completed`.
@@ -227,7 +169,7 @@ class HermesClient {
             if attempt > 0 {
                 try await Task.sleep(nanoseconds: backoffNanoseconds[attempt])
                 let errDesc = lastRetryableError.map { String(describing: $0) } ?? "unknown"
-                print("[notchnotch] SSE retry \(attempt)/3 after \(errDesc)")
+                os_log("[notchnotch] SSE retry %d/3 after %{public}@", type: .info, attempt, errDesc)
                 onEvent(.retryStarted(attempt: attempt))
             }
             do {
@@ -428,10 +370,11 @@ class HermesClient {
                       let type = item["type"] as? String else { break }
                 switch type {
                 case "function_call":
-                    let name = item["name"] as? String ?? "tool"
                     let callId = item["call_id"] as? String ?? ""
-                    let args = item["arguments"] as? String ?? ""
-                    let preview = Self.toolArgsPreview(toolName: name, rawArgs: args)
+                    let (name, preview) = Self.toolDisplay(
+                        name: item["name"] as? String ?? "tool",
+                        rawArgs: item["arguments"] as? String ?? ""
+                    )
                     callNames[callId] = name
                     let line = preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
                     toolCallsAccumulated += line
@@ -491,6 +434,12 @@ class HermesClient {
                 onEvent(.failed(message))
                 throw HermesError.httpErrorWithBody(500, message)
 
+            case "hermes.status":
+                if let text = payload["text"] as? String, !text.isEmpty {
+                    os_log("[notchnotch] hermes.status kind=%{public}@", type: .info, payload["kind"] as? String ?? "")
+                    onEvent(.status(text))
+                }
+
             case "response.output_item.done",
                  "response.output_text.done",
                  "response.created":
@@ -501,7 +450,7 @@ class HermesClient {
                 break
 
             default:
-                print("[SSE] unknown event: \(event.name ?? "")")
+                os_log("[notchnotch] SSE unknown event: %{public}@", type: .info, event.name ?? "")
             }
         }
 
@@ -532,18 +481,25 @@ class HermesClient {
             guard let type = item["type"] as? String else { continue }
             switch type {
             case "function_call":
-                let name = item["name"] as? String ?? "tool"
                 let callId = item["call_id"] as? String ?? ""
+                let (name, preview) = Self.toolDisplay(
+                    name: item["name"] as? String ?? "tool",
+                    rawArgs: item["arguments"] as? String ?? ""
+                )
                 callNames[callId] = name
-                let args = item["arguments"] as? String ?? ""
-                let preview = Self.toolArgsPreview(toolName: name, rawArgs: args)
                 toolCalls += preview.isEmpty ? "→ \(name)\n" : "→ \(name) \(preview)\n"
             case "function_call_output":
                 let callId = item["call_id"] as? String ?? ""
                 let name = callNames[callId] ?? "tool"
                 toolCalls += "✓ \(name)\n"
             case "reasoning":
-                thinkingContent = item["text"] as? String ?? ""
+                // Hermes puts the text in summary[].text, with several reasoning items per turn.
+                let summary = (item["summary"] as? [[String: Any]] ?? [])
+                    .compactMap { $0["text"] as? String }
+                    .joined(separator: "\n\n")
+                if !summary.isEmpty {
+                    thinkingContent += thinkingContent.isEmpty ? summary : "\n\n" + summary
+                }
             case "message":
                 if let contentArray = item["content"] as? [[String: Any]] {
                     for part in contentArray {
@@ -553,8 +509,7 @@ class HermesClient {
                     }
                 }
             default:
-                print("[notchnotch] Unknown output item type: \(type)")
-                break
+                os_log("[notchnotch] Unknown output item type: %{public}@", type: .info, type)
             }
         }
 
@@ -726,13 +681,14 @@ class HermesClient {
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             if !ok {
                 let body = String(data: data, encoding: .utf8) ?? "empty"
-                print("[notchnotch] Health check failed: status=\((response as? HTTPURLResponse)?.statusCode ?? -1) body=\(body)")
+                os_log("[notchnotch] Health check failed: status=%d body=%{public}@", type: .info,
+                       (response as? HTTPURLResponse)?.statusCode ?? -1, body)
             } else {
-                print("[notchnotch] Health check OK")
+                os_log("[notchnotch] Health check OK", type: .debug)
             }
             return ok
         } catch {
-            print("[notchnotch] Health check error: \(error)")
+            os_log("[notchnotch] Health check error: %{public}@", type: .info, String(describing: error))
             return false
         }
     }
@@ -822,6 +778,32 @@ extension HermesClient {
             }
         }
         return truncateAndScrub(trimmed)
+    }
+
+    /// Name + args preview to display for a function_call. Hermes's `tool_call`
+    /// bridge (tool search) wraps the real tool: `{"calls":[{"name","arguments"}]}`,
+    /// where `calls` may be a JSON string or a single object, and the legacy shape
+    /// is `{"name","arguments"}` (tools/tool_search_validation.py). Show the first
+    /// real tool, prefixed "×N" in the preview when the batch has several calls.
+    static func toolDisplay(name: String, rawArgs: String) -> (name: String, preview: String) {
+        func json(_ s: String) -> Any? { s.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } }
+        guard name == "tool_call", let wrapper = json(rawArgs) as? [String: Any] else {
+            return (name, toolArgsPreview(toolName: name, rawArgs: rawArgs))
+        }
+        var calls: Any? = wrapper["calls"] ?? [wrapper]
+        if let s = calls as? String { calls = json(s) }
+        if let single = calls as? [String: Any] { calls = [single] }
+        guard let list = calls as? [[String: Any]], let first = list.first,
+              let real = first["name"] as? String, !real.isEmpty else {
+            return (name, toolArgsPreview(toolName: name, rawArgs: rawArgs))
+        }
+        var args = first["arguments"] as? String ?? ""
+        if let dict = first["arguments"] as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: dict) {
+            args = String(data: data, encoding: .utf8) ?? ""
+        }
+        let preview = toolArgsPreview(toolName: real, rawArgs: args)
+        return (real, list.count > 1 ? "×\(list.count) \(preview)" : preview)
     }
 
     private static func truncateAndScrub(_ s: String) -> String {

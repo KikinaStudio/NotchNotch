@@ -48,6 +48,9 @@ struct ChatMessage: Identifiable {
     /// Ordered timeline of agent activity (tool calls + thinking blocks).
     /// Sole source of truth for the EventTimeline view in MessageBubble.
     var events: [AgentEvent] = []
+    /// Last `hermes.status` text received while streaming. Cleared as soon as
+    /// the turn makes progress (text, thinking, tool call). Live-only.
+    var liveStatus: String? = nil
     var promptTokens: Int? = nil
     var completionTokens: Int? = nil
     /// When the message is a cron-job delivery injected via the toast tap,
