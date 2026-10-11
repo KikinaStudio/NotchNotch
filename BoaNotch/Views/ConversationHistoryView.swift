@@ -104,7 +104,7 @@ struct ConversationHistoryView: View {
     }
 
     private func sessionRow(_ session: SessionSummary) -> some View {
-        let isActive = chatVM.sessionId == session.id
+        let isActive = chatVM.sessionId == session.conversationKey
 
         return Button {
             loadSession(session)
@@ -152,7 +152,7 @@ struct ConversationHistoryView: View {
     /// Title fallback chain: cached LLM title → DB title → first user message
     /// preview → "Untitled".
     private func displayTitle(for session: SessionSummary) -> String {
-        if let cached = titleStore.title(for: session.id), !cached.isEmpty {
+        if let cached = titleStore.title(for: session.conversationKey), !cached.isEmpty {
             return cached
         }
         if let stored = session.title, !stored.isEmpty {
@@ -165,12 +165,12 @@ struct ConversationHistoryView: View {
     }
 
     private func loadSession(_ session: SessionSummary) {
+        chatVM.resumeConversation(key: session.conversationKey)
         let msgs = sessionStore.messagesForSession(sessionId: session.id)
         chatVM.messages = msgs.compactMap { msg in
             guard let role = ChatMessage.Role(rawValue: msg.role) else { return nil }
             return ChatMessage(role: role, content: msg.content)
         }
-        chatVM.sessionId = session.id
         notchVM.isHistoryOpen = false
     }
 }

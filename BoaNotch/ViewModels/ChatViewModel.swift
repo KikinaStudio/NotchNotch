@@ -43,13 +43,7 @@ class ChatViewModel: ObservableObject {
     /// rewrites jobs.json.
     weak var cronStore: CronStore?
 
-    var sessionId: String? {
-        get { client.sessionId }
-        set {
-            objectWillChange.send()
-            client.sessionId = newValue
-        }
-    }
+    var sessionId: String? { client.sessionId }
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?
 
@@ -446,11 +440,17 @@ class ChatViewModel: ObservableObject {
         cancelStream()
         messages.removeAll()
         lastInputTokens = 0
-        // Generate a fresh notchnotch-{uuid} session so this conversation
-        // gets its own row in Hermes state.db.
         objectWillChange.send()
-        client.sessionId = "notchnotch-\(UUID().uuidString.lowercased())"
-        client.resetConversation()
+        client.startConversation()
+    }
+
+    /// Resume a history row. A `notchnotch-` key also names its `conversation`, so Hermes
+    /// re-chains the server-side history (rows from before H2a used a separate name and
+    /// restart empty). Other sources (Telegram, CLI…) continue in a fresh conversation.
+    func resumeConversation(key: String) {
+        cancelStream()
+        objectWillChange.send()
+        client.startConversation(id: key.hasPrefix("notchnotch-") ? key : nil)
     }
 
     func cancelStream() {

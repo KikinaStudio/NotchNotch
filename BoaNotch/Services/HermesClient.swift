@@ -14,8 +14,12 @@ class HermesClient {
         return request
     }
 
-    /// The current NotchNotch session ID. Persisted across launches so each
-    /// conversation maps to a single session row in Hermes's state.db.
+    /// The current conversation's key, `notchnotch-<uuid>`, persisted across launches.
+    /// Pre-v0.21.6 gateways use it as the state.db row id (`X-Hermes-Session-Id`); v0.21.6+
+    /// ignore that header on /v1/responses, mint their own id and record our key in
+    /// `sessions.session_key` (`X-Hermes-Session-Key`, inherited by compression children).
+    /// One key per conversation: Hermes resolves a known key to its latest live row, so a
+    /// shared key would merge every new conversation into the previous one.
     var sessionId: String? {
         didSet {
             if let id = sessionId, !id.isEmpty {
@@ -30,13 +34,30 @@ class HermesClient {
         self.sessionId = UserDefaults.standard.string(forKey: "notchnotchSessionId")
     }
 
-    /// Ensure a session ID exists before sending a request. Generates a fresh
-    /// `notchnotch-<uuid>` if none is set so every chat lands in a single row.
+    /// Ensure a session ID exists before sending a request.
     func ensureSessionId() -> String {
         if let id = sessionId, !id.isEmpty { return id }
-        let fresh = "notchnotch-\(UUID().uuidString.lowercased())"
-        sessionId = fresh
-        return fresh
+        return startConversation()
+    }
+
+    /// Switch conversation: `id` resumes one, nil starts a fresh `notchnotch-<uuid>`. The key
+    /// doubles as the `conversation` name, so a history row's key is enough to re-chain it.
+    @discardableResult
+    func startConversation(id: String? = nil) -> String {
+        let id = id ?? "notchnotch-\(UUID().uuidString.lowercased())"
+        sessionId = id
+        conversationId = id
+        return id
+    }
+
+    /// Chat requests send the key both ways (see `sessionId`). The key header answers 403 on a
+    /// gateway without `API_SERVER_KEY`, so it only rides along with the Bearer.
+    private func setSessionHeaders(_ request: inout URLRequest) {
+        let id = ensureSessionId()
+        request.setValue(id, forHTTPHeaderField: "X-Hermes-Session-Id")
+        if request.value(forHTTPHeaderField: "Authorization") != nil {
+            request.setValue(id, forHTTPHeaderField: "X-Hermes-Session-Key")
+        }
     }
 
     private let session: URLSession = {
@@ -48,22 +69,21 @@ class HermesClient {
 
     // MARK: - Server-side conversation persistence
 
+    /// `conversation` name chaining server-side history (response_store.db). Equals `sessionId`
+    /// for conversations started since H2a; an older stored UUID keeps the in-progress
+    /// conversation chained until the next "new conversation".
     var conversationId: String {
         get {
             if let id = UserDefaults.standard.string(forKey: "hermesConversationId") {
                 return id
             }
-            let id = UUID().uuidString
+            let id = ensureSessionId()
             UserDefaults.standard.set(id, forKey: "hermesConversationId")
             return id
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "hermesConversationId")
         }
-    }
-
-    func resetConversation() {
-        conversationId = UUID().uuidString
     }
 
     // MARK: - Non-streaming conversation via /v1/responses
@@ -84,9 +104,7 @@ class HermesClient {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Always send a session header so all turns of one NotchNotch
-        // conversation accumulate in a single state.db row.
-        request.setValue(ensureSessionId(), forHTTPHeaderField: "X-Hermes-Session-Id")
+        setSessionHeaders(&request)
 
         let inputValue: Any
         if let systemContext {
@@ -267,7 +285,7 @@ class HermesClient {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
-        request.setValue(ensureSessionId(), forHTTPHeaderField: "X-Hermes-Session-Id")
+        setSessionHeaders(&request)
 
         let inputValue: Any
         if let systemContext {

@@ -46,7 +46,7 @@ hermes gateway run --replace    # foreground; stop the service first or KeepAliv
 
 ## Core architecture (one-liners — details in docs/architecture.md)
 
-- `HermesClient` — `POST /v1/responses`, SSE streaming (`streamResponse`) with JSON fallback for pre-v0.11 servers; server-side history chained by the `conversation` UUID (`hermesConversationId`); `X-Hermes-Session-Id` (`notchnotch-<uuid>`) is informational only. Retries only on dead-agent disconnects (cannotConnect / connectionLost / EOF before `response.completed`), never on 5xx/4xx/timeout. Reads `API_SERVER_KEY` fresh from `.env` on every request.
+- `HermesClient` — `POST /v1/responses`, SSE streaming (`streamResponse`) with JSON fallback for pre-v0.11 servers; one `notchnotch-<uuid>` per conversation, sent as `conversation`, `X-Hermes-Session-Id` (row id on pre-v0.21.6 gateways) and `X-Hermes-Session-Key` (v0.21.6+ store it in `sessions.session_key`; only with the Bearer, else 403). Never share a key across conversations: Hermes would reuse the previous row. Resuming = restoring the key as `conversation`. Retries only on dead-agent disconnects (cannotConnect / connectionLost / EOF before `response.completed`), never on 5xx/4xx/timeout. Reads `API_SERVER_KEY` fresh from `.env` on every request.
 - `ThinkTagSplitter` / `postProcessResult` / `scrubSecrets` (in `HermesClient.swift`) — client-side cleanup of `<think>` blocks, tool-arg previews and secrets. Keep it client-side even though Hermes 0.13+ redacts server-side: it's the fallback for stale gateways.
 - `ChatViewModel` — send/stream/retry/edit, brain saves, memory edit/delete, routine actions.
 - `CronStore` — watches `~/.hermes/cron/jobs.json` (`{"jobs": [...]}` wrapper); reattaches on atomic rename; diffs `last_run_at` to surface `deliver: local` outputs as notch toasts (filters `[SILENT]`).
@@ -149,8 +149,8 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 
 - `onboardingCompleted` — main onboarding
 - `hasCompletedBrainOnboarding` — brain setup sheet
-- `hermesConversationId` — server-side conversation UUID
-- `notchnotchSessionId` — current chat session ID (`X-Hermes-Session-Id`)
+- `hermesConversationId` — `conversation` name for server-side chaining (= `notchnotchSessionId` since H2a; older installs keep a UUID until the next new conversation)
+- `notchnotchSessionId` — current conversation key `notchnotch-<uuid>` (`X-Hermes-Session-Id` + `X-Hermes-Session-Key`, TitleStore key)
 - `hermesSessionId` — legacy Telegram-derived session ID (informational)
 - `textSize` — `"medium"` | `"large"` (legacy `"small"` falls back to medium)
 - `panelSize` — `"standard"` | `"large"`
