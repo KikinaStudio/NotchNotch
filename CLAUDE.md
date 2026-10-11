@@ -2,1091 +2,168 @@
 
 ## What is this
 
-A native macOS SwiftUI app that lives in the MacBook notch, providing instant access to a [Hermes](https://github.com/NousResearch/hermes-agent) AI agent. Runs entirely on the local machine (not on a VPS) — a true on-device assistant with direct access to the user's files, tools, and system. Built with Swift 5.9 / SwiftUI, no Xcode required (Command Line Tools only).
+A native macOS SwiftUI app that lives in the MacBook notch, giving instant access to a local [Hermes](https://github.com/NousResearch/hermes-agent) AI agent (on-device, with access to the user's files, tools and system). Swift 5.9 / SwiftUI, macOS 14+, built with Command Line Tools only (no Xcode). Users are both technical and non-technical — UI copy is French.
 
-## Before every session
+Detailed per-file / per-feature notes live in [docs/architecture.md](docs/architecture.md). Read the relevant part on demand; the code is the source of truth.
 
-**Read the Hermes agent docs first.** NotchNotch is a thin client over Hermes — understanding Hermes is essential to avoid incorrect assumptions about capabilities.
+## Hermes — verify before assuming
 
-1. Fetch the latest Hermes README and features: `https://github.com/NousResearch/hermes-agent`
-2. Check latest releases for new API features: `https://github.com/NousResearch/hermes-agent/releases`
-3. Check local Hermes config for current state: `~/.hermes/config.yaml`
-4. Check Hermes DB schema for data model: `sqlite3 ~/.hermes/state.db ".schema"`
-5. **Before trusting any field, tool, or API name cited in a task prompt, grep the local install:** `grep -r "<name>" ~/.hermes/hermes-agent --include="*.py"`. Prompts can hallucinate fields even when they cite real PR numbers (observed 2026-04-24: a task cited a `wake_agent` cron field sourced to PRs #14767/#14798; the PRs were real and merged, but only added `enabled_toolsets` — `wake_agent` was fictional). Verify existence before writing a single line of code or schema against it.
-6. **Confirm the installed Hermes version against at least two sources** before relying on a version-gated feature: `grep -m1 -iE '^version' ~/.hermes/hermes-agent/pyproject.toml` AND `grep -E '__version__' ~/.hermes/hermes-agent/hermes_cli/__init__.py`. Cross-check the latest GitHub release tag (`gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name`). The `/health` endpoint returns `{"status":"ok","platform":"hermes-agent"}`; it does NOT expose the version number, so don't rely on it for version detection.
+NotchNotch is a thin client over Hermes, a full agent platform (sessions, memory, skills, cron, messaging platforms, tools, checkpoints, compression, personas, memory providers). Don't underestimate it, and don't trust names you haven't checked.
 
-Hermes is a full AI agent platform with: sessions, persistent memory (`~/.hermes/memories/`), skills (`~/.hermes/skills/`), cron jobs, multi-platform messaging (Telegram, Discord, Slack, WhatsApp, Signal, Email), tool execution, checkpoints, context compression, SOUL.md personas, hindsight, and 6 pluggable external memory providers. Do NOT underestimate its capabilities.
-
-## Session hygiene
-
-### Before starting
-- `git status` clean (no leftover staged changes from a previous session)
-- `git pull` if working with a remote
-- Start a fresh Claude Code session, not a continuation — stale context 
-  causes hallucinated inconsistencies between file versions
-
-### During
-- "Read first, report back" before writing code on any multi-file change. 
-  Surface assumptions, confirm signatures, list impacted files, THEN code.
-- Match the signature style of existing callbacks in the same file 
-  (e.g. `{ _, newValue in }` in `.onChange` if that's the local pattern)
-- Prefer **structured UI + direct REST / file write** when 
-  Hermes exposes a deterministic endpoint and the data has a fixed shape — 
-  the user explicitly chose this for routine editing (2026-04-26) because 
-  chat-driven edits hid *what* was editable. Each non-chat path must 
-  be listed under "Documented exception" with rationale. Current set 
-  (search "Documented exception —" for the full block of each): 
-  `~/.hermes/google_token.json` write, cron pause/resume/edit direct 
-  REST, memory provider direct config write, Skills Hub catalogue 
-  (browse/inspect/install) subprocess, `hermes computer-use install` 
-  subprocess + macOS privacy-panel deeplinks, `approvals.mode` direct 
-  config write, LaunchAgent for hermes gateway (delegated to 
-  `hermes gateway start/restart/uninstall`), `API_SERVER_ENABLED` 
-  + `API_SERVER_KEY` + `model.max_tokens` direct writes. Do not silently add new 
-  exceptions — write the doc edit in the same diff.
-
-### After
-- `git log --oneline -N` to verify commits match the stated scope
-- `git diff HEAD~N` to scan for unexpected file modifications
-- Build and manual-test the feature before closing the session
-- If new `@AppStorage` keys were introduced, document them below under 
-  "UserDefaults keys"
-
-### Audit protocol
-When asked to audit your own work, don't modify anything — read, verify, 
-report. Format: ✅ OK / ⚠️ + explanation / ❓ + question per check item.
-
-## NotchNotch CLAUDE.md vs wiki SCHEMA.md — do not confuse
-
-**This file** (`<repo-root>/CLAUDE.md`) guides Claude Code when developing 
-the NotchNotch app. Swift/SwiftUI conventions, architecture, patterns, 
-session rules.
-
-**A separate `SCHEMA.md`** lives at `~/.hermes/brain/wiki/SCHEMA.md` once 
-the llm-wiki Hermes skill has run its first ingest. That one is Hermes's 
-operating manual for the user's personal knowledge wiki (Karpathy's LLM 
-Wiki pattern): domain definition, naming/frontmatter conventions, tag 
-taxonomy, page-creation thresholds, ingest/query/lint workflows. It is 
-auto-generated by the skill, not by NotchNotch.
-
-Rules:
-- Never edit `SCHEMA.md` from NotchNotch Swift code. It's Hermes 
-  territory, co-evolved with the user through chat.
-- NotchNotch may READ `SCHEMA.md` if needed (e.g., to surface schema 
-  info in a future settings pane), but never writes it.
-- If a user asks to "change how the wiki works", the answer is to send a 
-  chat message to Hermes, not to modify NotchNotch code.
+- Check latest releases for new features: `https://github.com/NousResearch/hermes-agent/releases`. Local state: `~/.hermes/config.yaml`, `sqlite3 ~/.hermes/state.db ".schema"`.
+- **Before trusting any field, tool, or API name cited in a task prompt, grep the local install:** `grep -r "<name>" ~/.hermes/hermes-agent --include="*.py"`. Prompts hallucinate fields even when citing real PRs (2026-04-24: a fictional `wake_agent` cron field sourced to real PRs).
+- **Confirm the installed version against two sources** before relying on a version-gated feature: `grep -m1 -iE '^version' ~/.hermes/hermes-agent/pyproject.toml` and `grep -E '__version__' ~/.hermes/hermes-agent/hermes_cli/__init__.py`; cross-check `gh api repos/NousResearch/hermes-agent/releases/latest --jq .tag_name`. `/health` returns `"version"` since v0.21.6 (older gateways omit it): use it as a third source, not the only one.
+- Before trusting a REST path found by grepping Hermes, curl it: `hermes_cli/web_server.py` defines `/api/cron/jobs/...` but is NOT served by `hermes gateway run`; the real one is `/api/jobs/...` in `gateway/platforms/api_server.py`.
 
 ## Build & Run
 
 ```bash
-bash scripts/run.sh      # Build + bundle + codesign + launch
+bash scripts/run.sh       # Build + bundle + codesign + launch
 bash scripts/release.sh   # Universal binary + DMG
+bash scripts/lint-design.sh   # Run before committing UI changes
 ```
 
-**Version source of truth**: `BoaNotch/Info.plist` (`CFBundleShortVersionString`). `scripts/release.sh` reads it dynamically. Do not hardcode the version anywhere else — README intentionally has no version badge so it can't drift.
+- **Version source of truth**: `BoaNotch/Info.plist` (`CFBundleShortVersionString`). Don't hardcode it anywhere else.
+- SPM target is still `BoaNotch` (renamed `notchnotch` only at the app bundle level).
+- `BoaNotch/Resources/google_oauth_config.json` is gitignored — copy from `.example` and fill a Google Cloud "Desktop app" OAuth client before building. `run.sh`/`release.sh` copy it into `Contents/Resources/`.
+- Ad-hoc signed: Gatekeeper needs `xattr -cr` or right-click > Open.
 
-### Starting Hermes locally
+### Hermes locally
 
-Hermes auto-starts via its user-scoped LaunchAgent (`~/Library/LaunchAgents/ai.hermes.gateway.plist`, label `ai.hermes.gateway`). Since Hermes v0.21 that plist is owned and rewritten by Hermes itself (osascript wrapper + `gateway run --external-supervisor` on its bundled Python). NotchNotch never writes it: it asks Hermes to `start` / `restart` / `uninstall` the service. See `HermesGatewayLauncher.swift` + "Documented exception — LaunchAgent for hermes gateway".
-
-For dev work:
+Hermes owns its LaunchAgent (`~/Library/LaunchAgents/ai.hermes.gateway.plist`, label `ai.hermes.gateway`) since v0.21. NotchNotch never writes it.
 
 ```bash
-hermes gateway restart          # graceful drain + relaunch of the launchd service
-hermes gateway status           # service + process state
+hermes gateway restart          # graceful drain + relaunch (prefer over launchctl kickstart)
+hermes gateway status
 hermes gateway run --replace    # foreground; stop the service first or KeepAlive fights back
 ```
 
-- `~/.local/bin/hermes` is a wrapper script around `~/.hermes/hermes-agent/.hermes/bin/hermes` (bundled Python). The old `./venv/bin/python3 hermes` entrypoint still works but is no longer what the service runs.
-- The API server is started via `hermes gateway run`, NOT `hermes serve` (which doesn't exist).
-- Hermes v0.21.6+ only opens :8642 when `API_SERVER_ENABLED=true` AND `API_SERVER_KEY` (16+ chars, not a placeholder) are in `~/.hermes/.env`. NotchNotch writes both when absent — see Documented exception.
-- Health check (no key): `curl http://localhost:8642/health`. Any other endpoint needs `-H "Authorization: Bearer $(grep '^API_SERVER_KEY=' ~/.hermes/.env | cut -d= -f2-)"`, else 401.
-- Prefer `hermes gateway restart` over `launchctl kickstart -k gui/$(id -u)/ai.hermes.gateway`: kickstart skips the drain and the plist refresh.
-- Logs: `~/.hermes/logs/gateway.log` (stdout) and `~/.hermes/logs/gateway.error.log` (stderr)
-
-### Google OAuth client credentials (required for Connect Google)
-
-`BoaNotch/Resources/google_oauth_config.json` is **gitignored** — the repo only ships a `.example` template. Before building, copy the template and fill in real values from a Google Cloud Desktop OAuth client (type: "Desktop app"):
-
-```bash
-cp BoaNotch/Resources/google_oauth_config.json.example BoaNotch/Resources/google_oauth_config.json
-# then edit client_id / client_secret / project_id with real values
-```
-
-Per Google's Desktop OAuth docs the client secret isn't cryptographically secret (it ships inside every distributed binary), but we still keep it out of the public repo so GitHub secret scanning doesn't flag it and so forks don't inherit our quota. `run.sh` / `release.sh` copy the file into `Contents/Resources/` automatically — no further wiring needed.
-
-## Key architecture
-
-- `HermesClient.swift` — `POST /v1/responses` with server-side conversation persistence via `conversation` parameter (UUID stored in UserDefaults as `hermesConversationId`). **Two paths**: `streamResponse(input:systemContext:onEvent:)` drives the chat flow with SSE (`stream: true`, `store: true`) — yields `StreamEvent.textDelta`/`.thinkingDelta`/`.thinkingStarted`/`.thinkingEnded`/`.toolCallStarted`/`.toolCallCompleted`/`.completed`/`.failed`/`.retryStarted` via `onEvent` and returns the final `ResponseResult` reconciled from `response.completed.response.output`. Requires Hermes v0.11.0+; older servers silently return JSON on `stream: true`, so the method sniffs `Content-Type` and falls back to a single-shot JSON parse (emits a synthetic `.completed`). **Selective retry (2026-05-10)**: `streamResponse` wraps a private `performStreamAttempt` in a 0…3 attempt loop with backoff `[1s, 2s, 4s]`. The same `conversation` UUID is reused across retries (server-side response chaining still resolves via `_response_store.get_conversation` in `api_server.py`). Retry triggers ONLY on disconnects that strongly imply the server-side agent task is dead: `URLError.cannotConnectToHost`, `URLError.networkConnectionLost`, and the private sentinel `StreamAttemptError.eofWithoutCompletion` (TCP EOF before `response.completed`). 5xx is re-emballed as `HermesError.serverError(code)` and thrown immediately (no retry — server explicitly answered). 4xx, `URLError.timedOut`, `URLError.cancelled`, `CancellationError`, `response.failed` and other typed errors bubble up verbatim. Final-attempt exhaustion produces typed `HermesError.unreachable` / `.streamInterrupted` whose French `errorDescription` lands in the bubble's `.failed(reason)` event via `ChatViewModel`'s catch block. `.retryStarted(attempt:)` event tells `ChatViewModel` to clear `content` + `events.removeAll()` on the in-flight assistant message — the retry restarts a fresh agent turn server-side, so any deltas accumulated would be doubled by the second pass. Note: this is a plain network retry, NOT a true mid-stream resume — Hermes v0.13 PR #21192 only auto-resumes messaging-platform sessions (Telegram/Discord/etc. via `resume_pending` table), not the `/v1/responses` HTTP endpoint. The trade-off is a small risk of double-tour on transient flap (server still alive but TCP drops), accepted in exchange for resilience to gateway restart (`/update`, Sparkle, OS sleep). `sendResponse(input:systemContext:)` is the non-streaming sibling still used for one-shot call sites. Both return a `ResponseResult` with `content`, `thinkingContent`, `toolCalls`, `promptTokens`, `completionTokens`. Token counts come from the top-level `usage` field (`input_tokens`, `output_tokens` — note: Hermes uses these key names, not `prompt_tokens`/`completion_tokens`). When `systemContext` is provided, `input` is sent as `[system_msg, user_msg]` array instead of a plain string. Fire-and-forget brain saves via `sendCompletion` (non-streaming `/v1/responses` with `store: false`). `conversationId` persists across app launches; `resetConversation()` generates a new UUID for fresh context. `HermesError.httpErrorWithBody(Int, String)` captures the server response body on HTTP errors for actionable messages in the UI. **Auth (Hermes v0.21.6+)**: every call except `/health` builds its `URLRequest` through `makeRequest(_:)`, which adds `Authorization: Bearer <API_SERVER_KEY>` read fresh from `~/.hermes/.env` (`HermesConfig.readRawEnv`) on each request — no cache, so a key written + gateway restart is picked up without relaunching. Never log the key. Without it every endpoint answers 401 `gateway_auth_failed`. **Stable session ID**: `sessionId` is persisted to UserDefaults (`notchnotchSessionId`) and `ensureSessionId()` lazily generates a `notchnotch-<uuid>` if none exists — the `X-Hermes-Session-Id` header is sent on every request so all turns of a conversation accumulate in a single state.db row. **Title generation**: `generateTitle(userMessage:assistantResponse:)` POSTs to `/v1/responses` with `store: false` and no headers, asks for a 3-7 word title, returns it cleaned (quotes/trailing punctuation stripped, clamped to 80 chars).
-- `SSEParser.swift` — Minimal SSE tokenizer. `SSEStream` wraps `URLSession.AsyncBytes` and yields one `SSEEvent { name, data }` per blank-line-terminated block, ignoring `:` comment lines and `id:` / `retry:` per spec. All Hermes semantics (event name → client action) live in `HermesClient.streamResponse`, not here. See `sse-probe-notes.md` at the repo root for the empirical event ordering and payload shapes used by the client state machine.
-- `SessionStore.swift` — Auto-detects Telegram `user_id` from `~/.hermes/state.db`, prefixes with `notchnotch-` for the legacy `selectedSessionId`. Also provides conversation history via `loadRecentSessions()` (max 30, last 60 days, `message_count >= 2`, excludes `source = 'cron'`) and `messagesForSession(sessionId:)` — both read-only SQLite3 C API queries. **Schema gotcha**: the table uses `started_at REAL` (Unix epoch float) — there is no `updated_at` column; messages use `timestamp REAL` (not `created_at`). Dates are decoded with `Date(timeIntervalSince1970:)`. `loadRecentSessions()` uses a correlated subquery to pull the first user message per session in one round-trip, so the history view can fall back to a message preview when no title exists. `SessionSummary` (with `firstUserMessage`, `messageCount`, `messagePreview()`) and `SessionMessage` models live in the same file.
-- `TitleStore.swift` — JSON-backed cache of LLM-generated session titles at `~/Library/Application Support/NotchNotch/session_titles.json`. Exists because Hermes's `/v1/responses` endpoint does NOT call `maybe_auto_title` (only `/v1/runs` does — verified in `~/.hermes/hermes-agent/gateway/run.py:9244`). `ChatViewModel.maybeGenerateTitle()` fires after the first exchange of a fresh conversation, calls `HermesClient.generateTitle()`, writes the result here. `ConversationHistoryView` reads via `titleStore.title(for: sessionId)` with fallback chain: cached title → DB title → first user message preview → "Untitled".
-- `CronStore.swift` — Watches `~/.hermes/cron/jobs.json` with DispatchSource. Decodes `CronJob` array with `sortedJobs` (enabled first, soonest `next_run_at`). Fails silently to empty array if file is missing or malformed. Also serves as the **cron output delivery bridge**: on every reload, diffs `last_run_at` per job and — for jobs whose timestamp changed and `last_status == "ok"` — reads the newest `.md` file from `~/.hermes/cron/output/{job.id}/`, extracts the `## Response` section, filters `[SILENT]`, and fires `onNewOutput(jobName, content)`. First load primes `lastRunByJobId` without firing callbacks (prevents a toast storm on launch). **Watcher hardening (2026-04-26)**: `eventMask` is `[.write, .rename, .delete]` and the handler inspects `source.data`; on rename/delete (Hermes rewrites jobs.json atomically — write to tmp + rename) the orphan FD is closed and `reattachWatcher()` reopens on the new inode (with a brief retry loop covering the unlink→rename gap). Without this, only the *first* atomic rewrite was observed and all later edits — including REST pause/resume — went silent in-process. **Optimistic update (2026-04-26)**: `applyOptimisticPause(jobId:paused:)` mutates `enabled` + `state` on the local `CronJob` copy so the routine card flips instantly while the REST round-trip is in flight; the watcher reload reconciles. Fields `enabled` and `state` are `var` (not `let`) for that reason. Caller (`ChatViewModel.setRoutinePaused`) reverts on REST error. **Routine classification** (extension on `CronJob`, same file): `routineType: RoutineType ∈ {silent, digest, alert}` derived from prompt + schedule cadence (delivery channel is orthogonal — a daily Telegram briefing is still a digest). `[SILENT]` prefix → silent. Sub-daily cadence (`every Xm`, `every Xh<24`, cron `*/N` in min/hour) → alert. Else → digest. `routineStatus: RoutineStatus ∈ {nominal, failed, paused}` from `enabled` / `state` / `last_status`. Helpers `parseEveryHours` / `parseEveryMinutes` parse `every Xh` / `every Xm` separately so `every 90m` is correctly classified.
-- `RoutineTemplates.swift` — Data model for the routine template system. `RoutineCategory` (7 categories: Personal, Professional, Research, Travel, Health, Finance, Creator), `RoutineTemplate` (25 templates with icon, title, subtitle, schedule, deliver, inputs, and `promptTemplate` with `{{placeholder}}` tokens), `TemplateInput` (structured inputs: `.freeText`, `.picker`, `.number`, `.filePath`). `composeDraft(values:)` substitutes placeholders and prepends schedule/deliver info as natural language for Hermes to parse via its `cronjob` tool. One template per category uses `deliver: "local"` + a high-frequency `[SILENT]`-gated prompt (package-tracker, competitor-alert, arxiv-alert, flight-price-drop-alert, screen-time-alert, price-alert, mention-alert) — these surface as in-notch toasts via the `CronStore` bridge. All data is static — zero runtime cost until accessed.
-- `TemplateBrowserView.swift` — Three-screen drill-down for browsing routine templates within the 640×340px notch panel. Screen 1: category picker (7 rows + "Create your own"). Screen 2: template list for selected category — templates with `deliver == "local"` get a small `bell.badge` icon next to the title, signalling "this one notifies you in the notch". Screen 3: form with input fields (TextField, capsule picker buttons, number field, NSOpenPanel file picker) and a "Create routine" button. Navigation uses `@State` with spring-animated `.move` transitions. Output: calls `onSelectTemplate(draft)` with the composed prompt string — same callback contract as the old starter templates.
-- `DocumentExtractor.swift` — Handles file attachments: `extract(from: URL)` reads text/PDF/RTF or copies images to `~/.hermes/cache/images/`. `extractFromClipboardImage(_:)` converts clipboard `NSImage` to PNG, saves to the same cache dir, returns an `Attachment`. `hermesCacheDir` is `~/.hermes/cache/images/` (auto-created).
-- `BrainViewModel.swift` — Read-only view model for the Brain panel. Loads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` separator into `[MemoryBlock]` (title + category extracted from first bold label, dash-prefix, or heading — falls back to `Généralités`). `MemoryBlock.id` is a 16-char SHA-256 content hash (whitespace-normalized via `contentHashId(for:)`) so IDs survive small formatting edits. `memoryCategories: [MemoryCategoryGroup]` groups `allMemoryBlocks` (USER.md + MEMORY.md) by category with `localizedStandardCompare` sort and `Généralités` sunk to the bottom. Scans `~/.hermes/skills/<category>/<skill>/SKILL.md` with simple `---` frontmatter parsing (no Yams) to extract `name`/`description`. Computed `technicalSkills: [SkillInfo]` filters out skills whose id is in `CuratedSkillCatalog.mappedSkillIDs` (drives Tools tab Section 2 — "Capacités" — grouped by category, with a synthetic "Installées" group on top sourced from `lock.json`). `curatedSkillStates: [String: CuratedSkillState]` is recomputed by `resolveCuratedStates()` on every `refreshLightMetrics()` — reads `~/.hermes/.env` (env vars), `~/.hermes/google_token.json` (Google scopes), and `~/.hermes/auth.json` (Hermes provider auth). Checks `~/.hermes/brain/wiki/` or `~/.hermes/wiki/` for wiki articles (capped at 50, 50KB each) and computes `wikiLastUpdated` from file modification dates via `computeWikiLastUpdated()`. `SkillInfo`, `MemoryBlock`, `MemoryCategoryGroup`, `MemorySource`, and `WikiArticle` models live in the same file. `loadIfNeeded()` is a one-time gate; `reload()` forces a full refresh and ends with `refreshLightMetrics()`. **Light metrics (cheap to recompute)**: `refreshLightMetrics()` updates `pendingRawCount` (via `countPendingRawFiles()`), `wikiLastUpdated`, `curatedSkillStates`, plus `costThisMonth` / `costForecastMonth` / `dailySessionCounts` (via `refreshActivityMetrics()` — single read-only SQL pass on `state.db.sessions` with `idx_sessions_started`) without touching memory/skills/wiki article arrays — safe to call on a 60s timer. `countPendingRawFiles()` recurses `~/.hermes/brain/raw/{articles,papers,transcripts}` (skips `assets/` and any subdir not in that allow-list), filters by `mtime > ~/.hermes/brain/wiki/log.md.mtime` (if `log.md` is absent, every raw file counts as pending). `isIngesting: Bool` is toggled by the Brain tab's Wiki-section sync button. Lint-report integration is stubbed with a `TODO:` before `loadWiki()` — deferred until `.lint-report.json` format is stable. FileManager + read-only SQLite (`SQLITE_OPEN_READONLY` against `state.db`); no network calls, no writes.
-- `BrainView.swift` — Three-tab panel (Memory · Tools · Missions) for browsing Hermes knowledge and capabilities (renamed 2026-05-02 from the original Memory · Skills · Wiki, then the .brain tab was relabeled "Memory" again on 2026-05-02 with the `person` icon — the file/struct name stays `BrainView` internally; the third tab was relabeled "Missions" on 2026-05-03 — the `tasks` case name and all `tasksTab`/`tasksContent` Swift identifiers are unchanged). Tab bar uses icon+text buttons: `person` Memory · `xmark.triangle.circle.square` Tools · `checkmark.rectangle.stack` Missions. Each tab opens with a short French `tabIntro(_:)` one-liner. **Brain tab**: merges Memory and Wiki in a single FadingScrollView. Memory section first (`À PROPOS DE TOI` section header + flat `memoryCardCompact` list, edit/delete via hover icons routing through `chatVM.updateMemory`/`deleteMemory`). If `hasWiki`, a hairline divider + Wiki section (`À PROPOS DU MONDE` header + topic-count caption + sync button + Ask buttons routing through `onSendToChat`). Stale `selectedMemoryBlock` is guarded after deletes via `.onChange(of: allMemoryBlocks.map(\.id))`. **Tools tab (refactored 2026-05-04 to 2-section layout)**: two stacked sections in a single FadingScrollView, separated by 24pt of negative space — no hairline dividers (Liquid Glass continuity). **Section 1 — Apps**: all `CuratedSkillCatalog.all` (6 entries) rendered in a `LazyVGrid` 3 colonnes flexible (180pt par card sur panel standard, 250pt sur large), 2 lignes. Card vertical : icône brand 28pt + badge OFFICIEL en top, nom `DS.Text.bodyMedium`, dot vert/gris + "Connecté"/"Pas connecté" en bas. Brand icon désaturée `.primary.opacity(0.35)` si `.available` via `BrandIconView(desaturated:)`. Hover stroke accent 1pt. Tap → `selectedCuratedSkill` → `CuratedSkillDetailView` (inchangé). **Section 2 — Capacités**: header inline avec search field "Filtrer…" (filtre `name + description` in-memory) et bouton accent **"+ Parcourir"** à droite (unique point d'entrée vers le catalogue, remplace la précédente card d'invitation dashed). Pendant search active, toutes les catégories visibles sont force-expanded. Catégorie synthétique "Installées" (`sparkles`) en tête quand non vide — `~/.hermes/skills/.hub/lock.json` via `HubInstalledMeta`. Rows = `CapabilityCard` partagé avec badge `OFFICIEL`/`COMMUNAUTÉ` optionnel dérivé de `hubInstalled[name].source`. Drill-down sur tap → `skillDetailView` qui rend le SKILL.md via `SkillMarkdownView` (block-aware : heading/list/code/quote/paragraph) + CTA accent "Voir dans le Finder" en pied. Pas de brand-icon morph — la transition Apps `.connected ↔ .available` est portée par `BrandIconView.desaturated` qui flippe la `foregroundStyle`. **Missions tab**: thin wrapper that calls `tasksContent()` (a `() -> AnyView` closure passed by NotchView, currently wrapping `RoutinesView`). Note the asymmetry: user-visible label is "Missions", internal Swift identifier remains `tasks` (case `BrainTab.tasks`, `tasksTab` view, `tasksContent` closure) — same convention as `BrainTab.brain → "Memory"`. Refresh button reloads all sections. Calls `brainVM.refreshLightMetrics()` on appear and every 60 seconds via `Timer.publish(every: 60, on: .main, in: .common).autoconnect()` through `.onReceive`. Takes `chatVM`, `notchVM`, `onSendToChat` (auto-send, used by wiki Ask), `onPrefillChat` (no send, used by curated prompt examples), and `tasksContent`.
-- `NotchView.swift` — Root view with flanking overlay buttons (42pt inset matching the input bar). **Two symmetric burgers** (refactored 2026-05-02, icons swapped to SF Symbols 7 set on 2026-05-02): left burger (chat-icon `message` at the leftmost edge, deploys icons rightward toward center) and right burger (`ellipsis` at the rightmost edge, deploys icons leftward toward center). Both fan toward the center of the top bar — the hardware notch sits between them. **Right burger** (settings + Memory/Tools/Missions tabs as direct entries, 4 icons left-to-right when deployed): `gearshape` (Settings) · `person` (Memory → opens panel + sets `activeTab = .brain`) · `xmark.triangle.circle.square` (Tools → `activeTab = .tools`) · `checkmark.rectangle.stack` (Missions → `activeTab = .tasks`). The Memory/Tools/Missions icons each open the panel directly to their tab; re-clicking the same icon while it's the active tab toggles the panel closed. **Left burger** (conversation actions, 3 icons left-to-right when deployed): `magnifyingglass` (search panel) · `plus.message` (new conversation, fire-and-forget action) · `book` (history panel — fills via `.symbolVariant(.fill)` when active). The trio **replaces** the burger glyph on hover (mutually exclusive — refactored 2026-05-02 to prevent misclicks between the leftmost trio icon and the burger). Both burgers expand on hover with a 0.6s grace period before retract (`scheduleMenuCollapse` / `scheduleLeftMenuCollapse`). **Right burger owns the X**: regardless of which burger opened the panel (left history/search OR right settings/Brain), the close X always appears on the right burger morphing the ellipsis glyph. The left burger NEVER morphs to an X — when a left-side panel (history/search) is open, the leftSlot is replaced by the panel title, so a left-side X would be hidden under the title anyway (this used to be a real bug, fixed 2026-05-02). The right burger's `showX` flag is `isAnyPanelOpen || isMenuExpanded`; click handler routes through `closeAllPanels()` which clears all panel state regardless of side. The right cluster's deployed fan stays visible when `isRightPanelOpen` — this is now the **sole** path to switch between Brain · Tools · Missions tabs (the in-panel `brainTabsBar` was removed 2026-05-02 as redundant duplication). The fan is NOT auto-deployed when only a left panel is open (user must hover to switch sections). `menuButton()` renders each glyph with `.symbolVariant(active ? .fill : .none)` for SF Symbols with a `.fill` variant; it accepts a `sizeBoost: CGFloat = 0` for per-icon visual-balance overrides (see "Icon sizing" rule for the `xmark.triangle.circle.square` exception). **Background**: `notchBody` uses the `notchPanelBackground(top:bottom:isOpen:inSection:)` helper from `LiquidGlass.swift` — solid black when closed (camouflages the hardware notch). When open on macOS 26+: top-down gradient noir-vers-glass (top half opaque black to camouflage the hardware notch, bottom shows wallpaper through Liquid Glass). The `inSection` flag (true when Settings/Brain/History is open) darkens the bottom stop to `.black.opacity(0.7)` so the panel signals "I'm in a section" without losing all the glass refraction. Solid black fallback on macOS 14/15/25. **SF Symbols 7 draw effect**: top bar icons (`menuButton` action icons + the 3 standalone glyph buttons — left burger `message`, right burger `ellipsis`/X morph, resize) wear `.drawOnAppear()` (also from `LiquidGlass.swift`), which applies `.transition(.symbolEffect(.drawOn))` on macOS 26+ and no-ops elsewhere — so the trio insertions on hover-deploy and the closed-burger reveal on hover-out animate as drawn-on symbols on Tahoe. **Top bar opacity rules**: idle burger glyph + resize at 20%, deploy lifts to `.secondary` (~55%). Resize button has its own hover state. `RecordingToastView` appears below the closed notch during voice recording with Talk/Brain Dump action buttons. Also hosts the first-run brain onboarding sheet. Standalone Routines panel REMOVED — Routines are now embedded inside Brain panel's Missions tab via the `routinesEmbedded` private view. `NotchViewModel.isRoutinesOpen` and `openRoutines()` were deleted.
-- `NotchDropDelegate` — Custom DropDelegate in NotchView.swift for split drop zones (attach left, brain right)
-- `ClipperListener.swift` — NWListener HTTP server on port 19944, receives toast notifications from the NotchNotch Clipper Chrome extension
-- `NotchShape.swift` — Custom animatable shape (quad curves matching hardware notch)
-- `ToastView.swift` + `PixelIcons.swift` — Single unified toast surface. `enum ToastKind ∈ {info, chat, success, error, cron}` carries icon name (resolves to a pixel-art SVG in `Contents/Resources/`, with SF Symbol fallback in `fallbackSF`), per-kind `tint: Color`, and `displayDuration` (3s for info/chat/success/error, 5s for cron). `NotchState.toast(String, ToastKind)` is the only toast variant — `clipperToast` was collapsed into `success` on 2026-04-30. All call sites go through `NotchViewModel.showToast(_:kind:)` (default `.info`); `showCronToast(jobId:jobName:fullContent:)` is a thin wrapper that adds `pendingCronOutput` (with `jobId`) for tap-to-expand. `PixelIcon.image(_:fallback:)` is the shared loader (also used by `NotchView.callBellImage`/`callBellFillImage`); SVGs live flat in `BoaNotch/Resources/PixelIcons/` (subfolder for source organization, copied flat into `Contents/Resources/` by `run.sh`/`release.sh` so `Bundle.main.url(forResource:withExtension:)` finds them without a subdirectory hint). Vertical padding is **symmetric** 11/11 — same whitespace top and bottom so single-line content sits truly centered within the toast capsule (the older 9/12 asymmetric value was an over-correction for perceived top-heaviness; the user explicitly preferred true vertical centering on 2026-05-01). 2-line content grows in the middle; the icon stays centered via HStack default alignment. HStack spacing is 12pt between icon and text (was 8pt — too tight). Kind-specific mapping (icon | tint | usage):
-  - `info` — `notification` | soft lavender `(0.78, 0.72, 1.00)` | service-level system notices (compression endpoint unreachable, etc.)
-  - `chat` — `chat` (pixelarticons `message-text`) | `AppColors.accent` light blue | the agent's reply preview when the notch is closed (added 2026-05-01 — was previously misclassified as `.info`, surfacing a bell+lavender on every casual reply)
-  - `success` — `pacman` (actually pixelarticons' `bookmark` glyph renamed; halfmage's free pack has no pacman) | green `(0.50, 0.85, 0.55)` | clipper save, brain dump, memory edit, routine created
-  - `error` — `alert` | coral red `(0.95, 0.45, 0.45)` | failures, timeouts, transcription errors
-  - `cron` — `clock` | amber `(0.97, 0.70, 0.30)` | scheduled-routine deliveries
-  Cron toast is wider (`max(notchWidth, 280)`) to fit `⚙️ {jobName}: {firstLine}` previews. **Color rationale (2026-05-01)**: every toast was previously `AppColors.accent` (NotchNotch blue) on the theory that *glyph-shape carries semantics* — but a "hello"-style chat reply rendering with the same blue+bell as a system alert read as alarming. Per-kind hues now do the disambiguation; the blue is reserved for the chat voice.
-- `HermesConfig.swift` — Watches `~/.hermes/config.yaml` with file system events. Reads config via Yams (`Yams.load(yaml:)` → `[String: Any]` dict navigation); writes via line-level regex replacement to preserve comments. `availableModels` returns `[(value: String, label: String)]` hardcoded per provider (switch on `modelProvider`: nous, openai, anthropic, openrouter, minimax, gemini, huggingface, zai, kimi-coding, xiaomi, custom) — add new models to the relevant case. **OpenRouter exception**: the `openrouter` branch reads `OpenRouterCatalog.shared.freeModels` first (live `:free` list fetched from `https://openrouter.ai/api/v1/models`, cached 24h in UserDefaults under `openrouterFreeModelsCacheV1`); falls back to a 4-model hardcoded short-list when the cache is empty. A Combine sink on `OpenRouterCatalog.$freeModels` fires `objectWillChange` so the picker re-renders when the live list lands. **`switchModel(_:)` cap**: writes `model.default` AND now applies `model.max_tokens: 8000` when the model ID ends in `:free` (OpenRouter free-tier rejects requests where computed `max_tokens` > ~13K credit floor — Hermes's anthropic_adapter normally derives from `context_length` which balloons to 65K+). For non-`:free` models the cap is removed via the new `unsetKey(_:)` helper so Hermes resumes its natural calculation. `unsetKey` strips a single top-level or nested YAML key (delegates to `removeNestedYAMLKey` for `section.key` paths) — exposed publicly but currently only used for the max_tokens override. **Note**: Hermes 0.13+ exposes providers as a plugin surface (`ProviderProfile` ABC + `plugins/model-providers/`, PR #20324). NotchNotch's hardcoded list is a UI-supported subset, not the source of truth on the server side; new providers can be added server-side without touching this code, they just won't appear in the picker until added here. User-added custom model IDs are merged on top via `userCustomModels: [String: [CustomModel]]` (persisted in UserDefaults under `userCustomModels`, mutated via `addCustomModel` / `removeCustomModel`). `"custom"` is a NotchNotch-only UI label that maps to `model.provider: openai` in config.yaml — Hermes has no `custom` provider id; OpenAI-compatible endpoints (Ollama, vLLM, NIM) use `provider: openai` with `model.base_url` overridden. `switchModel()` writes `model.default`, `model.provider`, and `model.base_url` atomically in a single file write via `Data.write(options: .atomic)`. The old `writeToConfig` method also uses this pattern (NOT tmp+moveItem which fails on macOS). `defaultBaseURL(for:)` is the canonical provider→base URL map (Xiaomi is `api.xiaomimimo.com/v1`, double `mi`; HuggingFace uses `router.huggingface.co/v1`). `writeAPIKey(provider:key:)` maps each provider to its env var name (HuggingFace = `HF_TOKEN`, not `HUGGINGFACE_API_KEY`; Gemini = `GEMINI_API_KEY`; unknown providers early-return — no fallback to `OPENROUTER_API_KEY`). `writeRawEnv(key:value:)` is the underlying idempotent line-replace helper, exposed publicly so `MemoryProviderSection` can write plugin env vars (e.g. `MEM0_API_KEY`, `OPENVIKING_ENDPOINT`) without going through `writeAPIKey`'s LLM-provider switch. `readRawEnv(key:)` is its reader (nil when absent; last occurrence wins, quotes and ` #` comments stripped — Hermes's dotenv semantics). `readKey(_:)` is a public on-demand reader for arbitrary YAML keys (wraps the private `yamlString` helper, re-parses on every call) — used by Settings rows that surface live config values without a typed `@Published` property (e.g. the `approvals.mode` picker in Computer Use; see Documented exception). Reasoning effort supports `none`/`minimal`/`low`/`medium`/`high`/`xhigh`. The expanded bar shows a **context window usage gauge** (`Contexte` label + outlined capsule, 120×8pt, fill left→right) driven by `ChatViewModel.lastInputTokens`. Always visible (even at 0 tokens) for discoverability. Fill color: `AppColors.accent` < 70%, `.orange` ≥ 70%, `.red` ≥ 90%. Per-model limits live in `ExpandedBarView.contextWindowLimit` (substring match on `config.modelDefault`: claude/o1/o3/gpt-5/kimi/minimax → 200k, gpt-4o/4.1/llama/nemotron/deepseek/qwen/mistral/glm/mimo → 128k, gemini → 1M, default 128k) — add new providers there when extending `availableModels`. Minimum 5% visible fill when tokens > 0 so low usage still shows a segment. `lastInputTokens` is in-memory only (not persisted) — relaunching mid-conversation shows 0 until the next response. **Compression endpoint probe**: `compressionBaseURL: URL?` exposes `compression.summary_base_url` from config; `probeCompressionEndpoint() async -> EndpointHealth` GETs `{baseURL}/models` with a 2s timeout. `EndpointHealth` is `.notConfigured` / `.reachable` / `.unreachable(reason)`. `AppDelegate.probeCompressionEndpointOnce()` runs the probe once at launch (guarded by `didProbeCompression` flag) and fires `notchVM.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.")` on `.unreachable`. Read-only — NotchNotch never writes the compression section. **`yamlString` NSNull handling**: the helper returns `nil` for YAML `null` values (e.g., `summary_base_url: null`) instead of stringifying them as `"<null>"` — this gates the probe correctly when the key is present but unset.
-- `OpenRouterCatalog.swift` — Plain `ObservableObject` singleton (`shared`, NOT `@MainActor` so `HermesConfig.availableModels` can read it from a non-actor-isolated computed property). Fetches `https://openrouter.ai/api/v1/models` once per 24h with a 5s timeout; filters to free models (`id.hasSuffix(":free")` OR `pricing.prompt == 0 && pricing.completion == 0` — some free models have no `:free` suffix). Caches `[FreeModel]` + `fetchedAt` to UserDefaults (`openrouterFreeModelsCacheV1`) so the picker is hot on second launch. `refreshIfStale()` is the boot entry point (no-op when cache <24h old AND non-empty). `refresh()` is silent on network errors — keeps the existing list intact so the picker doesn't go blank during an OpenRouter outage. `@Published var freeModels` is mutated inside `await MainActor.run` so SwiftUI observers stay main-thread-safe. `niceLabel(for:)` is the static label helper (provider prefix dropped, `:free` suffix dropped, clamped to 25 chars). Touched once at `applicationDidFinishLaunching` via `Task.detached { await OpenRouterCatalog.shared.refreshIfStale() }`.
-- `HermesMemoryConfig.swift` — Read/write Hermes memory provider configuration. `currentProvider` reads `memory.provider` from `~/.hermes/config.yaml`; `switchTo(_:)` writes via `HermesConfig.setImmediate`. `scanInstalledPlugins()` enumerates `~/.hermes/hermes-agent/plugins/memory/<name>/plugin.yaml` (note: `hermes-agent/plugins/memory/`, NOT `~/.hermes/plugins/memory/`) and parses each yaml's `requires_env: [VAR1, VAR2]` list with Yams. `availableProviders` filters `knownProviders` (8-entry static metadata array + built-in) by `installedPluginIDs`, attaching the live `requiresEnv` from the yaml so the UI prompts for the correct env var per plugin. `hasRequiredEnv(for:)` regex-matches `~/.hermes/.env` to decide whether to switch immediately or open the inline API-key form. See "Documented exception — memory provider direct config write".
-- `SystemCapability.swift` + `SystemCapabilityCatalog.swift` — Editorial model + catalog for capabilities that operate on the Mac itself (Hermes 0.14.0's `computer_use` via the `cua-driver` binary), distinct from `CuratedSkill` which targets third-party services (Gmail, Notion, Spotify). `SystemCapability` reuses `IconKind` from CuratedSkill (don't redeclare). `SystemDetectionRule` is `.binaryOnPath(String)` only in v1. `SystemCapabilityState ∈ {notInstalled, installing, installedPendingPermissions, ready}` — extended in Session 2 from the original 3-case set because the UI needs a visually distinct intermediate state for "binary on PATH but user hasn't confirmed TCC grants" (Accessibility / Screen Recording / Automation). We cannot probe TCC programmatically: cua-driver is a separate binary with its own bundle-id, and `hermes computer-use status` only checks `shutil.which("cua-driver")`. The `.ready` transition is a UI-side act of faith (`ComputerUseService.confirmPermissions()`) persisted via UserDefaults — see `computerUsePermissionsConfirmed`. Same "structured UI, never via chat" doctrine as CuratedSkill — the install and permission flow MUST be exposed through buttons / progress indicators / system-panel deeplinks, never mediated by chat prompts. Catalog v1 has one entry (`computer-use`, icon `macwindow.and.cursorarrow`, docs at `https://hermes-agent.nousresearch.com/docs/user-guide/features/computer-use`).
-- `HermesGatewayLauncher.swift` — `@MainActor` singleton (`shared`) that keeps the Hermes gateway running at login and its API server reachable. Hermes owns the LaunchAgent (`~/Library/LaunchAgents/ai.hermes.gateway.plist`); NotchNotch never writes it. `state ∈ {notInstalled, installedAndLoaded, installedNotLoaded}` derived from `(plist file exists, launchctl print exit code)`. `install()` runs `hermes gateway start` (Hermes writes its plist if missing, refreshes an outdated one — older NotchNotch templates included — loads it and starts the gateway; no-op when running. `install --if-missing` is NOT used: it leaves an unloaded plist unloaded). `restart()` runs `hermes gateway restart` (graceful drain, can take tens of seconds). `uninstall()` runs `hermes gateway uninstall`. All via `ShellRunner` on `~/.local/bin/hermes`; `LauncherError.hermesNotInstalled` if that file is missing. `ensureApiServerEnv()` writes `API_SERVER_ENABLED=true` / `API_SERVER_CORS_ORIGINS=*` when absent and generates `API_SERVER_KEY` (32 random bytes, hex) when absent or unusable (`isUsableKey` mirrors Hermes's `has_usable_secret(min_length=16)`), then restarts a loaded gateway once; a valid key is never replaced. Called at boot, at onboarding and by the chat repair flow. `revealLogs()` opens `~/.hermes/logs/gateway.log` in Finder. `isHermesReachable()` is a 1s timeout GET on `/health` (no key needed). The singleton is touched once in `AppDelegate.applicationDidFinishLaunching`; UI consumes it via `@ObservedObject` in `SettingsView.hermesGatewaySection`. See "Documented exception — LaunchAgent for hermes gateway".
-- `AppDelegate.swift` boot helpers (Hermes-side) — three private methods run from `applicationDidFinishLaunching` to bring an upgrading user from pre-v1.4.0 state to a working gateway without their intervention. (1) `reinstallLaunchAgentIfNeeded()` — only acts on `.installedNotLoaded` (re-load an existing plist); `.notInstalled` is left for the lazy actionable-toast path so we don't install a LaunchAgent at boot without user consent. (2) `ensureApiServerEnvVars()` — thin wrapper around `HermesGatewayLauncher.ensureApiServerEnv()` (enabled + CORS + API key, restart of a loaded gateway when something changed). Skips entirely if `~/.local/bin/hermes` is absent (avoid creating an orphan `.env` on a Mac where Hermes isn't installed yet). (3) `applyMaxTokensCapIfFreeModel()` — boot safety net for users whose `model.default` is already a `:free` ID (set on pre-v1.4.0) but who never went through `switchModel` since the cap was added. Only writes `model.max_tokens: 8000` when the key is fully absent — any explicit override is respected. See "Documented exception — `API_SERVER_ENABLED` + `API_SERVER_KEY` + `model.max_tokens` direct writes" for the full rationale.
-- `ComputerUseService.swift` — `@MainActor` singleton (`shared`) that owns detection (`ShellRunner.commandExists("cua-driver")` — same probe Hermes itself uses in `cmd_computer_use` via `shutil.which`), install (`hermes computer-use install` via `ShellRunner.run` on the `~/.local/bin/hermes` symlink — see Documented exception), and three macOS privacy-panel deeplinks (Accessibility / ScreenCapture / Automation, via `x-apple.systempreferences:com.apple.preference.security?Privacy_<Pane>` URLs). Pattern mirrors `GoogleConnectionState` (NOT `HermesConfig` which is not `@MainActor`). `refreshState()` derives the 4-case state from `(binary on PATH, UserDefaults["computerUsePermissionsConfirmed"])` — missing binary → `.notInstalled`; binary present + flag true → `.ready`; binary present + flag false → `.installedPendingPermissions`. Runs from `private init()` and re-runs at the end of every `install()`. `confirmPermissions()` is called from `ComputerUseDetailView`'s "C'est bon" button after the user walks through the 3 TCC panels — flips the UserDefaults flag and bumps `state` to `.ready` synchronously (no probe, no Hermes round-trip). Mutates `@Published var state, isInstalling, installProgress, installError` from async Tasks — `@MainActor` on the class is required for thread-safe `@Published` updates (see gotcha). On exit-0 from `hermes computer-use install`, `install()` re-verifies `cua-driver` is on PATH via a second `ShellRunner.commandExists("cua-driver")` call before considering the install successful — the Hermes CLI exits 0 even when the upstream `install.sh` fails silently (cmd_computer_use at `~/.hermes/hermes-agent/hermes_cli/main.py:11351` ignores `install_cua_driver()`'s return value, so a network blip / curl missing / download failure produced "fake success" + silent return to pitchPhase from the user's POV; observed and fixed 2026-05-17). If the binary is present, writes `approvals.mode: manual` via `HermesConfig.shared.setImmediate` — safe default for non-tech users (Hermes asks before sensitive actions); no-op when the value is already `manual` (the Hermes default), matters for fresh installs where the user changed it. If the binary is absent post-install, synthesises a French `installError` ("L'installation s'est terminée sans réussir à poser cua-driver sur ton PATH…") so the UI surfaces the failure instead of silently returning to the pre-install state. The singleton is touched once in `AppDelegate.applicationDidFinishLaunching` to kick off the init-side `refreshState()`; UI surfaces consume it via `@ObservedObject` (not `@StateObject` — see CLAUDE.md gotcha "@MainActor singletons").
-- `ComputerUseDetailView.swift` — Detail view for the "Contrôle du Mac" SystemCapability, presented as an in-`BrainView` overlay (conditional `if let capability = selectedSystemCapability { ... }.transition(.move(edge: .trailing))`, NOT a sheet — mirrors `CuratedSkillDetailView`'s pattern). 4-zone layout: back chevron + name, hero (icon 40pt tinted by state) + status dot + label, description (`capability.descriptionFR`), uppercase mono "Essaie" / "Tu pourras lui demander" header + 3 tappable prompt examples (only interactive in `.ready` state — others render disabled but visible), state-dependent action section (Install button + Voir la doc / spinner with `installProgress` / 3 permission rows + "C'est bon" / empty for ready), and a bottom security note ("Ton curseur ne bouge pas..."). The "C'est bon" button is documented in a code comment as an act of faith — NotchNotch cannot verify cua-driver TCC grants programmatically. `onAskExample` is wired identically to `CuratedSkillDetailView` — fires `onPrefillChat?(prompt)` which closes the Brain panel + focuses the composer. No own dismiss for prompt taps — the panel close cascades.
-- `BoaNotch/Onboarding/ComputerUseStep.swift` — Session 3 onboarding step (Hermes 0.14 cua-driver). Sits at index 4 of the flow (Welcome 0 · Privacy 1 · InstallHermes 2 · ConnectProvider 3 · **ComputerUse 4** · Telegram 5 · Ready 6 — added 2026-05-17, shifted Telegram/Ready up by 1). Skippable at every phase via a "Plus tard" plain-text button reusing the exact pattern from `TelegramStep:85-91` (`DS.Text.micro` + `DS.Surface.secondary` + `.buttonStyle(.plain)` + `.pointingHandCursor()`) — `OnboardingButton` has no secondary style and no init was added. Five visual phases dérivées de `ComputerUseService.shared` via `@ObservedObject`: **pitch** (`.notInstalled` + not installing — title + description + 3 `privacyRow`-style pedagogy rows `eye.slash` / `lock.shield` / `slider.horizontal.3` + Plus tard / Activer) ; **installing** (`isInstalling == true` OR `state == .installing` — same `VStack(.leading, spacing: 0)` outer layout as pitchPhase so the title doesn't jump from top to center, with a centered `SpinningRing` + `installProgress` text where the rows were — the `|| state == .installing` second predicate is REQUIRED to cover the re-render window between `isInstalling = false` and `await refreshState()` in `ComputerUseService.install()`, without it the user briefly saw pitchPhase and perceived it as "the section closes and reopens", observed 2026-05-17) ; **error** (`installError != nil` — same outer layout, error inset reproducing `InstallHermesStep:83-91` exactly (`.white.opacity(0.03)` fill + `.white.opacity(0.05)` 0.5pt stroke + `RoundedRectangle(cornerRadius: 6)` + `DS.Text.nanoMono` content, max height 80) + Plus tard / Réessayer) ; **permissions** (`.installedPendingPermissions` — title + sub-title + 3 deeplink rows duplicating `ComputerUseDetailView.permissionRow:270-294` verbatim, icons `accessibility` / `rectangle.dashed.badge.record` / `gearshape.2.fill` aligned with the detail view, `DS.Radius.chip` (6pt, NOT cardCompact) + 12H×10V + `.quaternary.opacity(0.5)` + Plus tard / C'est bon) ; **ready** (`.ready` — "C'est déjà actif" + Continuer, covers the case where the user installed via Settings/Brain before reaching this step in a fresh onboarding). Tap "C'est bon" → `service.confirmPermissions()` (synchronous, sets `state = .ready` directly — NO `refreshState()` follow-up needed) + `onboardingVM.advance()`. Tap "Activer" → `Task { await service.install() }` — `install()` is non-throwing, errors flow back through `installError` and trigger errorPhase automatically. `permissionRow` and `pitchRow` are duplicated locally (out of scope: extracting to a shared component would touch ComputerUseDetailView). The `else` branch of the phase logic must list each `SystemCapabilityState` case explicitly (Swift exhaustiveness) — `.installing` maps to `installingPhase` for completeness even though it's unreachable in practice (covered by the `isInstalling || state == .installing` predicate above).
-- `ProviderIcon.swift` — Renders the LLM provider's brand icon at a configurable point size. `ProviderIconCatalog.slug(for:)` maps NotchNotch provider id → lobehub SVG slug; `sfSymbol(for:)` maps the rest to SF Symbols (`xiaomi` → `cpu`, `custom` → `globe`). The view loads `Bundle.main.resourceURL?.appendingPathComponent("provider_<slug>.svg")` via `NSImage(contentsOf:)`, sets `isTemplate = true`, and renders with `.renderingMode(.template)` so the surrounding `foregroundStyle` tints it. SVGs are MIT-licensed lobehub mono variants (`fill="currentColor"`, viewBox 0 0 24 24) bundled flat in `BoaNotch/Resources/provider_*.svg`. Refresh via `bash scripts/fetch-provider-icons.sh --force`. Used in `SettingsView.providerPill` (size 11) and `ExpandedBarView` model chip (size 10) — same icon, two locations.
-- `PanelSizeStore.swift` — `PanelSize` enum (`.standard` / `.large`) persisted to UserDefaults under `panelSize`. `@Published var size` — observed by `NotchWindowController` via Combine to resize the NSPanel when the user toggles the arrows button in the overlay. See the `@Published` willSet gotcha below.
-- `GoogleOAuthService.swift` — Desktop OAuth 2.0 flow with PKCE + loopback HTTP redirect. `connect()` generates a 64-char PKCE verifier, spins up a single-shot `LoopbackServer` (NWListener with OS-assigned port via `NWListener(using: .tcp)` and no explicit port), opens `https://accounts.google.com/o/oauth2/v2/auth` in the default browser via `NSWorkspace.shared.open`, waits up to 120s for the callback (CSRF-protected with a random `state` param), exchanges the code for tokens at `oauth2.googleapis.com/token`, GETs `/oauth2/v2/userinfo` for the email, then writes a 9-key JSON to `~/.hermes/google_token.json` (mode 0600) whose schema byte-matches `google.oauth2.credentials.Credentials.to_json()` — `expiry` formatted as `YYYY-MM-DDTHH:MM:SS.000000Z` so `strptime("%Y-%m-%dT%H:%M:%S.%f")` in the google-auth library parses it after stripping Z. Client credentials loaded from `Bundle.main.resourceURL?.appendingPathComponent("google_oauth_config.json")` (NEVER `Bundle.module` — see gotchas). The 8 scopes live in `GoogleOAuthService.scopes` and must match the Google Cloud OAuth consent screen exactly; `gmail.modify` alone covers read+send+modify (it's a superset of `gmail.readonly`/`gmail.send`). `prompt=consent` + `access_type=offline` are required to guarantee a `refresh_token` every time. `LoopbackServer` is marked `@unchecked Sendable` because all mutable state is serialized via its private `DispatchQueue`. The success HTML page is inline and styled near-black to match NotchNotch's aesthetic; the error page escapes Google's error string. `disconnect()` deletes the token file and clears UserDefaults. Typed errors: `.userCancelled`, `.exchangeFailed(body)`, `.invalidResponse`, `.fileWriteFailed`, `.stateMismatch`, `.timeout`, `.listenerFailed`. See also `GoogleConnectionState.swift`.
-- `GoogleConnectionState.swift` — `@MainActor` `ObservableObject` wrapping `GoogleOAuthService` for the Settings UI. `@Published isConnected/connectedEmail/isConnecting/errorMessage`. `refresh()` checks both `tokenFileExists()` AND `UserDefaults["googleConnectedEmail"]` (both must be truthy) so a stale token file without a remembered email shows as disconnected. `connect()` flips `isConnecting` for the spinner, awaits `GoogleOAuthService.shared.connect()`, silently swallows `.userCancelled` (no error banner on user backout), and routes everything else into `errorMessage`. `disconnect()` is synchronous — just calls the service and clears local state.
-- `NotchWindowController.swift` — Owns the `NotchPanel` (NSPanel subclass) and all sizing math. `dimensions(for:on:)` → panel-frame size per `PanelSize` (`.standard` = 680×380; `.large` = min(900, visibleFrame.width × 0.9) × min(600, visibleFrame.height × 0.8) so it stays inside the menu-bar/Dock reserved area on small displays). `openSize(for:on:)` = `dimensions - 2 × shadowPadding` (shadowPadding = 20pt) — this invariant MUST hold so the visible NotchShape always fits inside the NSPanel with room for the drop shadow. `NotchViewModel.openSize` is `@Published` and driven exclusively by the controller. **`applyPanelSize(animated:)`**: recenters horizontally on `notchScreen()` and pins to `screenFrame.height` top edge. Animation is asymmetric: **growing** → set NSPanel frame first (so SwiftUI content doesn't clip), then spring-animate `openSize`; **shrinking** → spring-animate `openSize` first, then tighten NSPanel frame after 0.5s (once the spring has settled). Driven by a Combine sink on `panelSizeStore.$size` with `.receive(on: DispatchQueue.main)` — required because `@Published` fires in willSet (see gotcha). Also called from `screenDidChange` (NSApplication.didChangeScreenParametersNotification) to reclamp on display swaps.
-
-### Conversation flow
-
-1. `ChatViewModel.send()` builds `fullContent` (inlined attachments + text), appends user message, calls `startRequest(input:)`
-2. `startRequest(input:)` appends a placeholder assistant message, sets `isStreaming`, and launches a Task that calls `HermesClient.streamResponse(input:systemContext:onEvent:)` — single `POST /v1/responses` with `stream: true`, `store: true`, `conversation: <UUID>`
-3. Server streams SSE events (`text/event-stream`). The `onEvent` callback runs off-main; each case hops back via `Task { @MainActor in ... }` and mutates `messages[lastIndex]`: `textDelta` appends to `content`, `thinkingDelta` to `thinkingContent` (and to `currentThinkingBlock` while `isCurrentlyThinking`), `thinkingStarted` sets `isCurrentlyThinking = true` and clears `currentThinkingBlock`, `thinkingEnded` flips it back off and clears the block, `toolCallStarted` / `toolCallCompleted` route to either `subagentActivity` (for `delegate_task` / `🤖`) or `toolCallContent`, `completed` updates `lastInputTokens`
-4. On `response.completed`, `streamResponse` returns a `ResponseResult` built from the terminal payload's `response.output` (same shape as the non-streaming path). `startRequest` uses this for final reconciliation — replaces accumulated content/thinking/tool strings and writes per-message token counts — so dropped deltas or out-of-order MainActor Tasks can't leave the message in a bad state
-5. Graceful degradation: if the server responds with `Content-Type: application/json` (older Hermes or validation error), `streamResponse` parses the body once and emits a single synthetic `.completed` — the caller path is unchanged
-6. Server persists the full conversation history in `~/.hermes/response_store.db` — next turn automatically chains via the `conversation` name
-7. `retryLastAssistant()` removes the last user+assistant pair, re-appends the user message, and calls `startRequest(input:)` to get a fresh response
-8. `editMessage(id:newContent:)` updates the user message content, truncates all subsequent messages, and calls `startRequest(input:)` to regenerate. Server-side history retains the pre-edit version (acceptable for v1). Editing is blocked while streaming.
-9. `startNewConversation()` cancels any stream, clears messages, resets `lastInputTokens` to 0, generates a fresh `notchnotch-<uuid>` `sessionId` (persisted to UserDefaults), and calls `resetConversation()` for a fresh conversation UUID. `confirmNewConversation()` delegates to it (used by the confirmation dialog).
-10. After the first exchange of a fresh conversation, `ChatViewModel.maybeGenerateTitle()` fires a detached Task that calls `HermesClient.generateTitle()` and saves the result to `TitleStore`. Gated by: titleStore set, sessionId non-nil, no title cached yet, assistant response non-empty, exactly one user message in `messages`. Best-effort — failure is silent.
-11. Loading a historical session: `ConversationHistoryView` reads messages via `SessionStore.messagesForSession()`, converts to `ChatMessage` array, sets `chatVM.sessionId` to the session ID for `X-Hermes-Session-Id` continuity.
-
-### Output hygiene (think tags + tool previews + secret scrubbing)
-
-Hermes streams raw model output verbatim, including inline `<think>...</think>` reasoning blocks and tool-call argument payloads that occasionally contain fragments of API keys. NotchNotch cleans these up in `HermesClient` before they reach the UI:
-
-1. **`ThinkTagSplitter`** (file-level struct in `HermesClient.swift`) — fed every `response.output_text.delta`, maintains `insideThink: Bool` + a holdback `buffer`, returns `(text, thinking, events: [TagEvent])`. It splits deltas around `<think>` / `</think>` even when a tag straddles a chunk boundary, holding back the longest suffix that could be a prefix of the active target. The matching `TagEvent` cases (`.thinkingStarted` / `.thinkingEnded`) are forwarded to the UI so the bubble can bracket each thinking block as a distinct `AgentEvent`. `flush()` drains residue on `response.completed`.
-2. **Reasoning-channel bracketing** — Hermes emits thinking via two SSE channels: inline `<think>...</think>` inside `response.output_text.delta` (handled by `ThinkTagSplitter` above), AND the dedicated OpenAI-style `response.reasoning_text.delta` / `response.reasoning_summary_text.delta` events (used by o1/o3 routes and any model that emits structured reasoning). The latter arrives as raw deltas with no opening event, so `streamResponse` tracks an `inReasoningChannel: Bool` and synthesizes `.thinkingStarted` on the first reasoning delta + `.thinkingEnded` whenever a non-reasoning event arrives (`output_text.delta`, `output_item.added`, `response.completed`). Without this bracketing, ChatViewModel's `thinkingDelta` handler silently drops the orphan deltas (no in-progress thinking event to append to), and the user sees only the inline `<think>` snippets while the real reasoning is lost.
-3. **`postProcessResult(_:)`** (extension on `HermesClient`) — runs on the reconciled `ResponseResult` from both the SSE and non-SSE paths. Calls `stripThinkTags(_:)` to pull any stray `<think>…</think>` out of the final `content` and merge it into `thinkingContent`; handles unclosed tags by treating everything after `<think>` as thinking.
-4. **`toolArgsPreview(toolName:rawArgs:)`** — replaces the old `String(args.prefix(60))` preview. Shell-style tools (`terminal`, `bash`, `shell`, `run`) render as `running command`; everything else JSON-parses the args, picks the primary value in priority order (`query`, `prompt`, `path`, `url`, `message`, `text`, `name`, `file_path`, `pattern`), and feeds it through `truncateAndScrub(_:)` (collapse newlines, scrub secrets, clamp to 40 chars).
-5. **`scrubSecrets(_:)`** — regex substitutions applied to every tool preview and (defensively) to the reconciled content: `([A-Z][A-Z0-9_]{2,})="…{8,}"` → `$1=***`, `([A-Z][A-Z0-9_]{2,})=…{20,}` → `$1=***` (bare env vars), `sk-[A-Za-z0-9\-_]{16,}` → `sk-***`, `(Bearer\s+)[A-Za-z0-9\-_\.]{20,}` → `$1***`.
-
-**Server-side redaction (Hermes 0.13+, PR #21193)**: as of v0.13.0 secret redaction is ON by default. Hermes scrubs API keys and Bearer tokens in tool-call payloads server-side before streaming them to the client. The `scrubSecrets(_:)` regex set above still runs as a belt-and-suspenders layer for older Hermes installs and for tool-arg shapes the upstream redactor doesn't cover. Don't remove the client scrub when the server gains coverage; the two are complementary, and the client is the fallback when users run a stale gateway.
-
-UI side (`MessageBubble.EventTimeline` — single source of truth, no separate `liveThinkingPreview` / `thinkingToggle` views anymore):
-
-- The bubble renders one ordered timeline backed by `ChatMessage.events: [AgentEvent]`. Three streaming display states share the outer header slot:
-  1. `currentEvent` is non-nil → `inProgressLine(event)`. For `.thinking` with a non-empty `event.detail`, this is a top-aligned pulsing dot + italic wrapping text of the live reasoning (`.fixedSize(horizontal: false, vertical: true)`). For `.thinking` with empty detail (just received `thinkingStarted`, deltas not yet flowing) → "Thinking…" placeholder. For `.tool` → BrailleSpinner leading + 9pt SF glyph (`DS.Surface.tertiary`) + verb italic (`DS.Text.captionMedium` on `DS.Surface.secondary`) + args preview mono (`DS.Text.captionMono` on `DS.Surface.tertiary`).
-  2. `isStreaming` but no `currentEvent` (gap between events, or text rolling out after reasoning) → soft "Thinking…" placeholder with pulse, no icon. Keeps the timeline visible during the wait so the user doesn't see flicker between events. The "Thought for Ns" recap is **not** shown during streaming — it belongs to the post-stream state.
-  3. `!isStreaming` → `recapLine` ("Thought for Ns and called M tools" / single-channel variants), still rendered in `DS.Surface.tertiary` (metadata weight).
-- The outer `EventTimeline` button (chevron leading — section header convention) and each per-event `EventLine` (chevron trailing — row convention) both use the same hover lift: `contentShape(Rectangle())` + `nnGlass(in: shape)` on macOS 26+ / `DS.Stroke.hairline` fallback elsewhere, mirroring `RoutinesView.rowHoverBackground` exactly. Click target = full row, not just the chevron.
-- **EventLine row anatomy (Workspace-pivot 2026-05-03)** — left → right: (1) **status indicator** — 6pt `Circle` filled with `DS.Status.success` (`.completed`) or `DS.Status.failure` (`.failed`); during `.inProgress` the slot renders a `BrailleSpinner(size: 9)` instead — same 9pt frame so dot rows and spinner rows align vertically; (2) **SF glyph** — 9pt `DS.Text.nano` on `DS.Surface.tertiary`, from `verbMapping(toolName:).icon`, kept in the row because dot-only regressed scannability for "ran" vs. "edited" vs. "fetched"; (3) **verb** — past-tense from `verbMapping`, `DS.Text.captionMedium` on `DS.Surface.secondary` (subordinated to message text on purpose — the timeline is metadata, not equal-weight content); (4) **target** — `argsPreview` truncated to 50 chars, `DS.Text.captionMono` on `DS.Surface.tertiary`; (5) `Spacer(minLength: 6)`; (6) **duration** — `DS.Text.captionMono` on `DS.Surface.quaternary`, swapped to `DS.Status.failure` for failed events (failed verb stays neutral — only the duration + the reason text in `detailBody` shout); (7) **trailing chevron** — `DS.Icon.chevronBold` on `DS.Surface.quaternary`. The old `statusIcon` (trailing checkmark/xmark/spinner) was deleted: leading dot covers outcome, trailing chevron covers expand affordance, one signal per axis.
-- `verbMapping(toolName:)` covers only the tools actually emitted by Hermes today (`terminal`, `view`, `str_replace`, `create_file`, `web_search`, `web_fetch`, `delegate_task`). Speculative aliases (`bash`, `read_file`, `session_search`, `save_memory`, etc.) are NOT included — they'd be silently-broken matches. Confirm the exact name in `hermes/tools/*.py` before extending.
-- Expanding the timeline (chevron) reveals one row per event. `.tool` events keep their own toggle (args + result clamped to 600 chars are drillable). `.thinking` events render their `event.detail` directly as a left-bar + monospace block — no per-event chevron, no "Thought" label header. The reasoning content IS the row.
-
-Do NOT "fix" Hermes to stop emitting `<think>` blocks — the server streams what the model writes, and the model will keep writing them. The cleanup lives client-side and must stay there.
-
-### Voice recording flow
-
-Triple-tap the Control (⌃) key to start recording. A toast appears below the closed notch with a pulsing red dot and two buttons:
-
-1. **Talk** — stops recording, transcribes via `SpeechTranscriber` (macOS `SFSpeechRecognizer`, French locale), opens notch, sends transcript as chat message
-2. **Brain Dump** — stops recording, transcribes, saves transcript to Hermes memory via `saveToBrain()`, shows `kind: .success` toast "Note archivée 🧠" (pacman pixel icon)
-3. **Triple-tap ⌃ again** while recording — cancels, discards audio
-
-The triple-tap detection uses `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` gated on `event.keyCode == kVK_Control || kVK_RightControl` with down→up transition tracking. 0.5s sliding window, 3 releases to trigger. No Carbon hotkeys — all keyboard shortcuts were removed to avoid global key hijacking (Enter, Escape).
-
-If transcription fails, the Talk path falls back to sending the audio file as an attachment. The Brain Dump path shows a "Transcription échouée" toast.
-
-### Brain save pattern
-
-The drop zone "Save to brain", voice notes, and the Clipper extension all use the same flow:
-
-1. `ChatViewModel.saveToBrain(content:fileName:)` builds a prompt: `"Please save the following content to your memory. File: <name>\n\n<content>"`
-2. `HermesClient.sendCompletion(messages:)` sends `POST /v1/responses` with `store: false`, checks HTTP 200, discards body
-3. Toast shown via `notchVM.showToast()`
-
-The NotchNotch Clipper Chrome extension uses the identical API pattern, then pings `localhost:19944/clip` to trigger a `kind: .success` toast (pacman pixel icon) in the notch.
-
-### Brain edit/delete pattern
-
-Users can modify or delete individual memory blocks directly from the Brain tab's Memory section. Both paths are fire-and-forget chat prompts — NotchNotch never writes `~/.hermes/memories/` itself. Hermes interprets the prompt and applies the change through its own `memory` tool, which rewrites `MEMORY.md` / `USER.md` in place.
-
-1. **Edit** — `ChatViewModel.updateMemory(oldContent:newContent:)` sends a prompt asking Hermes to find the block matching `oldContent` and replace it with `newContent`, preserving `§` separators. Shows `"Mémoire mise à jour"` toast on HTTP 200. No-ops if the trimmed new content equals the old or is empty.
-2. **Delete** — `ChatViewModel.deleteMemory(content:)` sends a prompt asking Hermes to remove the matching block along with its surrounding separator. Shows `"Mémoire supprimée"` toast on HTTP 200.
-3. **Eventual consistency** — after either call, `BrainView.scheduleBrainReload()` fires `brainVM.reload()` 5 seconds later to pull the rewritten state back into the UI. There is no completion signal from Hermes on `/v1/responses` with `store: false`, so the 5s delay is a best-effort heuristic. If the model is slow or routes wrong, the user can hit the refresh button — state is eventually-consistent, not optimistic.
-4. **UX** — each `MemoryCard` reveals pencil + trash icons on hover. Pencil swaps the body for an inline `TextEditor` with Save (⌘↩) / Cancel buttons. Trash shows an inline "Supprimer ?" confirmation (Oui / Annuler) — no modal dialogs.
-
-Both methods live in [ChatViewModel.swift:276-326](BoaNotch/ViewModels/ChatViewModel.swift:276). The `MemoryCard` edit/delete UI is in [BrainView.swift:491-end](BoaNotch/Views/BrainView.swift:491).
-
-### Brain onboarding (first-run sheet)
-
-`BrainOnboardingView.swift` — One-time sheet presented after the main onboarding finishes, wiring up the Hermes `llm-wiki` skill and two cron routines. Gated by `@AppStorage("hasCompletedBrainOnboarding")` and the state of `~/.hermes/brain/wiki/` (skipped if any `.md` file exists).
-
-**Setup directories** — `AppDelegate.ensureBrainDirectories()` runs at every launch (idempotent, silent `try?`). Creates `~/.hermes/brain/raw/` (raw clipped content, fed to the ingest routine) and `~/.hermes/brain/wiki/` (LLM-compiled knowledge base).
-
-**Presentation gate** (NotchView.swift) — two triggers, both guarded by a `didEvaluateBrainOnboarding` `@State` once-flag so the sheet presents at most once per app launch:
-1. `.onAppear` — covers the "existing user" path where `onboardingVM.needsOnboarding == false` at boot.
-2. `.onChange(of: onboardingVM.needsOnboarding)` — covers the "fresh install" path: the main onboarding renders first (brain sheet suppressed), and when `completeOnboarding()` flips `needsOnboarding → false`, the sheet appears.
-
-Full condition: `!onboardingVM.needsOnboarding && !hasCompletedBrainOnboarding && wikiHasNoMarkdown && !didEvaluateBrainOnboarding`. The `wikiHasNoMarkdown` helper returns `true` when the wiki dir is missing OR contains zero `.md` files.
-
-**Everything-through-chat principle** — NotchNotch does NOT call Hermes's skill manager or cron API directly. `ChatViewModel.setupBrainPipeline(options:onStep:)` sends 1–4 natural-language messages via `sendCompletion` (fire-and-forget, `store: false`), sequentially, stopping on the first HTTP failure. Hermes interprets them with its own tools (`skill_manage`, `cronjob`, and `terminal` — the last one runs `hermes config set` because there is no `config_set` tool; see gotcha below). This keeps the coupling thin — if Hermes's internal APIs change, setup still works.
-
-**`BrainSetupOptions`** — three bools from the toggles: `enableWiki` (sends install + verify), `enableAutoIngest` (sends cron ingest every 2h, job name `brain-ingest`), `enableWeeklyLint` (sends cron lint Sunday 9h, job name `brain-lint`). Toggles default to ON. The sheet's "Pas maintenant" button sets the flag and dismisses without sending anything; "Activer" runs the pipeline with a progress indicator (`1/N : label…`) and flips to "Réessayer" on error without setting the flag.
-
-### Brain panel
-
-The Brain panel is a read-only viewer for Hermes knowledge and capabilities, opened via Memory/Tools/Missions icons in the right burger menu (`NotchViewModel.isBrainOpen`, `openBrain()` + `brainVM.activeTab` set per icon). Three tabs: **Memory · Tools · Missions** (the .brain tab carries the user-visible label "Memory" via `BrainTab.brain.rawValue`; the .tasks tab carries the user-visible label "Missions" via `BrainTab.tasks.rawValue` since 2026-05-03; internal code keeps the `brain`/`tasks` case names and `BrainView`/`BrainViewModel` types — convention: case = English code identifier, rawValue = French user-visible label). Each tab carries an icon next to its label: `person` Memory · `xmark.triangle.circle.square` Tools · `checkmark.rectangle.stack` Missions.
-
-**Brain tab — Memory section + (optional) Wiki section in one scroll:**
-
-The Brain tab is a single `FadingScrollView` with two stacked sections separated by a hairline divider (only rendered when wiki content exists). Both sections share an uppercase monospaced section header (`À PROPOS DE TOI` / `À PROPOS DU MONDE`) at `Color.white.opacity(0.28)`.
-
-- **Memory section** (top, always rendered):
-  - `BrainViewModel` reads `~/.hermes/memories/MEMORY.md` and `USER.md`, splits each on `§` (section sign) into `[MemoryBlock]`, and groups them by derived `category` into `memoryCategories: [MemoryCategoryGroup]`. The CATEGORY metadata is preserved in the model for the SF Symbol icon mapping (`iconForCategory(_:)`) used per row, but the DISPLAY is a flat list of `memoryCardCompact` rows (no two-level category drill-down — the flat doctrine is documented at "Memory section is flat" below).
-  - Title + category extraction priority: `**Bold Label**:` → `- Dash prefix:` → `## Heading` → first 40 chars (category falls back to `"Généralités"`).
-  - `MemoryBlock.id` is a 16-char SHA-256 content hash (whitespace-normalized) — stable across reloads so UI state survives small formatting edits without remounting rows.
-  - Tapping a card opens `memoryBlockDetail` (asymmetric `.move(edge: .trailing)` transition) which shows the full `MemoryCard`. Pencil → inline `TextEditor` with Save (⌘↩) / Cancel. Trash → inline "Supprimer ?" confirm (Oui / Annuler). Both route through `ChatViewModel.updateMemory` / `deleteMemory` — see "Brain edit/delete pattern" above.
-  - Stale selection guard: if the selected memory disappears after reload (e.g. block deleted), `.onChange(of: brainVM.allMemoryBlocks.map(\.id))` resets `selectedMemoryBlock` back to the list.
-  - If a file has no `§` separators, the entire content becomes one block. Missing files = empty French copy ("Hermes n'a encore rien appris…").
-
-- **Wiki section** (bottom, conditionally rendered when `brainVM.hasWiki`):
-  - Dashboard caption: `Ton cerveau connaît N sujet(s)` (singular at N=1) + `· Dernière intégration il y a <short>` where `<short>` is `47 min` / `2h` / `3j`. Never use the words "wiki", "RAG", "Karpathy", "lint" in user-facing copy; prefer "cerveau" / "intégration" / "maintenance".
-  - Sync button (`arrow.clockwise`, 11pt) sits inline with the caption: opacity 0.3 + disabled when `pendingRawCount == 0` (tooltip `Cerveau à jour`); opacity 1.0 + 1.5s ease-in-out scale pulse when pending > 0 (tooltip `Intégrer maintenant (N en attente)`); swapped for a `ProgressView` (controlSize `.mini`, scaled 0.6) when `isIngesting`. Tap fires `onSendToChat?("Utilise le skill llm-wiki pour ingérer le contenu en attente dans ~/.hermes/brain/raw/")` and resets `isIngesting` to false after a 60s `DispatchQueue.main.asyncAfter` timeout (no "ingestion done" signal from Hermes today). The prompt explicitly names the `llm-wiki` skill because free-tier models route a bare "ingère" to the `memory` tool.
-  - Article list: each row has an "Ask" button (also tappable as the whole row) — tap fires `onSendToChat?("Qu'est-ce que tu sais sur \(article.title) ?")` for normal articles, or `onSendToChat?("Résume-moi ton wiki")` for the index article. The row pre-fills the chat composer and auto-sends. NO article content preview — this is a dashboard, not a reader.
-  - Empty state (dir exists but no articles): `Ton cerveau est vide. Installe l'extension NotchNotch-Clipper et clippe ton premier article.` rendered via markdown `AttributedString` so the Clipper repo URL is a subtle tinted link.
-
-**Hermes memory file format** (important for Clipper compatibility):
-```
-~/.hermes/memories/
-  MEMORY.md    # Agent-curated facts, § separated blocks
-  USER.md      # User profile/preferences, § separated blocks
-  MEMORY.md.lock / USER.md.lock  # Lock files (ignore)
-```
-When Hermes saves to memory (via `saveToBrain` or its own `memory` tool), it appends `§`-separated blocks to MEMORY.md. Each block is a thematic group — a single fact, a project context, a person's details, etc. The `§` separator is Hermes's convention, not a NotchNotch invention.
-
-**Tools tab — 2 sections : Apps + Capacités** (refactored 2026-05-04 from the previous 3-zone état-driven layout, then iterated 2026-05-04 after first user pass):
-
-The Tools tab is a single vertical `FadingScrollView` with two stacked sections separated by 24pt of negative space — no hairline dividers between sections (Liquid Glass continuity). Mental model: "Apps" = services connectés (gros monde extérieur), "Capacités" = compétences locales (le set d'outils que ton agent embarque).
-
-- **Section 1 — Apps** (curated capabilities, **3-column card grid**): all 6 entries of `CuratedSkillCatalog.all` rendered in a `LazyVGrid` of `[.flexible(), .flexible(), .flexible()]` — exactly 3 cards per row, 2 rows total at v1. Each card is a 10pt rounded rect, 10pt padding, layout 2 lignes (compactée 2026-05-10, ~50pt vs précédemment ~76pt) : top = `checkmark.seal.fill` accent (DS.Text.captionSemibold, tooltip "App officielle NotchNotch" — remplace l'ancien tag texte "Officiel" qui prenait sa propre row width) ; bottom row HSTACK = brand icon (22pt) gauche + name (`DS.Text.bodyMedium`, `.primary` if connected else `.secondary`) à côté + Spacer. **L'état connecté/non-connecté est porté par la matière de la card, pas par un label texte** : connectée → fill `.quaternary.opacity(0.50)` + hairline blanche `0.10` ; non-connectée → fill `.quaternary.opacity(0.20)` (ghostée) + hairline blanche `0.04` (presque invisible). Brand icon desaturates to `Color.primary.opacity(0.35)` via `BrandIconView(desaturated:)` when `.available`. Hover lifts to `AppColors.accent.opacity(0.55/0.35)` stroke (vibrant sur connectée, plus doux sur non-connectée qui invite à la connexion) — accent réservé au hover, jamais au rest state pour ne pas surcharger en bleu. Tap → `selectedCuratedSkill` → `CuratedSkillDetailView` (inchangé). **Toutes les Apps curées sont marquées OFFICIEL** par convention NotchNotch — les connecteurs MCP user-supplied (v2) afficheront "COMMUNAUTÉ".
-- **Section 2 — Capacités** (technical Hermes skills, card-style + grouped): header inline avec **search field** (filtre in-memory sur `name + description` des skills installés, `Filtrer…` placeholder, X icon to clear) et bouton accent **"+ Parcourir"** à l'extrême droite — ce bouton est l'**unique point d'entrée vers le catalogue** (la précédente card d'invitation dashed a été retirée le 2026-05-04 au profit de ce CTA inline plus dense, cohérent avec le pattern Routines `[+ New]`). Sous le header, la liste de catégories collapsibles. Pendant qu'une recherche est active (`isSearchActive`), toutes les catégories visibles sont force-expanded pour ne pas cacher les matches ; le `collapsedTechnicalCategories` set utilisateur est préservé (restauré quand le query se vide). Empty groups droppés via `filteredTechnicalSkillCategories`. Chaque catégorie : sub-header tappable (icône + label uppercase `DS.Text.sectionHead` + count + chevron 90° rotatif), spring 0.3/0.85, asymmetric transition. Rows : `CapabilityCard` partagé, 8pt vertical entre cards.
-- **Catégorie pseudo "Installées"** (synthetic, en tête de Section 2 quand non vide): regroupe les capacités installées via le catalogue, sourcées depuis `~/.hermes/skills/.hub/lock.json` (champ `installed: {<name>: {source, trust_level, identifier, install_path, ...}}`). Icon `sparkles`, label "INSTALLÉES". Une capacité hub-installed est *retirée* de sa catégorie native pour éviter le double-listing (Notion installé via hub apparaît UNIQUEMENT sous "Installées", pas sous "Productivité"). Default state : "Installées" expanded, autres catégories collapsed — géré par `initializeZone3CollapseIfNeeded()` (gated by `didInitializeZone3Collapse` pour ne pas écraser les choix user). À chaque fresh install (`hubInstalled.count` augmente), "Installées" est ré-expanded automatiquement via `.onChange(of: brainVM.hubInstalled.count)`.
-- **`CapabilityCard` — composant partagé** (`BoaNotch/Views/CapabilityCard.swift`, 2026-05-04) : single source of visual truth pour les capacités, utilisé à la fois par Section 2 et par l'écran 1 du catalogue (`SkillsHubView`). Layout : 10pt rounded rect, fond `.quaternary.opacity(0.5)`, 14H × 12V padding, icône SF Symbol 22pt à gauche, nom (`DS.Text.bodyMedium`) + badge optionnel `OFFICIEL`/`COMMUNAUTÉ` à côté, description sur 2 lignes (`DS.Text.nano .secondary`, `lineLimit(2)` *non* `reservesSpace`), chevron droite révélé au hover. **Badge dérivation** : `BrainView.badgeFor(_:)` consulte `brainVM.hubInstalled[skill.name]` → `OFFICIEL` si `source == "official"` ou `trust_level == "builtin"`, sinon `COMMUNAUTÉ`, sinon nil (skills bundled / locaux non passés par le hub n'ont pas de badge).
-- **`SkillMarkdownView` — drill-down rendering** (`BoaNotch/Views/SkillMarkdownView.swift`, 2026-05-04) : block-aware markdown renderer pour le contenu d'un `SKILL.md`. La précédente impl utilisait `AttributedString(markdown:options: .inlineOnlyPreservingWhitespace)` qui laissait `##`, `**`, `- ` etc. en clair — `Text(AttributedString)` n'honore que les attributs *inline* même quand parsé en `.full`. Solution : split linéaire en blocks typés (`heading(1-3)`, `paragraph`, `bullet`, `codeBlock`, `quote`) et chaque block rendu comme une vue dédiée avec sa propre font (heading 17/15/13 semibold, code mono 12, quote bar accent + secondary). Inline (bold/italic/links/inline code) parsé via `AttributedString(markdown:options:)` dans chaque block. **CTA footer** : bouton accent "Voir dans le Finder" qui révèle `~/.hermes/skills/<id>/SKILL.md` via `NSWorkspace.activateFileViewerSelecting` (fallback sur le dossier si SKILL.md absent).
-- **Pas de brand-icon morph** : la fusion Apps connectées/non-connectées en une seule grid rend le `matchedGeometryEffect` inutile. La transition est portée par `BrandIconView.desaturated` qui flippe la `foregroundStyle` (brand color ↔ `.primary.opacity(0.35)`) avec un spring sur `value: isConnected`.
-
-**Liquid Glass without the material**: les 2 sections gardent la doctrine — concentric shapes (cards 10pt continues), pure-spacing entre sections (24pt de vide), pas de divider entre sections. `.glassEffect()` / `nnGlass()` reste réservé au floating UI (toasts, recording, panel background). Inside the panel, le dégradé de `.quaternary.opacity()` et l'espace négatif portent les couches.
-
-**Curated Skills connect rule (NEVER `.viaChat`)**: when a curated capability needs configuration, expose it through structured UI — OAuth button (`.oauth(.google)` reuses `GoogleOAuthService`), inline API-key form (`.apiKeyInput(envVarName:)` writes to `~/.hermes/.env` via `HermesConfig.writeRawEnv`), or external doc link (`.external(URL)` opens browser via `NSWorkspace.shared.open`). The `ConnectAction` enum intentionally has no `.viaChat` case. The mission is to expose Hermes's powers to non-dev users with visible, inspectable parameters; chat-mediated connection is opaque, model-dependent, and teaches nothing about the agent's surface area. Same rule applies to disconnect: Google → `GoogleOAuthService.shared.disconnect()`, API key → `writeRawEnv(key: name, value: "")`, external → no disconnect (user manages externally).
-
-**Detection rules** (resolved sync, all small file reads, ~milliseconds):
-- `.envVar("FOO")` — read `~/.hermes/.env`, check `FOO` is present and non-empty (used by Notion → `NOTION_API_KEY`)
-- `.googleScope("gmail.modify")` — read `~/.hermes/google_token.json`, check `scopes` array contains a URL containing the substring (used by all 4 Google capacities; the substring matches the trailing scope component because Google scopes are full URLs like `https://www.googleapis.com/auth/gmail.modify`)
-- `.hermesAuthProvider("spotify")` — read `~/.hermes/auth.json`, check `providers.<id>` is present and non-null (used by Spotify; populated by `hermes auth spotify login` CLI)
-
-**Brand icons via Simple Icons** (https://github.com/simple-icons/simple-icons, MIT) — monochrome SVGs (single path, viewBox 24x24) bundled flat in `BoaNotch/Resources/BrandIcons/`. Loaded via `Bundle.main.url(forResource: slug, withExtension: "svg")` + `NSImage(contentsOf:)` + `isTemplate = true` so `.foregroundStyle(brandColor)` tints them — same pattern as `ProviderIcon.swift` and `NotchView.callBellImage`. The `BrandIconView` view substitutes too-dark brand colors (luminance < 0.18) with `.primary` so they remain visible on the panel's near-black background — Notion's `#000000` is the canonical case. Refresh / add new brand: edit the `SLUGS` array in `scripts/fetch-brand-icons.sh` and run it manually. The script tries jsDelivr first, falls back to raw GitHub. SVGs are committed to the repo — `run.sh` and `release.sh` only copy them, they never refetch.
-
-**Spotify v1 caveat**: Spotify uses OAuth 2.0 PKCE via the `hermes auth spotify login` CLI, which requires the user to register their own Spotify Developer app (env var `HERMES_SPOTIFY_CLIENT_ID`). NotchNotch v1 does NOT implement the in-process OAuth flow for Spotify — `connectAction` is `.external(URL)` pointing to the Hermes setup docs. Detection still works (`auth.json` parsing) so the green dot lights up automatically once the user completes the CLI setup. Building a native `SpotifyOAuthService` mirroring `GoogleOAuthService` is the v2 path.
-
-**Missions tab — RoutinesView wrapper (Goals later):**
-
-The Missions tab is a thin wrapper around `tasksContent: () -> AnyView`, a closure passed by NotchView (`routinesEmbedded` private view in `NotchView.swift`) that constructs `RoutinesView` with all its callbacks rewired to close the Brain panel (`notchVM.isBrainOpen = false`) instead of the deprecated standalone Routines panel. The Missions tab is the only entry point to Routines now — the right burger's `checkmark.rectangle.stack` icon opens the Brain panel directly to this tab.
-
-Goals (`/goal` Hermes feature) will be added above Routines in a future session — the structure intentionally leaves room for a second section header above `tasksContent()`.
-
-**Missions tab — activity banner (`MissionsActivityBanner`, 2026-05-04):** three side-by-side micro-cards stacked above `tasksContent()` via a 14pt spacing in `tasksTab`. Sources: `state.db.sessions` (USD cost natively, no FX) and `CronStore.jobs` (cron health). 30-day cost + linear month-end forecast (`actual_cost_usd` ?? `estimated_cost_usd`, `nil` when the entire window has `cost_status='unknown'` — distinguishes "no pricing data" from "$0 spent"); 7-day session sparkline (`Path` stroke `AppColors.accent.opacity(0.8)`, no Charts framework); cron health (`failures` / `healthyJobs` counted from `last_status` + ISO8601 `last_run_at` parsed via custom `DateFormatter` that handles 6-digit fractional seconds — `ISO8601DateFormatter` only accepts 3). Computation lives in `BrainViewModel.refreshActivityMetrics()` (single SQL pass, indexed `idx_sessions_started`, 60-day window, `SQLITE_OPEN_READONLY` — bails silently on lock/missing file, keeping previous values). Three new `@Published` vars: `costThisMonth: Double?`, `costForecastMonth: Double?`, `dailySessionCounts: [Int]` (always size 7). Cron stats are computed inline in `BrainView` from `cronStore.jobs` for instant updates on cron writes (vs the 60s `refreshLightMetrics` cadence). **No `.glassEffect()` on the cards** — the panel already carries glass behind the gradient on macOS 26+ via `notchPanelBackground`; doubling the material muddies the surface. Cards use `.quaternary.opacity(0.6)` matching Tools tab Zone 2 — visual variety comes from the three distinct centerpieces (mono number / `Path` sparkline / dot+text), not from the material. Empty state (no cost AND zero sessions AND no jobs) renders a single discrete "Pas encore d'activité" line instead of three placeholder cards. Errors.log is intentionally NOT consulted — it's 99% asyncio "Unclosed client session" noise that would always show RED to non-actionable users; cron `last_status` is the actionable signal.
-
-**Wiki filesystem** (important for Clipper compatibility):
-```
-~/.hermes/brain/wiki/     # Primary location (Karpathy-style LLM wiki)
-  index.md                # Wiki index — pinned first in the list
-  topic-name.md           # One article per topic
-~/.hermes/wiki/           # Fallback location (checked if brain/wiki/ doesn't exist)
-```
-Wiki articles are LLM-compiled summaries from ingested raw material. The Clipper could feed raw content into `~/.hermes/brain/raw/` for Hermes to compile into wiki articles, or save directly to memory via the existing `saveToBrain` pattern.
-
-**Integration points for Clipper:**
-- **Saving clipped content** → goes through `saveToBrain` → Hermes decides whether to store in MEMORY.md (facts) or process into wiki (if wiki pipeline is active)
-- **ClipperListener** (`localhost:19944/clip`) → only handles the toast notification, NOT the save itself. The Clipper must call the Hermes API directly for the actual save, then ping ClipperListener for the toast.
-- **Brain panel refresh** → `BrainViewModel.reload()` re-reads all files. After a Clipper save, the user can hit the refresh button in the Brain panel to see the new content. No automatic refresh on file change (no DispatchSource watcher on memory files — could be added).
-
-### Routines (cron job display + template browser)
-
-Read-only view of Hermes cron jobs from `~/.hermes/cron/jobs.json`. **Since 2026-05-02 Routines are reached through the Brain panel's Missions tab** (right burger → `checkmark.rectangle.stack` icon) rather than a standalone panel — `RoutinesView` is embedded inside `BrainView.tasksTab` (Swift identifier kept) via the `routinesEmbedded` private view in `NotchView.swift`. The right burger menu deploys 4 icons on hover (settings · Brain · Tools · Missions), driven by `NotchViewModel.isMenuExpanded` with a 0.6s grace period before retract (`expandMenu()` / `scheduleMenuCollapse(after:)`). The deprecated standalone Routines panel + `NotchViewModel.isRoutinesOpen` + `openRoutines()` were removed.
-
-**Template browser** — `TemplateBrowserView` provides a three-screen drill-down replacing the old 4-card starter templates. Screen 1: 7 category rows (Personal, Professional, Research, Travel, Health, Finance, Creator) with SF Symbol icons, template counts, and a "Create your own" row at the bottom. Screen 2: template list for the selected category. Screen 3: form with structured inputs (text fields, capsule picker buttons, number fields, file pickers via NSOpenPanel) and a "Create routine" button. Navigation uses `@State` — resets to categories each time the panel reopens. Transitions: `.asymmetric(.move)` with spring animation.
-
-**Template data** — `RoutineTemplates.swift` defines 25 templates across 7 categories (`RoutineCategory.all`). Each `RoutineTemplate` has a `promptTemplate` with `{{placeholder}}` tokens and `[TemplateInput]` describing the form fields. `composeDraft(values:)` substitutes placeholders and prepends `"Schedule a new routine running <schedule>, delivered via <deliver>."` — producing a natural-language string that Hermes parses via its `cronjob(action="create", ...)` tool. *Creation* still composes a natural-language draft for the `cronjob` tool; *edit*, *pause*, and *resume* go through direct REST (see Documented exceptions). *Removal* still goes through chat for now.
-
-**Empty state** — shows the template browser. When jobs exist, `RoutinesView` shows the task-report list with a `[+ New]` Menu in the top-right header (accent, `plus` glyph + "New" label, opens a native macOS popup with **From a template** / **Blank routine**). When `showingBrowser` is true, the header swaps the menu for a `← Back` button. Horizontal padding lives at the NotchView wrapper (42pt) — `RoutinesView` itself only applies vertical padding so the list spans the available width without double-padding.
-
-**Job list — task-report rows (refactored 2026-05-03 from grid of cards)** — `LazyVStack(spacing: 0)` of single-line rows separated by `DS.Stroke.hairline` 0.5pt dividers (`rowDivider` helper). On `panelSize == .large` the stack is constrained to `DS.Layout.maxWidthRoutines` (720pt) and centered; on `.standard` it's full-width. Sorted by enabled status then `next_run_at`. Identity-of-object rule (cards as exception) is RETIRED for routines — the doctrine now treats them as a true list, in line with Memory/Skills/History. Each `routineRow(_:)` is a 32pt-min `Button` (`DS.Layout.rowMinHeight`) with 6pt vertical padding and 14pt horizontal padding (`DS.Padding.rowH`). Anatomy left → right: (1) **type icon** — SF Symbol from `iconName(for: job.routineType)` (`eye.fill` silent / `calendar` digest / `bell.fill` alert), `DS.Icon.caption` (11pt), white `DS.Surface.primary`, 14pt fixed frame for column alignment; (2) **title** — `DS.Text.bodySmall` (13pt) on `DS.Surface.primary`, `lineLimit(1)` truncating tail; (3) `Spacer(minLength: 12)`; (4) **schedule** — `humanSchedule(job.schedule_display)` in `DS.Text.caption` (11pt) on `DS.Surface.secondary`, `lineLimit(1)`; (5) **clickable `StatusPill`** — always visible, label `active` / `failed` / `paused` (5pt dot colored per status: accent blue / coral red `(0.95, 0.55, 0.55)` / muted gray `Color.white.opacity(0.4)` + label in `DS.Text.microMedium`). The pill IS the toggle — the old leading `StatusDotButton` was removed; clicking the pill fires `onSetPaused?(job, isActive)` (Button-in-Button works because SwiftUI routes taps to the innermost). Run count + last_run_at + next_run_at + error detail live in the native `.help()` tooltip via `tooltipText(for:)` — kept off the row to preserve density. Hover background uses `nnGlass(in: rounded8)` on macOS 26+ (Liquid Glass "lift" moment) and `AppColors.accent.opacity(0.06)` fallback elsewhere — rest state has NO fill (true list, not card). Paused rows at opacity 0.5. **Tap on row body** opens the dual-mode edit form pre-filled. Right-click context menu unchanged: Talk · Pause/Resume · Remove. The list ends with `rowDivider` + `addRoutineRow` — a discreet leading `+` icon + "New routine" in `DS.Surface.secondary` that wraps the same Menu as the header `[+ New]`, so the affordance is identical wherever the user reaches.
-
-**Add row + custom form / edit mode** — there is no longer a dashed `addCard` cell. Creation goes through the `+ New` Menu in the header OR the bottom `addRoutineRow` — both invoke `newRoutineMenu(label:tint:)` which exposes "From a template" (sets `showingBrowser = true`) and "Blank routine" (`resetForm()` + `showingCustomForm = true`). The same `customForm` powers both **create** and **edit** (tapping a routine row → `applyJobToForm(job)` → pre-filled). Mode is driven by a single `editingJob: CronJob?` `@State`. Form layout:
-1. Back chevron breadcrumb — "← New routine" or "← Edit routine".
-2. **Notion-style title header** (`titleHeader` view, 2026-04-26) — replaces the old `Name (optional)` formField. A plain `TextField("Name your routine", text: $formName)` styled with `DS.Text.title` (18pt semibold) and `.fixedSize(horizontal: true, vertical: false)` so the field hugs the typed text instead of stretching to full width — followed by a `pencil.line` SF Symbol at `DS.Icon.secondary` (14pt medium, `DS.Surface.tertiary`) sitting 8pt to the right of the text, then a trailing `Spacer(minLength: 0)`. Result: the pencil affordance always sits next to the title regardless of length, never pinned to the trailing edge of the panel. The user explicitly rejected the previous variants (small thin pencil pinned far-right, bordered text field) on 2026-04-26 — preserve this hierarchy.
-3. "What should it do?" — required `TextEditor` for the prompt.
-4. "When?" — `scheduleSection` (structured picker, see below) when `scheduleEditable == true`; otherwise `advancedScheduleNotice` showing the raw cron expression read-only with the hint "Édite cette routine via le chat — son planning n'est pas modifiable ici". `scheduleEditable` is set to `false` by `applyJobToForm` whenever the job's `schedule.expr` doesn't roundtrip cleanly through `parseCron(_:)` (sub-hourly steps like `*/30 * * * *`, ranges, multi-day-of-month, `month != *`, or `kind != "cron"` like `every 90m`).
-5. "Deliver to" — capsule picker (Notch / Telegram / Discord / Slack), selected pill `#A8DCFC` with dark text. `deliverPillName(_:)` maps the job's stored value back to a pill on edit-mode entry — `local`/`origin` both resolve to "Notch" (closest pill); unknown values like `email` also default to "Notch" but `submitEdit` only includes the `deliver` key in the PATCH body when the user actually picks a *different* pill, so `origin`/`email`/custom platforms survive untouched.
-6. Submit button — label is "Create routine" or "Save changes" depending on mode.
-
-**Submit branching** — `submit()` calls either `submitCreate()` (existing chat-driven flow: composes a natural-language draft and fires `onCreateCustomRoutine`) or `submitEdit(_ job:)` (assembles a *minimal* `[String: Any]` patch — only includes keys whose values actually changed vs. the loaded job — and fires `onUpdateRoutine?(job.id, patch)`). Empty patches early-return without calling the callback (no toast spam on no-op saves). `NotchView` wires `onUpdateRoutine` to `ChatViewModel.updateRoutine(jobId:patch:)` → `HermesClient.updateCronJob` (PATCH `/api/jobs/{id}`, see Documented exception). `onCreateCustomRoutine` still routes through `ChatViewModel.createRoutine(draft:)` — chat-driven `sendCompletion` because creation needs LLM phrasing of the prompt.
-
-**`parseCron(_:)` static helper** — the inverse of `composedCron`. Recognized patterns: `M H * * *` → daily, `M H * * 1-5` → weekdays, `M H * * d1,d2,…` → weekly with `Set<Int>` weekday indices, `M H D * *` (D ≤ 28) → monthly, `0 */N * * *` (N ∈ {1,2,3,4,6,12}) → hourly. Returns `nil` for everything else, triggering the read-only fallback in step 4 above. Roundtrip-clean for everything `composedCron` produces.
-
-**Schedule picker (`scheduleSection`)** — replaces a free-text "When?" input so users never have to know cron syntax. Row 1 is a 5-pill frequency selector (Daily · Weekdays · Weekly · Monthly · Hourly) styled exactly like the Deliver picker (`#A8DCFC` capsule with dark text when selected), followed inline (when the frequency has a time-of-day) by `at [DatePicker(.compact, .hourAndMinute)]` — the picker is `.fixedSize()` + `minWidth 84` so the minutes field never clips. Hourly omits the inline time (interval is on row 2 instead). Row 2 holds the contextual extras: Weekly shows 7 day-of-week circle pills (28pt, indices 0=Sun…6=Sat — the cron convention; at least one always selected); Monthly shows a `Stepper(1...28)` for day-of-month; Hourly shows interval pills (1h · 2h · 3h · 4h · 6h · 12h); Daily/Weekdays leave row 2 empty. Row 3 is a `humanSchedule(composedCron)` preview caption so users see the rendered result. `composedCron` is a computed property mapping the selections to a 5-field cron string (`"\(m) \(h) * * *"` daily, `"\(m) \(h) * * 1-5"` weekdays, `"0 */N * * *"` hourly, etc.) — that cron expression is sent to Hermes verbatim. `customFormValid` only checks the prompt is non-empty since the schedule always has a default. Layout fits within the standard panel (~556pt content width) without crowding — DO NOT enlarge the panel to accommodate this UI; if a future addition is too tight, redesign instead (user explicitly rejected enlarging the notch panel for the schedule UI on 2026-04-24).
-
-**`humanSchedule()` cron parser** — converts common 5-field cron expressions to readable text: `0 9 * * *` → "Daily at 9 AM", `0 9 * * 1-5` → "Weekdays at 9 AM", `0 9 * * 0` → "Suns at 9 AM", `0 9 * * 1,4` → "Mon & Thu at 9 AM", `*/30 * * * *` → "Every 30 min", `0 */6 * * *` → "Every 6h", `0 9 15 * *` → "Day 15, 9 AM". Falls back to raw string for unrecognized patterns. Also passes through `every Xh/Xm` interval syntax unchanged.
-
-**CronStore JSON format** — `jobs.json` is `{"jobs": [...]}` (wrapper object), not a bare array. `CronStore.load()` tries `JobsWrapper` first, falls back to bare `[CronJob]`.
-
-**Routine context** — when `activeRoutineContext` is set, `startRequest()` passes a `systemContext` string to `sendResponse()`, which converts the API `input` from a string to `[system_msg, user_msg]` array. The system message describes the job so Hermes knows which cron job the user is referring to. `routineCreationMode` uses the same mechanism for file-based routine creation (one-shot, resets after send).
-
-**Hermes cron API** — Hermes exposes cron management through a tool-based interface (`cronjob(action, ...)`), not REST endpoints. Actions: `create`, `list`, `update`, `pause`, `resume`, `run`, `remove`. Schedule formats: cron expressions (`0 9 * * *`), relative delays (`30m`), intervals (`every 2h`), ISO timestamps. Delivery targets: `telegram`, `discord`, `slack`, `local`, `origin`, etc. Jobs stored in `~/.hermes/cron/jobs.json`, output in `~/.hermes/cron/output/{job_id}/`. `[SILENT]` prefix suppresses delivery.
-
-**Cron output delivery (notch as alert surface)** — jobs created with `deliver: "local"` skip all platform delivery on the Hermes side; the agent runs, writes the response to `~/.hermes/cron/output/{job_id}/YYYY-MM-DD_HH-MM-SS.md`, and nothing else happens. NotchNotch picks these up client-side:
-
-1. `CronStore`'s existing `jobs.json` DispatchSource watcher triggers `load()` on write
-2. `load()` decodes jobs, then `detectNewOutputs(in:)` diffs `last_run_at` against the in-memory `lastRunByJobId` map (primed silently on first load so a restart doesn't replay history)
-3. For any job with a changed `last_run_at` and `last_status == "ok"`, `readLatestOutput(jobId:)` lists the output dir, picks the lexically newest `.md` (filenames sort chronologically), and returns the trimmed `## Response` section
-4. Hermes's `[SILENT]` marker is written to the file *before* its suppression kicks in (`scheduler.py:951` saves, `:960` silently skips delivery), so the watcher filters `[SILENT]` client-side (case-insensitive prefix)
-5. Surviving outputs fire `onNewOutput(jobId, jobName, content)` — wired in `AppDelegate.wireCronOutputToasts()` to `NotchViewModel.showCronToast(jobId:jobName:fullContent:)`. The `jobId` rides through end-to-end so the eventual `ChatMessage` carries a stable `routineId` (no fragile name-lookup downstream).
-
-The toast shows `⚙️ {jobName}: {firstLine}` (5s auto-dismiss, `kind: .cron` with the clock pixel icon) and stores the full content in `NotchViewModel.pendingCronOutput` (tuple `(jobId, jobName, fullContent)`). Tapping the toast (`NotchView.swift` `.onTapGesture`) injects `**{jobName}**\n\n{fullContent}` as an assistant `ChatMessage` (with `routineId: pending.jobId`) and opens the notch. `pendingCronOutput` is cleared on consumption and also reset at the start of every `showToast` call so stale cron output can't hijack a regular toast tap.
-
-**Refine button** — when a routine delivery is injected as a `ChatMessage` via the toast tap, the message carries the matching `routineId` (propagated end-to-end via `CronStore.onNewOutput` → `wireCronOutputToasts` → `NotchViewModel.pendingCronOutput`). `MessageBubble` shows a wand button (`wand.and.stars`, `DS.Text.caption`, alongside Copy/Retry) for messages with a non-nil `routineId`. Tapping it calls `ChatViewModel.startRefine(routineId:)`, which sets `activeRoutineContext`, pre-fills the composer with a neutral French primer (`"Pour cette routine, je voudrais que tu… "` — overwrites any draft, by design), and triggers composer focus via a `focusComposerTrigger: UUID` `@Published` observed by `ChatView` (`.onChange` sets `isInputFocused = true` — UUID rather than Bool so re-firing always emits even if focus is already held). The user edits and sends — Hermes routes via its `cronjob` and `memory` tools. No direct REST. `activeRoutineContext` stays sticky after send (intentional — multi-turn refinement OK); cleared via the X on `routineContextTag` like "Talk about this routine". Routine deliveries reloaded from session history don't carry `routineId` (not persisted server-side), so the button only appears on live deliveries within the same NotchNotch session. Routine removed between delivery and tap = silent no-op + log. **While Hermes is streaming a response** (`chatVM.isStreaming == true`, passed to `MessageBubble` as `isChatStreaming`) the wand button stays visible but becomes non-clickable at 0.4 opacity, with the tooltip switching to "Hermes répond…" — prevents accidental re-taps and conveys an honest waiting state without lying about success (no fake checkmark — there's no clean "routine actually changed" signal short of watching `jobs.json` diff for the specific `jobId`).
-
-### Conversation history
-
-`ConversationHistoryView` — read-only browser for past Hermes sessions from `~/.hermes/state.db`. Opened via the `book` icon in the left burger trio (fills when active). `NotchViewModel.isHistoryOpen` toggles visibility, mutually exclusive with all other panels via `openHistory()`. Sessions reload on open via `.onChange`. The header has an inline search field (between the title and the [+ New] button) that filters the list by resolved title or first user message (case-insensitive); shows "No matches" when the query has no hits.
-
-Each row shows source icon (color-coded: orange for CLI, blue for Telegram, purple for Discord, accent for `api_server` which is NotchNotch's own conversations), title, and relative timestamp. Title resolution chain: cached LLM title from `TitleStore` → `sessions.title` from DB → preview of first user message (truncated to 45 chars) → "Untitled". Active session highlighted with `AppColors.accent` tint. Tapping a row loads its messages into `chatVM.messages` and sets `chatVM.sessionId` for session continuity. The [+ New] button calls `chatVM.startNewConversation()` (also accessible via the `plus.message` flanking button on the left side of the notch).
-
-**Why we don't rely on Hermes auto-titles**: `/v1/responses` does not call `maybe_auto_title` (only `/v1/runs` does, see `~/.hermes/hermes-agent/gateway/run.py:9244`). Until/unless that's patched in Hermes, NotchNotch generates titles itself via `HermesClient.generateTitle()` and caches them in `TitleStore`. The prompt and gating mirror Hermes's own implementation in `agent/title_generator.py`.
-
-**Why we own the session ID**: legacy code in AppDelegate used to set `chatVM.sessionId = sessionStore.selectedSessionId` (Telegram user_id), causing every NotchNotch chat to be appended to the user's Telegram session — producing one giant 268-message blob. That line is now removed. `HermesClient` owns its own persistent `notchnotch-<uuid>` session ID per conversation, which means each conversation maps to exactly one session row in state.db with a real `message_count`.
-
-### Rich media in messages
-
-**Inline image previews** — `MessageBubble.filePathAwareContent` detects image paths (png, jpg, gif, etc.) in both `.text` and `.code` blocks via `splitByFilePaths()`. Image paths render as inline thumbnails (280×200 max, rounded corners, subtle border) via `imagePreview()`. Click opens in default app; context menu offers "Open in default app" and "Reveal in Finder". Non-image paths render as `fileCard()`. If NSImage fails to load, falls through to `fileCard()`.
-
-**Color-coded file cards** — `fileCard()` uses `colorForFileType(ext)` from `AppConstants.swift` for category-based coloring: purple for code, pink for audio, blue for video, green for images, red for PDF, orange for text, yellow for data formats, teal for CSV, gray for archives. Background is `color.opacity(0.15)` with a subtle `color.opacity(0.25)` border stroke and full-saturation icon+text.
-
-**Smart file open** — File cards open the file in its default app on click (not reveal in Finder). Right-click context menu provides "Reveal in Finder" via `revealInFinder()`.
-
-**Code block path extraction** — When a code block contains a file path and is under 300 chars, the code block is replaced by a file card (or image preview). Longer code blocks render normally. This handles Hermes's habit of wrapping file paths in code fences.
-
-**Backtick path regex** — `splitByFilePaths()` has two regex branches: backtick-delimited paths (`` `~/path with spaces/file.ext` ``) that allow spaces, and bare paths that stop at whitespace. Hermes frequently backtick-wraps paths with spaces.
-
-**Clipboard image paste** — `ChatView` installs a local `NSEvent` monitor for Cmd+V (stored in `@State pasteMonitor`, cleaned up on disappear). When the notch is open and the pasteboard contains `.png`/`.tiff` data, `ChatViewModel.pasteFromClipboard()` calls `DocumentExtractor.extractFromClipboardImage()` to save to cache and adds a pending attachment. Normal text paste falls through. `PendingAttachmentChip` shows a 20×20 thumbnail for image attachments instead of the generic SF Symbol.
-
-### Empty-state examples carousel
-
-`WelcomeExamplesCarousel` (fileprivate struct in `ChatView.swift`) — shown when `chatVM.messages.isEmpty`. Single 260×110pt stroke-only card centered between left/right chevron buttons (`chevron.left` / `chevron.right`, `DS.Text.caption.weight(.medium)`, `DS.Surface.tertiary`). Card anatomy: thin SF Symbol on top (`.system(size: 18, weight: .thin)`) + 3-line French prompt below (`DS.Text.nano`, centered, `DS.Surface.quaternary`). Stroke-only `Color.white.opacity(0.07)` rest, lifts to `0.14` on hover; icon also lifts from `tertiary` → `secondary` on hover. **No fill** — the panel background carries the surface; doubling material would muddy it. **Auto-cycles every 2s** via `Timer.publish(every: 2, on: .main, in: .common).autoconnect()` calling `advance(by: 1)`. **Manual nav** via the two chevrons (also call `advance`, with `-1` and `+1`). Modular arithmetic uses `((offset + delta) % count + count) % count` so backwards wrap is safe. Transition: `.id(offset)` on the card with `.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .move(edge: .leading).combined(with: .opacity))` wrapped in `withAnimation(.easeInOut(duration: 0.4))` — card slides in from the right, exits to the left. **Pool of 26 Hermes-specific French prompts** (Goals long-cours · Mémoire write/recall · Cron actionnable · Mail/agenda croisé · Web/research · Shell/fichiers · Brain/wiki) shuffled on first appear via `Array(0..<pool.count).shuffled()`. Tap routes to `chatVM.draft = entry.prompt` + `chatVM.focusComposerTrigger = UUID()` — same injection pattern as the routine refine button (UUID forces `.onChange` to fire even if focus is already held).
+- `~/.local/bin/hermes` is a wrapper script exec'ing `~/.hermes/hermes-agent/.hermes/bin/hermes` (bundled Python). The legacy `~/.hermes/hermes-agent/venv/bin/python3` still exists and is used by `SkillsHubClient`.
+- The API server starts via `hermes gateway run` (there is no `hermes serve`), port 8642.
+- v0.21.6+ only opens :8642 when `API_SERVER_ENABLED=true` AND `API_SERVER_KEY` (16+ chars, not a placeholder) are in `~/.hermes/.env`. NotchNotch writes both when absent (see exceptions).
+- `curl http://localhost:8642/health` needs no key. Everything else needs `-H "Authorization: Bearer $(grep '^API_SERVER_KEY=' ~/.hermes/.env | cut -d= -f2-)"`, else 401. Never log the key.
+- Logs: `~/.hermes/logs/gateway.log` / `gateway.error.log`.
+
+## Core architecture (one-liners — details in docs/architecture.md)
+
+- `HermesClient` — `POST /v1/responses`, SSE streaming (`streamResponse`) with JSON fallback for pre-v0.11 servers; server-side history chained by the `conversation` UUID (`hermesConversationId`); `X-Hermes-Session-Id` (`notchnotch-<uuid>`) is informational only. Retries only on dead-agent disconnects (cannotConnect / connectionLost / EOF before `response.completed`), never on 5xx/4xx/timeout. Reads `API_SERVER_KEY` fresh from `.env` on every request.
+- `ThinkTagSplitter` / `postProcessResult` / `scrubSecrets` (in `HermesClient.swift`) — client-side cleanup of `<think>` blocks, tool-arg previews and secrets. Keep it client-side even though Hermes 0.13+ redacts server-side: it's the fallback for stale gateways.
+- `ChatViewModel` — send/stream/retry/edit, brain saves, memory edit/delete, routine actions.
+- `CronStore` — watches `~/.hermes/cron/jobs.json` (`{"jobs": [...]}` wrapper); reattaches on atomic rename; diffs `last_run_at` to surface `deliver: local` outputs as notch toasts (filters `[SILENT]`).
+- `BrainViewModel` / `BrainView` — Memory · Tools · Missions tabs (internal identifiers stay `brain` / `tasks`; rawValue = user-visible label).
+- `HermesConfig` — reads `config.yaml` via Yams, writes via line-level regex (preserves comments) with `Data.write(options: .atomic)` — NOT tmp+moveItem. `writeRawEnv` / `readRawEnv` for `.env`.
+- `HermesGatewayLauncher`, `ComputerUseService`, `GoogleConnectionState` — `@MainActor` singletons.
+- `NotchWindowController` — owns the `NotchPanel` and sizing; invariant `openSize = dimensions - 2 × shadowPadding`.
+- `DesignSystem.swift` — all visual tokens (`DS.*`). Shared primitives in `BoaNotch/Views/Components/` (`PrimaryButtonStyle`, `SegmentedButtonStyle`, `PanelSection`, `CardCompact`, `CardProminent`, `ListRow`, `Hairline`, `notchPanelInsets`).
 
 ## Important gotchas
 
-- **Tap inside the open notch never closes it**: `NotchViewModel.handleClick()` only opens (`if !isOpen { open() }`). The user explicitly asked for this — missed clicks on dead space inside the panel used to dismiss it, which was frustrating. The only ways to close are hover-out (handled by `handleHover`) and the X button when a panel is open. Do NOT add `else { close() }` back to `handleClick()`.
-- **Conversation history is server-side**: the server chains responses via the `conversation` UUID. The stored history includes full agent messages (tool calls + results), which can grow large in tool-heavy conversations. If this becomes a problem, check that Hermes's context compression handles tool results well — do NOT strip them from the response store.
-- **Session ID header is informational, not the conversation spine**: `sessionId` is sent as `X-Hermes-Session-Id` for Telegram continuity and state.db row grouping. The actual conversation chain comes from the `conversation` UUID on `/v1/responses`, not the session header.
-- **Hermes v0.11.0 is the SSE floor for /v1/responses**: streaming on `/v1/responses` only works from v0.11.0 onwards. Earlier versions silently ignore `stream: true` and return plain JSON. `HermesClient.streamResponse` sniffs the response `Content-Type` and falls back to a one-shot JSON parse so the call site still works — but the live tool-call preview and incremental text will only actually animate on v0.11.0+. Do NOT "fix" the fallback by erroring out; older Hermes in the wild must keep working.
-- **Tool-call `.added` and `.done` carry the same payload**: for `function_call` and `function_call_output`, Hermes emits `response.output_item.added` and `response.output_item.done` with identical payloads. `streamResponse` reacts on `.added` only (fires `toolCallStarted` / `toolCallCompleted`) and ignores `.done` to avoid double-counting. See `sse-probe-notes.md` for the full event ordering.
-- **SSE callback runs off-main**: `HermesClient.streamResponse(onEvent:)` fires `onEvent` from the URLSession delegate queue. Any UI mutation inside the callback MUST hop to the main actor (`Task { @MainActor in ... }`) — reading `@Published` state or mutating `messages` off-main is a runtime warning at best, a crash at worst.
-- **DropDelegate, not .onDrop closure**: The split drop zone requires `DropInfo.location` for position detection, which is only available via a `DropDelegate`. The simple `.onDrop(of:isTargeted:)` closure does not expose cursor position.
-- **NWListener response timing**: In `ClipperListener.swift`, do NOT use `defer { connection.cancel() }` in the receive handler — it cancels the connection before `connection.send()` completes. Let the send completion handler call `connection.cancel()`.
-- **Bundle.module is forbidden — use `Bundle.main.resourceURL`**: SPM's generated `Bundle.module` looks for `BoaNotch_BoaNotch.bundle` at `Bundle.main.bundleURL` (app root), NOT in `Contents/Resources/`. Putting the bundle at the app root breaks codesign ("unsealed contents present in the bundle root"); leaving it in `Contents/Resources/` makes `Bundle.module`'s lazy static call `fatalError` on first access — which shipped as a crash-on-launch in v1.0.1 (friend's machine: `could not load resource bundle: from /Applications/NotchNotch.app/BoaNotch_BoaNotch.bundle or /Users/leon/NotchNotch/.build/...`). Fix: load all resources via `Bundle.main.resourceURL?.appendingPathComponent(...)` (files are copied to `Contents/Resources/` by `release.sh`/`run.sh`). Never reintroduce `Bundle.module` — even behind a fallback, the lazy static evaluates first and crashes before the fallback runs.
-- **`swift build` doesn't add `@executable_path/../Frameworks` to the binary's rpath**: the universal binary from `swift build -c release --arch arm64 --arch x86_64` only carries `/usr/lib/swift` and `@executable_path/../lib` rpaths. Embedded frameworks live at `Contents/Frameworks/`, so dyld can't find them — the binary crashes on launch with `dyld: Library not loaded: @rpath/Sparkle.framework/...`. v1.2.1's DMG shipped without this fix and crashed on every launch (verified by `otool -l` on the bundled binary). Both `scripts/run.sh` and `scripts/release.sh` now patch the rpath via `install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/MacOS/${APP_NAME}"` AFTER copying Sparkle.framework into `Frameworks/` and BEFORE codesigning. `install_name_tool` invalidates the existing signature with a warning — that's expected; the subsequent `codesign --force --deep` re-signs both the binary and the embedded framework. On a universal binary, `-add_rpath` patches both arch slices automatically. Do NOT remove this step thinking codesign or swift build will handle it.
-- **Ad-hoc signed**: Triggers Gatekeeper. Users need `xattr -cr` or right-click > Open.
-- **SPM target name**: Still `BoaNotch` in Package.swift (renamed to `notchnotch` only at the app bundle level).
-- **NotchState exhaustive switch**: Adding a new case to `NotchState` enum (`closed`, `open`, `toast(String, ToastKind)`) requires updating the switch in `NotchWindowController.swift` (line ~133) or the build fails.
-- **Chrome extension local path**: The extension is loaded from `~/NotchNotch Extension/` on the dev machine, NOT from the git repo clone. Changes to the repo must be copied there and the extension reloaded in Chrome.
-- **Hermes has no `config_set` tool**: the agent's available tools include `terminal`, `cronjob`, `memory`, `skill_manage`, `skills_list`, `skill_view`, `write_file`, `patch`, and others — but no `config_set`. To change a Hermes config key via chat, the prompt must instruct Hermes to run `hermes config set <key> <value>` via the `terminal` tool. A bare "set X to Y" prompt will fail with "Tool 'config_set' does not exist".
-- **`cronjob action=run` does NOT execute immediately**: it advances `next_run_at` to just after "now" but the actual execution still waits for the scheduler's tick. `last_run_at` and `last_status` stay null until the scheduler picks it up. To force-test a cron job's prompt, send that prompt directly via `/v1/responses` — don't rely on `action=run` for E2E verification.
-- **Free-tier models skip skill invocation**: the default Nemotron free-tier model routes ambiguous "ingest this" prompts to the `memory` tool instead of the `llm-wiki` skill. The `brain-ingest` cron prompt must explicitly name the skill (`[SILENT] Utilise le skill llm-wiki pour ...`) to force the right path.
-- **Memory edit/delete is fire-and-forget**: `ChatViewModel.updateMemory` / `deleteMemory` POST to `/v1/responses` with `store: false` — HTTP 200 just means "request received", NOT "memory rewritten". Hermes still has to invoke its `memory` tool, which depends on the model. Weak models may route the edit prompt to generic chat instead of the tool, silently no-op'ing. The 5s `scheduleBrainReload()` is a heuristic — if the edit hasn't landed, the user must hit the refresh button. Never claim "memory updated" to the user beyond the optimistic toast.
-- **`@Published` fires in willSet, not didSet**: a Combine sink on `$someProperty` runs *before* the stored value is updated, so reading `store.someProperty` inside the sink returns the OLD value. Bit us on `panelSizeStore.$size` — the resize sink was reading stale size and resizing to the previous dimensions. Fix: `.receive(on: DispatchQueue.main)` on the publisher chain defers the sink to the next runloop tick, by which point `didSet` has written the new value. See `NotchWindowController.sizeCancellable`. Apply this anywhere a sink needs to observe a *post-change* state, not just that "a change happened".
-- **MiniMax uses Anthropic-compat at `/anthropic`, not `/v1`**: `provider: minimax` in Hermes routes via `api_mode: anthropic_messages` (verified in `~/.hermes/hermes-agent/plugins/model-providers/minimax/__init__.py`). The canonical `base_url` is `https://api.minimax.io/anthropic`. NotchNotch's `HermesConfig.defaultBaseURL(for: "minimax")` shipped with `/v1` until 2026-05-10 — every chat returned `HTTP 404 — 404 Not Found` because that path doesn't exist on MiniMax. Fixed in HermesConfig.swift. Independent gotcha: Hermes's `.env.example` template includes a `MINIMAX_BASE_URL=https://api.minimax.io/v1` line that **overrides** `config.yaml`'s `model.base_url` even when the latter is correct — affected installs need the line commented out / deleted from `~/.hermes/.env`. Symptom is the same persistent 404 even after picking the right provider in Settings.
-- **Hermes v0.13 static i18n** (PR #20329): `display.language: <code>` in `~/.hermes/config.yaml` switches CLI/gateway messages to one of 7 locales (zh, ja, de, es, fr, uk, tr). NotchNotch writes `fr` once on launch via `AppDelegate.applyHermesLocaleOnce()` guarded by the `didSetHermesLocaleFr` UserDefaults flag. Idempotent, fail-silent if Hermes not yet installed.
-- **`os_log` is the only way to log from a GUI bundle launched via `open`**: Swift `print()` writes to stdout, which has no destination for an AppKit bundle launched via `open .build/notchnotch.app` (LaunchServices/AppKit redirect stdout to nowhere). Same trap for `#if DEBUG print` — invisible because `run.sh` builds Release anyway. Use `os_log(..., type: .info, ...)` (matches `LoginItemService.swift:23` and `AppDelegate.swift:111`), then query the unified log with `PRED='process == "notchnotch"'; /usr/bin/log show --info --debug --last 2m --predicate "$PRED" | grep "(notchnotch)"` — the parenthesized `(notchnotch)` filter isolates messages the app itself emitted (vs. the hundreds of system-bootstrap entries XPC / TCC / LaunchServices log under the same process name). The `log show --predicate` flag is finicky with zsh quoting; assigning to a variable and/or using full path `/usr/bin/log` avoids `(eval):log:1: too many arguments`. The `%{public}@` format specifier is required for any string arg you want to read in plain text; without it the unified log redacts it as `<private>`. Bit us in Session 1 of the Mac-control feature when `print()` produced zero output despite the code running fine — symptom looked like "the call never executed", root cause was "stdout went into the void".
-- **`@MainActor` singletons must be touched from a main-actor context**: `ComputerUseService` is `@MainActor` (required to mutate `@Published` state from async Tasks safely, mirrors `GoogleConnectionState`). Accessing `ComputerUseService.shared` from a non-main-actor context — e.g. a class-level `let computerUseService = ComputerUseService.shared` on `AppDelegate`, which is NOT itself `@MainActor` — triggers an actor isolation warning under Swift 5.9 and a hard error under Swift 6. The simplest fix is to touch the singleton inside `applicationDidFinishLaunching` (`_ = ComputerUseService.shared`) — that method is main-actor by virtue of being an `NSApplicationDelegate` callback, so the singleton's `static let` init resolves cleanly. Alternative: mark `AppDelegate` itself `@MainActor`, technically correct (all delegate methods ARE main-actor in practice) but a wider change to make deliberately if/when more services adopt the `@MainActor` singleton pattern. The same gotcha will apply to every future `@MainActor`-marked service touched at app boot.
-- **TCC system prompts render BEHIND `.mainMenu + 3` panels**: NotchPanel's level is `.mainMenu + 3` so it floats above the menu bar. macOS TCC dialogs (mic, speech recognition, Accessibility, etc.) render at a standard window level, so they get hidden under the notch on first authorization — user sees nothing happen and the app appears frozen. Fix: `NotchPanel.withLoweredLevel { ... }` (NotchPanel.swift) temporarily drops every NotchPanel to `.normal` + `NSApp.activate(ignoringOtherApps:)` for the duration of an async block, restores `.mainMenu + 3` after. Wired around `SFSpeechRecognizer.requestAuthorization` in `SpeechTranscriber.transcribe` and around `AVCaptureDevice.requestAccess(for: .audio)` in the new `AudioRecorder.startRecordingWithPermission()`. The latter exists because `AVAudioRecorder.record()`'s implicit mic prompt fires from inside AVFoundation with no async surface to wrap — we have to force the request explicitly BEFORE instantiation. Call sites (`AppDelegate.handleControlKeyTap`, `ChatViewModel.toggleVoiceRecord`) switched to the new `await startRecordingWithPermission()` variant. Cua-driver TCC prompts (Accessibility / Screen Recording / Automation) fire from a separate process so this helper doesn't apply — those are handled by System Settings deeplinks.
-- **Sticky install phase on ComputerUseStep**: between `isInstalling = false` and `await refreshState()` completing in `ComputerUseService.install()`, `state` can transiently flip back to `.notInstalled` without `installError` being set, briefly re-rendering pitchPhase ("section closed and reopened" — observed 2026-05-17). Fix: local `@State installAttemptedInThisStep` in `ComputerUseStep` set on Activer/Réessayer tap, consumed in the Group guard alongside `isInstalling || state == .installing`, so installingPhase stays visible until a terminal state (`.ready`, `.installedPendingPermissions`, or `installError != nil`).
-
-## Companion projects
-
-### NotchNotch Clipper
-
-**Repo:** [KikinaStudio/NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) — Chrome extension that clips web pages to Hermes's brain.
-
-**Current flow:**
-1. User clicks the Clipper extension icon on a web page
-2. Extension extracts page content (title, URL, text/selection)
-3. Extension calls the Hermes API directly (`POST /v1/responses` to `localhost:8642`) with a save-to-memory prompt
-4. On success, extension POSTs `{"title": "...", "url": "..."}` to `localhost:19944/clip`
-5. `ClipperListener.swift` receives the POST, `AppDelegate` calls `notchVM.showToast(title, kind: .success)` — pacman pixel icon + page title
-
-**How clipped content appears in NotchNotch Brain panel:**
-- Hermes processes the save prompt and writes to `~/.hermes/memories/MEMORY.md` as a `§`-separated block
-- Next time the user opens the Brain tab (or hits refresh), the clipped content appears as a card in the Memory section
-- The card title is extracted from the first bold label or dash-prefixed line that Hermes wrote
-
-**Key integration contracts:**
-- Hermes API: `localhost:8642` (health check: `GET /health`)
-- ClipperListener: `localhost:19944` — only accepts `POST /clip` with JSON `{"title": String, "url": String}`
-- ClipperListener response: HTTP 200 with `{"status":"ok"}` on success
-- The toast uses `kind: .success` (pacman pixel icon, `AppColors.accent` tint) and auto-dismisses after 3 seconds
-
-**Local dev path:** Extension is loaded from `~/NotchNotch Extension/` (NOT the git repo clone). Changes to the repo must be copied there and the extension reloaded in `chrome://extensions`.
-
-## Conventions
-
-- Language: Swift 5.9, macOS 14+ deployment target
-- UI: SwiftUI with AppKit (NSPanel, NSStatusItem, NSEvent global monitors)
-- Dependencies: Yams (SPM) for YAML parsing; otherwise standard frameworks (Network.framework for ClipperListener)
-- French locale for speech transcription
-- Accent color: `AppColors.accent` = light blue `Color(red: 0.6, green: 0.87, blue: 1.0)`. Toast icons are tinted **per kind** (lavender / accent / green / coral / amber for info / chat / success / error / cron) — the blue is reserved for the chat-voice toast specifically. See the `ToastKind.tint` mapping in the architecture section.
-- Toast icons are pixel-art SVGs from [halfmage/pixelarticons](https://github.com/halfmage/pixelarticons) (MIT) bundled in `BoaNotch/Resources/PixelIcons/`. `pacman.svg` is actually the pixelarticons `bookmark` glyph renamed (the free pack has no pacman); SF Symbol fallbacks live in `ToastKind.fallbackSF`.
-
-### Design language — NOT Material Design
-NotchNotch deliberately avoids MD3-ish patterns. When adding or changing 
-UI, follow these rules:
-
-- **Tab/segmented selection**: no filled pills. Use text weight + opacity 
-  for the active state (bold white vs medium `.white.opacity(~0.32)`). 
-  Segmented pickers may use a subtle neutral `.white.opacity(0.1)` 
-  capsule on the selected segment only — never accent tint, never 
-  per-segment backgrounds on unselected. See `BrainView.tabButton` and 
-  `SettingsView.segmentedButton`.
-- **List rows (Memory blocks, skills, history)**: no filled card 
-  backgrounds. Use 1pt hairline dividers `.white.opacity(0.06)` between 
-  items. Hover may add a very subtle `.white.opacity(0.05)` tint for 
-  interactive rows. Vertical padding ~10pt. See `blockDivider` / 
-  `rowDivider`.
-- **Routines = task-report list (refactored 2026-05-03 from cards)**: the 
-  prior "routines are the exception" doctrine is RETIRED. Routines now 
-  follow the same dividers-only doctrine as Memory / Skills / History — 
-  single-line rows separated by `DS.Stroke.hairline`, 32pt min-height 
-  (`DS.Layout.rowMinHeight`), 6pt vertical padding, no fill at 
-  rest. The list is constrained to `DS.Layout.maxWidthRoutines` (720pt) 
-  centered on `panelSize == .large`, full-width on `.standard`. Anatomy 
-  per row: small white type icon (`eye.fill` / `calendar` / `bell.fill` 
-  at 11pt `DS.Surface.primary`) · title (`DS.Text.bodySmall`) · spacer · 
-  schedule (`DS.Text.caption`) · always-visible clickable `StatusPill` 
-  (the toggle — replaces the old leading `StatusDotButton`). Hover state 
-  is a Liquid Glass moment: `nnGlass(in: rounded8)` on macOS 26+, accent 
-  wash fallback elsewhere. Run count + last/next run + error detail live 
-  in the native `.help()` tooltip via `tooltipText(for:)`. Bottom row is 
-  a discreet `addRoutineRow` (+ icon + "New routine") that wraps the 
-  same Menu as the header `+ New` (From a template / Blank routine) — 
-  no more dashed `addCard` cell.
-- **Section headers**: uppercase monospaced, 9pt bold, 
-  `.white.opacity(0.28)`, tracking 1.5. Never accent-tinted.
-- **Tab intros for non-technical users**: one-line French italic at 
-  10.5pt, `.white.opacity(0.45)`. See `BrainView.tabIntro`.
-- **Accent usage**: reserved for signature moments (the serif `§` mark 
-  in MemoryCards, uppercase-mono category prefix in skill rows, active 
-  state dots, the chat-toast icon — see `ToastKind.tint` for the per-kind 
-  palette of the others). Never on heading/title text, never as a pill 
-  fill.
-- **Icon sizing**: top bar icons (`NotchView` — both burger glyphs, X 
-  morph, panel resize, and all 7 burger **action icons**: settings, 
-  Brain, Tools, Missions ; search, new conversation, history) are all 13pt 
-  medium via `DS.Icon.topBar`. The bottom input bar (`ChatView` — 
-  paperclip attach, mic) stays at 14pt medium via `DS.Icon.secondary`. 
-  Top vs bottom intentionally differ by 1pt — top reads tighter, bottom 
-  reads more affordant. Tuned 2026-05-02 (was unified at 14pt earlier 
-  the same day, then dropped to 13pt per user preference for the top 
-  bar density). `menuButton()` exposes a `sizeBoost: CGFloat = 0` 
-  parameter for per-icon visual-balance overrides — currently used only 
-  by `xmark.triangle.circle.square` (Tools) which carries `sizeBoost: 2` 
-  (effective 15pt) because the 4-shape composition reads ~2pt smaller 
-  than its peers at the same point size. This is a visual-balance 
-  override, not a new design tier. The cluster `HStack(spacing: 8)` 
-  (NotchView ~L284) sets the gap between the action icons, the burger, 
-  and the resize button. The send button (`arrow.up.circle.fill`) stays 
-  at 18pt as the deliberate primary-CTA anchor — intentional emphasis, 
-  not a violation. Do NOT use `.callout.weight(.medium)` for icons: 
-  `.callout` is 12pt on macOS and breaks the top/bottom parity.
-- **MemoryCard title** is rendered via markdown so stray `**` wrappers 
-  resolve to bold instead of showing as literal asterisks.
-
-Why: the notch panel is solid near-black to camouflage with the hardware 
-notch. Native macOS editorial feel wins inside the panel: confident 
-typography, dividers, accent sparingly. User explicitly rejected the 
-MD3 pill+card look (2026-04-18).
-
-**Section panels: no inner rectangle (2026-05-02)**: Settings, Brain (with 
-Memory/Tools/Missions tabs), and ConversationHistory used to be wrapped in a 
-double `.padding(.horizontal, 42).padding(.bottom, 18).background(RoundedRectangle.fill(.quinary)).padding(.horizontal, 42).padding(.bottom, 25)` 
-chain — content sat inside a translucent rectangle that itself sat inside 
-the panel. This wasted ~84pt of horizontal width on a "rectangle in 
-rectangle" anti-pattern. Removed: the `.background(...)` and the inner 
-horizontal padding are gone; section content sits directly on the notch 
-panel background with a single `.padding(.top, 14).padding(.horizontal, 42).padding(.bottom, 25)`. 
-The "I'm in a section" signal is carried by `notchPanelBackground(inSection: true)` 
-which darkens the gradient bottom (cf. Liquid Glass policy below). 
-ChatView untouched (no inner rectangle to begin with). Do NOT reintroduce 
-a content-area background fill on these panels — the gradient is the 
-surface.
-
-**Pill vs button rule (2026-04-26)**: `Capsule()` is reserved for 
-*tag-like* information chips that display state without being a primary 
-action — the active routine context tag (`ChatView.routineContextTag`), 
-the streaming/loading indicator, the ExpandedBar profile/model/reasoning 
-chips, `nnGlass()` floating toasts. Anything that's a *button* (segmented 
-control, picker pill, CTA) uses `RoundedRectangle(cornerRadius: 8, style: .continuous)`. 
-Send button (`arrow.up.circle.fill`) is the only documented exception 
-that keeps a Capsule shape — it's a recognizable affordance carried over 
-from chat conventions. Migrated all settings segments + Routines/Templates 
-custom-form pickers on 2026-04-26.
-
-**Selected button text color**: when a button (segmented, picker, CTA) 
-is selected and filled with `AppColors.accent`, the text MUST be 
-`.black.opacity(0.85)` — never white. The accent is a light blue 
-(`(0.6, 0.87, 1.0)`) and white text on it is illegible. The dark text 
-also matches the routines form pattern. Apply to every `if isSelected` 
-branch in `foregroundStyle(...)`.
-
-**Top bar panel title (2026-04-25, updated 2026-05-02)**: when a panel 
-is open, the left slot of the top bar displays the panel title 
-(`"Conversations"`, `"Settings"`, `"Search"`, or the active tab name 
-`"Memory"` / `"Tools"` / `"Missions"`) instead of the chat-icon left 
-burger. `panelTitle` resolves the Brain panel title via 
-`brainVM.activeTab.rawValue` — `BrainViewModel.activeTab` is 
-`@Published` so the title updates live as the user clicks 
-Memory/Tools/Missions in the right burger fan. The earlier 
-in-panel `brainTabsBar` (a clickable `Brain · Tools · Missions` trio with 
-icons rendered in the left slot) was removed 2026-05-02 — it duplicated 
-the right fan's affordance and added a misclick zone. Per-panel titles 
-are removed from the panel content (no internal `Text("Settings").font(.headline)` 
-header anymore). The standalone Routines panel title was removed in 
-2026-05-02 when Routines moved into the Missions tab.
-
-**StatusDotButton primitive (`LiquidGlass.swift`, 2026-04-26)**: 
-radio-style toggle for any on/off action. Always-visible gray ring 
-(18pt), inner dot (7pt) blue when `.on`, yellow when `.error`, 
-transparent when `.off`. Hit area 24pt. Replaces every SwiftUI `Toggle` 
-in Settings (Stream responses, Launch at login). Previously also used 
-in routine cards but was removed 2026-05-03 when routines pivoted to 
-task-report rows — the clickable `StatusPill` now carries the toggle. Two inits: `init(isOn: Bool, ...)` for 
-binary call sites, `init(state: DotState, ...)` for routines that 
-surface error state. Uses Button internally so SwiftUI's button-in-button 
-gesture routing works — required because the routine card itself is 
-now a Button (`.onTapGesture` propagation on macOS DOES bubble to 
-parents; only Button-in-Button reliably consumes). Don't try 
-`.highPriorityGesture` to fix this — it only competes with gestures 
-on the same view, not parent gestures.
-
-**FadingScrollView (`ScrollEdgeFade.swift`, 2026-04-26)**: drop-in 
-replacement for `ScrollView` with a soft bottom-only gradient mask. 
-Tint is `#0C0C0C` (calibrated to match the panel's perceived black 
-after macOS rendering — `Color.black` rendered slightly off through 
-the semi-transparent `NotchPanel`). The content gets 
-`.padding(.bottom, fadeHeight)` baked in so the last item can scroll 
-fully past the gradient instead of being clipped. Used in 
-BrainView/RoutinesView/TemplateBrowser/Settings/ConversationHistory. 
-Top is intentionally NOT faded — fading at scroll position 0 has no 
-semantic meaning.
-
-**Memory section is flat (2026-04-25)**: the Memory section of the Brain 
-tab shows `brainVM.allMemoryBlocks` as a flat list of `memoryCardCompact` 
-(full-width cards), not grouped by category. The category info still 
-informs the leading icon via `iconForCategory(_ raw: String)` (heuristic 
-FR/EN keyword match in `BrainView.swift` — perso/famille/work/voyage/santé/ 
-finance/cuisine/agent/notes/code/maison/études/musique/agenda + `tag.fill` 
-fallback). The Wiki section below is a flat ask-list with `pin.fill` for 
-the index article. The Tools tab uses a 2-section layout (Apps · Capacités) 
-— see the Tools tab section above for details.
-
-**`tabIntro` is blue, not italic (2026-04-26)**: the one-line French 
-intro at the top of each Brain tab uses `DS.Text.caption` + 
-`AppColors.accent`. Italic was previously used and was rejected by the 
-user. Don't reintroduce italics for these intro lines.
-
-**Settings section dividers (2026-04-25)**: each `settingsSection(...)` 
-in `SettingsView` is separated from the next by a full-width 
-`sectionDivider` (`Rectangle().fill(DS.Stroke.hairline).frame(height: 1)`). 
-Each section has 14pt vertical padding internally. The outer VStack 
-spacing is 0 (the dividers + padding handle the rhythm).
-
-**Settings section order (2026-05-17)**: top-level order is AI Provider · 
-Computer Use · Google Workspace · Session · Appearance · Startup · Updates · 
-**Avancé** (a `DisclosureGroup` collapsed by default, gated by 
-`isAdvancedExpanded: Bool = false` `@State`). Inside Avancé: Memory · 
-Agent · Execution · Hermes, with `sectionDivider` between each. The label 
-"AVANCÉ" reuses the `DS.Text.sectionHead` styling (uppercase mono tracking 
-1.5, `.tertiary`) of regular section headers; the DisclosureGroup body 
-contains nested `settingsSection(...)` calls so each inner section keeps 
-its own header + 14pt vertical rhythm. Rationale: for non-tech users, 
-Memory provider / max iterations / streaming / terminal backend / Hermes 
-LaunchAgent are cognitive noise — bury them but don't hide them. The old 
-inner "Advanced" DisclosureGroup inside AI Provider (custom URL + custom 
-model ID) was REMOVED in the same change — those affordances are reached 
-via the "Custom" provider pill higher up in the same section.
-
-**Settings action button style (2026-05-17)**: every Settings-level action 
-button (Installer, Réglages, Tester, Déconnecter, etc.) goes through the 
-`settingsActionButton(label:action:)` helper — padding `.horizontal 10`, 
-`.vertical 5`, `RoundedRectangle(cornerRadius: 8).fill(.quaternary)`. Do 
-not reinvent the style inline (the Google "Disconnect" button previously 
-shipped with V4 padding + `.captionMedium` font and stood out as visually 
-inconsistent next to the V5 "Installer" — fixed 2026-05-17 by routing 
-through `settingsActionButton`). Same rule for copy: action labels in 
-Settings are French throughout (Installer / Réglages / Tester / 
-Déconnecter / Connecter Google / Connexion… / Voir les logs / Redémarrer 
-/ Désinstaller le démarrage auto). Don't mix English action labels in.
-
-**Provider API-key link (2026-05-17)**: `providerKeyLink` renders 
-"Récupérer ma clé sur {host} →" in `DS.Text.nano` + 
-`AppColors.accent.opacity(0.7)` below the API key field, sourced from 
-`OnboardingViewModel.providerKeyURLs[provider]`. Gemini ("gemini") is in 
-the map (`https://aistudio.google.com/apikey`) and gets a friendlier 
-label "Récupérer ma clé sur Google AI Studio →" (special-cased; other 
-providers show the URL host). Opens via `NSWorkspace.shared.open(url)`.
-
-**Liquid Glass (macOS 26+) policy**: `.glassEffect()` DOES ship on 
-macOS 26 (Tahoe). NotchNotch deployment target is 14, so glass usage 
-MUST go through `nnGlass()` / `nnGlass(in:)` / `NNGlassContainer` 
-(`BoaNotch/Views/LiquidGlass.swift`) — these apply `.glassEffect` on 
-macOS 26+ and fall back to `.ultraThinMaterial` elsewhere.
-
-Where glass is allowed:
-- Floating UI OVER the desktop / outside the black panel — the 
-  recording toast capsule, the clipper/cron `ToastView`.
-- Never on content rows (memory cards, skill rows, history rows) — 
-  that's the "glass on content" anti-pattern.
-- **Routines cards** used to be the in-panel exception but no longer — 
-  switched to a flat `.quaternary.opacity(0.6)` fill on 2026-04-24 per 
-  user preference. Keep routines flat; don't reintroduce `nnGlass` 
-  there without a new call from the user.
-- **Notch panel background (open state, macOS 26+ only)**: 
-  `notchPanelBackground(top:bottom:isOpen:inSection:)` modifier in 
-  `LiquidGlass.swift` layers `.glassEffect(.regular, in: NotchShape)` 
-  underneath a top-down `LinearGradient` from `.black` (top, opaque to 
-  ~45% of height) to a tunable bottom stop. When `inSection` is **false** 
-  (chat view, Search, closed), the bottom is `.black.opacity(0)` — full 
-  glass bleed, wallpaper visible. When `inSection` is **true** 
-  (Settings / Brain / History panel open), the bottom darkens to 
-  `.black.opacity(0.7)` so the surface signals "I'm in a content section" 
-  while keeping a hint of glass refraction. The black-at-top gradient in 
-  both cases camouflages the hardware notch. Closed panel + 
-  macOS 14/15/25 fallback both stay solid black. **This replaced the 
-  inner `.quinary` rectangle-in-rectangle pattern (2026-05-02)** — see 
-  "Section panels: no inner rectangle" rule below.
-
-Inside the panel, use semantic ShapeStyles (`.primary`, `.secondary`, 
-`.tertiary`, `.quaternary`, `.quinary`, `.separator`) and system 
-typography (`.headline`, `.callout`, `.footnote`, `.caption`, 
-`.caption2` with `.weight()`/`.monospaced()` modifiers) rather than 
-hardcoded `.white.opacity(x)` or `.system(size: N)`. Conditional 
-ShapeStyle ternaries need `AnyShapeStyle(...)` on both branches to 
-compile.
-
-### Design system policy (DesignSystem.swift)
-
-Single source of truth for all visual tokens: `BoaNotch/DesignSystem.swift`.
-Catalog organized as nested enums under `DS`:
-
-- `DS.Text.*` — font sizes & weights. Roles, not pixel sizes: `title` 18 / `titleSmall` 16 / `body` 14 / `bodyBold` / `bodySmall` 13 / `bodySmallMedium` 13 medium / `bodySmallSemibold` 13 semibold (≡ `.headline` macOS) / `label` 12 / `labelMedium` 12 medium / `labelSemibold` 12 semibold / `caption` 11 / `captionMedium` 11 medium / `captionSemibold` 11 semibold / `micro` 10 / `microMedium` 10 medium / `microSemibold` 10 semibold / `microBold` 10 bold / `nano` 9. Mono variants: `codeBlock` 12, `labelMono` 12, `captionMono` 11, `microMono` 10, `nanoMono` 9, `sectionHead` 10 bold, `badge` 8 medium. Brand: `serifMark` 13 serif (§ glyph in MemoryCards).
-- `DS.Icon.*` — SF Symbol sizes (`hero` 28 / `large` 22 / `primary` 18 / `secondary` 14 / `inline` 13 / `glyph` 12 / `caption` 11 / `mini` 9 / `chevron` 8 medium / `chevronBold` 8 bold)
-- `DS.Surface.*` — semantic foreground/fill ShapeStyles wrapped in `AnyShapeStyle`. `primary` / `secondary` are native macOS ShapeStyles (~85% / ~55% en dark mode). `tertiary` (33%) et `quaternary` (24%) ont été tunés sur valeurs explicites pour cohérence visuelle entre tous les call-sites — ne PAS revenir aux ShapeStyles natifs sans un nouveau call. `headerLow` (28%) ajouté session C0 pour les section heads UPPERCASE mono via `PanelSection` — slot distinct de `tertiary` parce que la doctrine "Section header" l'impose à 28% spécifiquement (CLAUDE.md "Design language"). `separator` reste natif.
-- `DS.Status.*` — semantic dot tints wrapped in `AnyShapeStyle`: `success` (vert ~85%) / `failure` (rouge ~85%). Use for status pastilles (event timeline dots, failed-state text). Never hardcode `Color.green/red.opacity(...)` in views — route through these tokens.
-- `DS.Stroke.*` — hairline strokes for overlays where fine opacity control is needed (`hairline` 0.06, `lineWidth` 0.5)
-- `DS.Radius.*` — corner radii (`chip` 6, `button` 8, `cardCompact` 10, `card` 12). `button` est la valeur dominante pour les CTA / segmented controls / search fields. `cardCompact` pour les CapabilityCard et Apps tiles. `card` réservé aux containers prominents.
-- `DS.Spacing.*` — gaps génériques entre éléments. Échelle complète : `xs` 4 / `sm` 8 / `md` 10 / `lg` 14 / `xl` 16 / `xxl` 20 / `xxxl` 24. Anciens `row` (= `md` 10) et `section` (= `xl` 16) conservés en alias jusqu'à migration des call-sites en sessions B/C. Pour les paddings de composants standardisés, voir `DS.Padding.*`.
-- `DS.Padding.*` — presets de paddings de composants, nommés par rôle (cohérent avec la typo `title`/`body`/`caption`). Chaque preset expose deux constantes `<name>H` / `<name>V` (séparé volontairement, pas d'EdgeInsets unifié pour rester compatible avec `.padding(.horizontal,/.vertical,)`). Catalogue : `cardCompact` 14×12 (CapabilityCard, Apps tile Tools tab) / `cardProminent` 14×16 (memoryCardCompact, templateCard, MissionsActivityBanner) / `row` 14×6 (routineRow, futurs sessionRow/memoryRow — à combiner avec `DS.Layout.rowMinHeight`) / `button` 12×6 (CTA standard) / `segment` 12×5 (segmented controls / picker pills, plus serré que `button` pour densité) / `input` 10×6 (search fields stylisés). Doctrine : tout nouveau composant utilise un de ces presets ou AJOUTE un nouveau preset ici — pas de padding inline en call-site.
-- `DS.Hairline.*` — line widths (`standard` 0.5)
-- `DS.Motion.*` — animations (`standard` 0.2s easeInOut)
-- `DS.Layout.*` — contraintes de layout, hauteurs minimales et insets de panel. Largeurs : `maxWidthRoutines` 720. Hauteurs : `rowMinHeight` 32 (générique pour rows denses). Insets panels structurés : `panelHorizontalInset` 42 (Settings/Brain/History/Chat — *aussi* utilisé en négatif -42 dans `ScrollEdgeFade.swift`, garder ces deux call-sites en synchronisation) / `panelTopInset` 14 / `panelBottomInset` 25 (plus large pour respirer + accommoder le `FadingScrollView`). Insets ChatView : `chatTopInset` 4 (premier message monte plus haut) / `chatBottomInset` 18 (espace pour input bar). Alias historiques `routineRowMinHeight` / `routineRowPadH` retirés en session E (call-sites RoutinesView migrés vers `rowMinHeight` / `DS.Padding.rowH`).
-
-**Hard rule for any new or modified UI**: use `DS.*` tokens. Do NOT hardcode
-`.system(size: N)`, `.white.opacity(x)`, `cornerRadius: N`, or ad-hoc paddings
-in views. If a needed value is not in the catalog, ADD the token to
-`DesignSystem.swift` first, then use it. Adding a one-off literal in a view is
-the failure mode this catalog exists to prevent.
-
-The v1 catalog is intentionally minimal. Prefer `DS.Surface.*` (native
-ShapeStyles) over `DS.Stroke.*` (explicit `Color.white.opacity`) when a
-semantic ShapeStyle is sufficient — `DS.Stroke` exists only for fine-grained
-stroke control on overlays.
-
-Migration is incremental, zone by zone (Onboarding ✅ → MessageBubble ✅ → ChatView ✅ → NotchView ✅ → BrainView ✅ → RoutinesView ✅ → TemplateBrowserView ✅ → LiquidGlass ✅). Migration v1 close (session 5): seuls 4 TODO(design) résiduels sur ces 4 fichiers — 2× glass material stroke (LiquidGlass.swift, matière non tokenisable) et 2× `textSize.scale` dynamique (BrainView.swift, scale runtime). Tokens ajoutés session 5: `DS.Icon.caption` (11pt, bell.badge.fill alert routines), `DS.Text.serifMark` (13pt serif, § brand glyph MemoryCards). Token ajouté session 6 (routine cards refonte 2026-04-26): `DS.Icon.routineType` (13pt hierarchical, glyph silent/digest/alert). Tokens ajoutés session 7 (EventTimeline Workspace-pivot 2026-05-03): `DS.Status.success` / `.failure` (vert/rouge ~85%, pastilles d'état tool calls — remplacent les `.green.opacity(0.9)` / `.red.opacity(0.9)` hardcodés du défunt `statusIcon`). Tokens ajoutés session 8 (catalogue expansion 2026-05-04, Session A de la refonte UI préparant la migration des call-sites en B/C/D) : nouvelle enum `DS.Padding.*` (presets sémantiques par rôle — `cardCompact` / `cardProminent` / `row` / `button` / `segment` / `input`, chaque preset en H/V séparés), échelle `DS.Spacing` étendue (`xs` / `md` / `lg` / `xl` / `xxl` / `xxxl` ; les alias historiques `row` / `section` ont été retirés en session E sans avoir jamais été utilisés en call-site), `DS.Radius.button` (8) et `DS.Radius.cardCompact` (10), insets panel et chat dans `DS.Layout` (`panelHorizontalInset` 42, `panelTopInset` 14, `panelBottomInset` 25, `chatTopInset` 4, `chatBottomInset` 18) + `rowMinHeight` générique. Aucun call-site migré dans cette session — la migration des paddings/insets hardcodés viendra en sessions B/C/D. Aucun alias marqué `@available(*, deprecated)` (décision : éviter le bruit Xcode pendant la migration ; les alias seront retirés directement en session D quand les call-sites auront tous basculé).
-
-**Session B (2026-05-05) — composants primitifs partagés** : deux fichiers nouveaux dans [BoaNotch/Views/Components/](BoaNotch/Views/Components/), aucun token DS ajouté (consomme uniquement les tokens session A). Utiliser ces primitifs pour TOUT nouveau bouton CTA, segmented control, ou conteneur de section dans le panel — ne pas réimplémenter le pattern inline.
-- [PrimitiveButtons.swift](BoaNotch/Views/Components/PrimitiveButtons.swift) — 3 `ButtonStyle` :
-  - `PrimaryButtonStyle(font:)` : fond `AppColors.accent` plein, texte `Color.black.opacity(0.85)` (jamais blanc — règle "Selected button text color"), opacité 0.85→1.0 au hover/press, padding `DS.Padding.buttonH/V` (12×6), radius `DS.Radius.button` (8). Pattern hover via vue interne `BodyView` (un `ButtonStyle` ne peut pas porter de `@State` directement ; nommer la struct `Body` shadowe l'associated type du protocole — utiliser `BodyView`).
-  - `PrimaryButtonStyleSubtle(font:enabled:)` : variante discrète, fond `accent.opacity(0.35)` quand `enabled`, transparent + texte tertiary sinon. Pour CTA secondaires affirmatifs (Save API key, Generate avec validation).
-  - `SegmentedButtonStyle(isSelected:)` : pill `accent` plein + texte noir 0.85 quand sélectionné, stroke `Color.gray.opacity(0.45)` 1pt + texte secondary sinon. Padding `DS.Padding.segmentH/V` (12×5) plus serré qu'un bouton standard pour densité de groupe.
-- [PrimitiveContainers.swift](BoaNotch/Views/Components/PrimitiveContainers.swift) — 5 vues + 1 modifier :
-  - `PanelSection(_ title:count:content:)` : header `DS.Text.sectionHead` UPPERCASE tracking 1.5 + count optionnel à droite (rendered si > 0), padding bottom `DS.Spacing.sm` avant le contenu. Header foreground `Color.white.opacity(0.28)` (TODO : tokeniser `DS.Surface.headerLow` quand 5+ call-sites convergent).
-  - `CardCompact { content }` : 10pt radius, padding `DS.Padding.cardCompactH/V` (14×12), fond `.quaternary.opacity(0.5)`, `frame(maxWidth: .infinity, alignment: .leading)`. Pas de hover intégré.
-  - `CardProminent { content }` : 12pt radius, padding `DS.Padding.cardProminentH/V` (14×16), fond `.quaternary.opacity(0.6)`. Pour contenu primaire (memoryCard, templateCard, MissionsActivityBanner).
-  - `ListRow { content }` : padding `DS.Padding.rowH/V` (14×6), `frame(minHeight: DS.Layout.rowMinHeight)` (32pt). Pas de divider intégrée — le call-site intercale des `Hairline()` si besoin.
-  - `Hairline()` : `Rectangle().fill(DS.Stroke.hairline).frame(height: DS.Hairline.standard)` (0.5pt).
-  - `View.notchPanelInsets(variant: .standard | .chat)` : applique les insets `DS.Layout.panelTopInset/panelBottomInset/panelHorizontalInset` (`.standard` pour Settings/Brain/History) ou `chatTopInset/chatBottomInset/panelHorizontalInset` (`.chat` pour ChatView).
-
-Migrations validatives session B (5 call-sites pour exercer l'API tôt) :
-- [BrainOnboardingView.swift](BoaNotch/Views/BrainOnboardingView.swift) bouton "Activer" → `PrimaryButtonStyle(font: .callout.weight(.semibold))` (légèrement plus compact qu'avant : padding vertical 9pt → 6pt, radius 7pt → 8pt, conforme aux tokens DS).
-- [SettingsView.swift](BoaNotch/Views/SettingsView.swift) bouton "Save" API key → `PrimaryButtonStyleSubtle(enabled: !apiKey.isEmpty)`.
-- [SettingsView.swift](BoaNotch/Views/SettingsView.swift) helper `segmentedButton` → délègue à `SegmentedButtonStyle(isSelected:)` (propage à 2 call-sites en aval : Max iterations + Terminal backend, rendu identique aux valeurs précédentes qui matchaient déjà les tokens).
-- [BrainView.swift](BoaNotch/Views/BrainView.swift) `memorySection` → `PanelSection("À propos de toi", count:) { ... }` (le helper privé `sectionHeader` reste car `wikiSection` l'utilise encore — migration complète en session C).
-- [BrainView.swift](BoaNotch/Views/BrainView.swift) divider Memory↔Wiki → `Hairline()` (1pt → 0.5pt, conforme `DS.Hairline.standard`).
-
-Décision explicite session B : **pas de glass natif macOS 26 sur les ButtonStyle/Containers**. Les CTA et cards dans le panel restent flat (fond `.quaternary.opacity()`) sur 14/15/26 pour préserver la doctrine "glass = floating UI hors panel" (cf "Liquid Glass policy" plus haut). `.buttonStyle(.glass)` / `.glassProminent` sera évalué plus tard pour les boutons floating (toasts), pas ici. Sessions C/D continueront la migration des call-sites restants vers ces primitifs (wiki/skills section headers, routine form buttons, template browser CTAs, etc.).
-
-**Session C+D (2026-05-10) — migration call-sites + sweep complet font aliases natifs** : 11 commits sur la branche, structurés par zone avec gating per-build et per-lint. Token ajouté à C0 : `DS.Surface.headerLow` (white 0.28) pour les section heads UPPERCASE mono — distinct de `tertiary` (33%). Substitué dans 6 occurrences (PrimitiveContainers, BrainView ×4, SkillsHubView). Lint script étendu avec une 3e passe catch des aliases natifs SwiftUI (`.callout`, `.footnote`, `.body`, `.caption`, `.caption2`, `.headline`, `.title*`) appliqués comme fonts hors `var body`. Tokens ajoutés à D0 (5) puis D5 (1, pendant sweep BrainView) :
-- `DS.Text.bodySmallSemibold` (13pt semibold) — top-bar panel title (équiv `.headline` macOS), CTA full-width affirmé (Submit routine).
-- `DS.Text.bodySmallMedium` (13pt medium) — detail labels (memory block category breadcrumb, skill detail header).
-- `DS.Text.labelSemibold` (12pt semibold) — headers prose section (zoneHeader, capabilitiesHeader).
-- `DS.Text.labelMono` (12pt monospaced) — cron expression display, stepper digits.
-- `DS.Text.captionSemibold` (11pt semibold) — chevron icons row action buttons.
-- `DS.Text.microSemibold` (10pt semibold) — petit chevron/icône affirmée 10pt.
-- `DS.Text.microBold` (10pt bold) — counter badges, breadcrumb chevrons.
-
-**État final lint** : 27 `.system(size:)` (TODOs documentés — dynamiques `textSize.scale`, badges 8pt mono, brand icons 22pt, hero 40pt) · 40 `.white.opacity()` (action button idle MessageBubble, hairlines fines spécifiques) · **0 native font alias** appliqué comme font dans une vue (les seules occurrences restantes sont des line-headers du lint script lui-même).
-
-**Stop conditions déclenchées en session C/D (rapportées sans écrire)** — utiles pour de futures sessions :
-1. **OnboardingButton/WideButton → PrimaryButtonStyle** : 2 patterns CTA distincts (28×9 padding glass-frosted vs 12×6 accent solid). Migration changerait l'identité. `WideButton` n'existe pas (référence comment-only).
-2. **zoneHeader / capabilitiesHeader → PanelSection** : prose-style avec icône + CTA inline, doctrine CLAUDE.md explicite. Migration nécessiterait extension `PanelSection(icon:trailing:)` ET visual identity shift (font 12pt semibold → 10pt mono bold, primary → headerLow). Préserver tels quels.
-3. **Form pills (frequencyPill, deliverButton, intervalPicker) → SegmentedButtonStyle** : SegmentedButtonStyle est stroke-only en non-sélectionné, les form pills sont fill `.quaternary.opacity(0.6)`. Identité visuelle distincte (fill vs stroke). Pour migrer plus tard : créer `SegmentedButtonStyleFilled` variant.
-4. **templateCard / memoryCardCompact → CardProminent** : CardProminent n'a pas d'API hover overlay. Pour migrer : étendre CardProminent avec `@ViewBuilder hover:` slot.
-5. **settingsSection → PanelSection** : helper SettingsView a `padding(.vertical, 14)` + `.tertiary` (33%), vs PanelSection `padding(.bottom, 8)` + `headerLow` (28%). Migration changerait spacing inter-sections + couleur sur 9 sections — délégation refusée.
-
-Migrations validatives complètes en session C/D (par fichier) :
-- **NotchView** : Settings/Brain/History/Chat wrappers → `notchPanelInsets(variant:)` (zéro delta, juste tokenisation).
-- **SettingsView** : `sectionDivider` helper → `Hairline()` (1pt → 0.5pt = harmonisation au standard).
-- **BrainView** : `memoryCardCompact` literals + 33 font aliases substitués via 11 patterns.
-- **ConversationHistoryView** : 10 font aliases + radius search/row + padding search → tokens DS.
-- **TemplateBrowserView** : 18 font aliases + radius literals.
-- **RoutinesView** : 24 font aliases en 9 patterns replace_all.
-- **NotchView/ExpandedBarView/SkillsHubView/SearchBarView/BrainOnboardingView/DropOverlay/ToastView/PrimitiveContainers** : sweeps mineurs, tous nettoyés.
-
-**Decisions de typo doctrinaires confirmées en session D** :
-- Titre d'item dans une liste : 13pt regular partout (`DS.Text.bodySmall`) — appliqué à ConversationHistoryView session row title (14pt → 13pt) et MemoryCardCompact title (12pt medium → 13pt regular). Pattern Routines, "true list" doctrine.
-- Top-bar panel title : `.headline` macOS = 13pt semibold = `DS.Text.bodySmallSemibold` (match exact).
-
-MessageBubble (session 3) reduced 51 hardcodes to 5 justified TODOs (animated
-pulse opacity ×2, blockquote bar 0.15, image overlay 0.1, action button idle
-0.28). Tokens added during that pass: `DS.Text.bodySmall`, `DS.Text.captionMono`,
-`DS.Icon.chevronBold`. ChatView+NotchView (session 4) ramené 34 hardcodes à 6 TODOs
-justifiés (textSize.scale dynamique, ellipsis 15pt one-off, BrailleSpinner 0.7
-×2 et size paramétrique, weight conditionnel menuButton). Token ajouté:
-`DS.Text.microMedium`. Remaining zones: BrainView, SettingsView, RoutinesView,
-TemplateBrowserView.
-A bash check script `scripts/lint-design.sh` lists remaining hardcoded
-`.system(size:)`, `.white.opacity()`, AND native SwiftUI font aliases
-(`.callout`, `.footnote`, `.body`, `.caption`, `.caption2`, `.headline`,
-`.title*`, etc.) applied as fonts via `.font(.X)` outside `DesignSystem.swift`.
-3 sections, output format is `file:line:` directly clickable in editors.
-Run before committing UI changes. SwiftLint was tried but requires full
-Xcode, not available in this dev environment — the bash script covers the
-3 rules with zero external dependency.
-
-État final post-D : 27 hits `.system(size:)` (TODOs documentés — dynamiques
-`textSize.scale`, badges 8pt mono, brand icons 22pt, hero icons 28-40pt) ·
-40 hits `.white.opacity()` (action button idle MessageBubble, hairlines
-fines spécifiques) · **0 native font alias** appliqué comme font dans
-une vue. Toute typographie passe par `DS.Text.*`.
-
-**ShapeStyle ternaries reminder**: SwiftUI requires `AnyShapeStyle(...)` on
-both branches of a conditional `foregroundStyle`. The `DS.Surface.*` tokens
-already wrap in `AnyShapeStyle` so they compose directly:
-`.foregroundStyle(isActive ? DS.Surface.primary : DS.Surface.secondary)` ✓.
-
-### Brain pipeline invariants
-- Wiki path: NotchNotch reads `~/.hermes/brain/wiki/`. The llm-wiki Hermes 
-  skill defaults to `~/wiki` — setup MUST force the path via 
-  `skills.config.wiki.path` (sent as a chat message to Hermes, which runs 
-  `hermes config set skills.config.wiki.path ~/.hermes/brain/wiki` via its 
-  `terminal` tool — there is NO `config_set` tool).
-- Raw sources path: `~/.hermes/brain/raw/`. Clipper and drop-to-brain write 
-  here with YAML frontmatter: `source`, `title`, `clipped_at`, `word_count`. 
-  Hermes's `brain-ingest` cron (every 2h, deliver=local) compiles raw/ into 
-  wiki/ via the llm-wiki skill.
-- Wiki structure produced by llm-wiki (as of first real ingest):
-  - `SCHEMA.md` — domain, conventions, tag taxonomy, thresholds (not 
-    `CLAUDE.md`)
-  - `index.md` — catalog with `[[wikilinks]]`, grouped by `## Entities`, 
-    `## Concepts`, `## Comparisons`, `## Queries`; page counter at top
-  - `log.md` — append-only journal, format `## [YYYY-MM-DD] action | 
-    subject`; rotate when >500 entries
-  - `concepts/<name>.md` — one page per concept with YAML frontmatter 
-    (`title`, `created`, `updated`, `type`, `tags`, `sources`)
-  - `entities/`, `comparisons/`, `queries/` — parallel directories for 
-    other page types
-  - `raw/articles/<name>.md` — archived copy of the ingested source
-- `.lint-report.json`: produced by the `brain-lint` cron (Sunday 9h, 
-  deliver=local) running llm-wiki in lint mode. If present, 
-  BrainViewModel reads it for health status. If absent, health is silently 
-  `.unknown` — never an error. (Not yet verified end-to-end — lint hasn't 
-  run yet.)
-- Memory blocks use `§` as thematic separator in MEMORY.md and USER.md. 
-  This is Hermes's convention, not a NotchNotch invention. Do not change.
-
-### UserDefaults keys (maintained list)
-- `onboardingCompleted` — main onboarding flow (OnboardingViewModel)
-- `hasCompletedBrainOnboarding` — brain setup sheet (NotchView)
-- `hermesConversationId` — server-side conversation UUID (HermesClient)
-- `notchnotchSessionId` — current NotchNotch chat session ID, sent as `X-Hermes-Session-Id` (HermesClient)
-- `hermesSessionId` — legacy Telegram-derived session ID (SessionStore, informational only)
-- `textSize` — chat/brain text size picker: "medium" | "large" (AppearanceSettings). Legacy `"small"` falls back to `.medium` via `?? .medium` rawValue init. MessageBubble body size is custom-mapped (medium=12pt, large=15pt) via private `messageBodySize` rather than `textSize.scale`; bold markdown scales the same. BrainView/ChatView still use `textSize.scale` (1.0 / 1.25).
-- `panelSize` — open panel size variant: "standard" (680×380) | "large" (≤900×600, clamped to 0.9×visibleFrame) (PanelSizeStore)
-- `googleConnectedEmail` — connected Gmail address after OAuth; absence = not connected (GoogleOAuthService / GoogleConnectionState)
-- `userCustomModels` — JSON-encoded `[String: [HermesConfig.CustomModel]]`, custom model IDs the user has added per LLM provider via the AI Provider > Advanced > Add custom model ID flow (HermesConfig)
-- `didSetHermesLocaleFr` — Bool, true after NotchNotch has written `display.language: fr` once into `~/.hermes/config.yaml` so Hermes v0.13+ static i18n (PR #20329) renders CLI/gateway messages in French. Idempotent at launch; fails silently if Hermes is not yet installed (AppDelegate.applyHermesLocaleOnce)
-- `computerUsePermissionsConfirmed` — Bool, true after the user clicks "C'est bon" in `ComputerUseDetailView` after walking through the 3 macOS TCC panels (Accessibility / Screen Recording / Automation). NotchNotch cannot verify these grants programmatically (cua-driver is a separate binary, TCC is bundle-scoped), so this flag is a UI-side act of faith. Drives `ComputerUseService.state` resolution: binary on PATH + flag true → `.ready`; binary on PATH + flag false → `.installedPendingPermissions`. Set via `ComputerUseService.confirmPermissions()`; persistence is straight UserDefaults, no Hermes round-trip.
-- `openrouterFreeModelsCacheV1` — JSON-encoded `Cache { models: [FreeModel], fetchedAt: Date }` storing the live OpenRouter `:free` model list fetched from `https://openrouter.ai/api/v1/models`. Written by `OpenRouterCatalog.persistCache()` after every successful refresh; read by `OpenRouterCatalog.loadCached()` at init. TTL 24h before `refreshIfStale()` re-fetches. The `V1` suffix is a schema version — bump it if the `FreeModel` shape changes incompatibly so stale caches are silently dropped.
-
-Add new keys here when introducing them.
-
-### What NotchNotch never does
-- Write to `~/.hermes/config.yaml` directly (only reads; config changes go 
-  through chat messages to Hermes)
-- Call Hermes's skill manager, cron API (with one exception, see below), 
-  or memory tool directly (all goes through `sendCompletion` as natural 
-  language)
-- Edit any file under `~/.hermes/brain/wiki/` (Hermes owns it)
-- Edit any file under `~/.hermes/memories/` (Hermes owns it)
-- Write any launchd plist, including `~/Library/LaunchAgents/ai.hermes.gateway.plist` 
-  (Hermes owns it; NotchNotch only runs `hermes gateway start/restart/uninstall` — 
-  see exception below)
-
-**Documented exception — `~/.hermes/google_token.json`**: the `GoogleOAuthService` 
-writes this file directly after a successful OAuth consent, because the 
-Desktop OAuth flow (loopback HTTP on an OS-assigned port + PKCE) must happen 
-in-process to receive the callback. Everything-through-chat doesn't apply 
-because chat can't intercept a browser redirect. The file format matches 
-`google.oauth2.credentials.Credentials.to_json()` exactly (9 keys: `token`, 
-`refresh_token`, `token_uri`, `client_id`, `client_secret`, `scopes`, 
-`expiry` as `YYYY-MM-DDTHH:MM:SS.000000Z`, `universe_domain`, `account`) 
-so the `google-workspace` skill reads it with `Credentials.from_authorized_user_file`. 
-See `GoogleOAuthService.swift` for the 8-scope set and `setup.py` in 
-`~/.hermes/skills/productivity/google-workspace/scripts/` for the downstream 
-consumer.
-
-**Documented exception — cron pause/resume/edit direct REST**: `HermesClient.pauseCronJob(id:)` 
-and `resumeCronJob(id:)` POST to `localhost:8642/api/jobs/{id}/pause` 
-and `/resume` (defined at `~/.hermes/hermes-agent/gateway/platforms/api_server.py:2048-2084`), 
-bypassing chat. Note: the path is `/api/jobs/...` (NOT `/api/cron/jobs/...` — 
-that latter exists in `hermes_cli/web_server.py` but is a different module 
-that's not actually served by `hermes gateway run`; verify with curl before 
-trusting any path you grep for in the Hermes repo). Used by the `StatusDotButton` on routine cards and the 
-Pause/Resume context-menu item — both call `ChatViewModel.setRoutinePaused(_:paused:)` 
-which fires the request and shows a toast (`"Routine en pause"` / 
-`"Routine relancée"` / `"Échec — Hermes injoignable"`). 
-
-Justification: the `sendCompletion("Pause routine X")` alternative adds 
-500ms-1s of LLM latency, can be misrouted by weak free-tier models (same 
-gotcha as `brain-ingest`), and forced a panel switch + a visible chat 
-message every time the user toggled a routine. CronStore's DispatchSource 
-on `jobs.json` picks up the change automatically — no client-side state 
-mutation needed. 
-
-`HermesClient.updateCronJob(id:patch:)` PATCHes `localhost:8642/api/jobs/{id}` 
-with a JSON body of `{name?, prompt?, schedule?, deliver?, enabled?}` — 
-defined at `~/.hermes/hermes-agent/gateway/platforms/api_server.py:1997` 
-(allowed-fields whitelist `_UPDATE_ALLOWED_FIELDS` at `:1892`). Wired to 
-the routine card's tap (single click opens a pre-filled creation form, 
-2026-04-26): `RoutinesView.applyJobToForm` reads `schedule.expr` (the 
-canonical cron string — we expanded `CronJobSchedule` to decode it; 
-`schedule_display` is sometimes humanized and not a safe truth source) 
-and reverse-parses via `parseCron(_:)` into the form's structured state. 
-The form recognizes `M H * * *`, `M H * * 1-5`, `M H * * d1,d2,…`, 
-`M H D * *` (D ≤ 28), and `0 */N * * *` (N ∈ {1,2,3,4,6,12}) — 
-everything else (sub-hourly intervals, ranges, multi-day-of-month, 
-`month != *`, `kind != "cron"` like `every 90m`) falls back to a 
-read-only schedule chip + "Édite cette routine via le chat" hint while 
-keeping name/prompt/deliver editable. `ChatViewModel.updateRoutine` 
-assembles a *minimal* patch: each field is included only when it 
-actually changed, so unknown deliver values (`origin`, `email`, custom 
-platforms) survive untouched even though they map to the "Notch" pill 
-on read. Same rationale as pause/resume: deterministic, model-agnostic, 
-no chat noise. Tap behavior changed in tandem — the old "pull routine 
-into chat as system context" behavior moved to a right-click menu item 
-("Talk about this routine"); single tap = edit, single click on the 
-status dot = pause/resume.
-
-**Documented exception — memory provider direct config write**: `HermesMemoryConfig.switchTo(_:)` writes `memory.provider: <id>` to `~/.hermes/config.yaml` via `HermesConfig.setImmediate`. The `MemoryProviderSection` UI calls `HermesConfig.writeRawEnv(key:value:)` directly to write plugin env vars (e.g. `MEM0_API_KEY`, `OPENVIKING_ENDPOINT`, `RETAINDB_API_KEY`) into `~/.hermes/.env`. Both bypass chat.
-
-Justification: the `sendCompletion("Switch memory to mem0")` alternative adds 500ms-1s of LLM latency and can be misrouted by weak free-tier models. The CLI alternative (`hermes memory setup`) is a curses TUI with NO `--provider`/`--apply` flags (verified in `~/.hermes/hermes-agent/hermes_cli/memory_setup.py` and `main.py:8149`) — the wizard accepts `setup`, `status`, `off`, and `reset --yes --target {all|memory|user}`, nothing else — so we cannot run it as a non-interactive subprocess.
-
-Pip-dep tradeoff: cloud providers like mem0 / supermemory have pip dependencies that the curses wizard normally installs via `uv pip install`. By bypassing the wizard, NotchNotch leaves dep installation to the user. The Memory section UI shows an actionable hint ("If responses fail with ImportError, run `hermes memory setup` once in Terminal to install pip deps") whenever the active provider is non-local. Local-only providers (hindsight, holographic) work immediately with no install step — the most common path.
-
-Plugin discovery: `HermesMemoryConfig.scanInstalledPlugins()` reads `~/.hermes/hermes-agent/plugins/memory/<id>/plugin.yaml` (the install dir, NOT `~/.hermes/plugins/memory/` which doesn't exist) and parses `requires_env: [...]` to know which env vars to prompt for per provider. Static metadata (display name, tagline, docURL, isLocal flag) is hardcoded in `knownProviders`; everything dynamic comes from the yaml. Adding a new memory plugin in Hermes requires only adding an entry to `knownProviders` here (plus a docURL anchor on the Hermes docs site).
-
-Read-only fields: NotchNotch never writes any other key under `memory.*` (e.g. `memory_enabled`, `flush_min_turns`, `memory_char_limit`). Those are Hermes territory, edited via chat or CLI.
-
-Other cron operations (create, remove) **still go through chat** — 
-creation because the prompt is the *content* of the routine and 
-benefits from LLM phrasing, removal because deleting work warrants a 
-confirmation step.
-
-**Documented exception — Skills Hub catalogue (browse / inspect / install)**: 
-`SkillsHubClient` (`BoaNotch/Services/SkillsHubClient.swift`) talks to Hermes 
-through three direct subprocess paths instead of chat:
-- **`browse()`** spawns `~/.hermes/hermes-agent/venv/bin/python3 -c "<inline 
-  script>"` that imports `hermes_cli.skills_hub.browse_skills` and prints 
-  `json.dumps(...)` to stdout. Single page, size 100, source `'all'`. Helpers 
-  return name / description / source / trust per item; the helper already 
-  dedupes by name (preferring higher trust) and sorts "official first". 
-  `~/.hermes/hermes-agent` is set as both `currentDirectoryURL` and 
-  `HERMES_AGENT_DIR` env var so `sys.path.insert` resolves cleanly without 
-  hardcoded user paths.
-- **`inspect(name:)`** same pattern with `inspect_skill(os.environ['SKILL_NAME'])`. 
-  Returns identifier, full description, source, tags, and `skill_md_preview` 
-  (50 lines of `SKILL.md`). Frontmatter `requires_env:` is parsed Swift-side 
-  to surface a discreet "could ask for an API key" hint in the preview UI.
-- **`install(identifier:)`** spawns `venv/bin/python3 hermes skills install 
-  <identifier> --yes` (CLI subprocess, NOT inline). `--yes` corresponds to 
-  `skip_confirm=True` in `do_install` and suppresses the disclaimer prompt 
-  (which would block on stdin and hang the subprocess). Exit code = success, 
-  but with a belt-and-suspenders check: Hermes prints "Installation blocked" 
-  on a `dangerous` verdict and `return`s without raising — so a 0 exit is 
-  re-classified by inspecting stdout for the block marker.
-
-Justification: the chat alternative ("/skills install <id>" via 
-`sendCompletion`) costs 500ms-1s of LLM latency, can be misrouted by weak 
-free-tier models, and produces opaque pass/fail signals. The CLI 
-alternative requires the user to leave NotchNotch. The programmatic helpers 
-(`browse_skills` / `inspect_skill`) are explicitly designed for non-CLI 
-callers ("Powers both `hermes skills <subcommand>` and `/skills`" + 
-"Paginated hub browse for programmatic callers (e.g. TUI gateway)") so the 
-contract is intentional.
-
-Coupling: `SkillsHubClient` is tightly coupled to the layout of 
-`~/.hermes/hermes-agent` (the venv path + the `hermes_cli` package). If 
-Hermes restructures its install layout this file breaks loud and visible 
-(the subprocess fails on import). All home-dir paths are resolved at call 
-time via `FileManager.default.homeDirectoryForCurrentUser` — never 
-hardcoded.
-
-UI side: `BrainView` Section 2 ("Capacités") header carries an inline 
-search field (filtre in-memory) et un bouton accent compact "+ Parcourir" 
-qui opens `SkillsHubView` as an `.overlay()` covering the BrainView 
-content — **unique point d'entrée vers le catalogue**. The catalogue's 
-flag (`NotchViewModel.isSkillsHubOpen`) is deliberately NOT included in 
-`closeAllPanels()` — closing Brain via the right-burger X cascades 
-through `NotchView`'s `.onChange(of: isBrainOpen)` which resets the flag, 
-so the overlay's lifecycle stays scoped to Brain without further coupling. 
-Catalogue rows réutilisent le composant partagé `CapabilityCard` (mêmes 
-badges OFFICIEL/COMMUNAUTÉ que Section 2). Only sources `official` and `skills.sh` are 
-exposed in v1; `well-known`, `github`, `clawhub`, `lobehub`, 
-`claude-marketplace` are filtered out catalogue-side. 
-Already-installed capabilities are filtered by case-insensitive name 
-comparison against `brainVM.skills`. Update (`hermes skills check/update`) 
-and uninstall paths are not surfaced in v1.
-
-Source-name quirk: the browse helper labels skills.sh items with 
-`source == "skills.sh"` (with a dot) in the items array, even though the 
-install identifier prefix is `skills-sh/<repo>/<skill>` (with a dash) and 
-the per-source-limit dict key is also `"skills-sh"`. NotchNotch matches 
-what the items actually emit (`"skills.sh"`) for filtering and badge 
-rendering — don't normalize to `"skills-sh"` thinking it's a typo.
-
-**Documented exception — `hermes computer-use install` subprocess + macOS privacy-panel deeplinks**: `ComputerUseService` ([BoaNotch/Services/ComputerUseService.swift](BoaNotch/Services/ComputerUseService.swift)) calls Hermes via two non-chat paths:
-
-- **`install()`** spawns `~/.local/bin/hermes computer-use install` via `ShellRunner.run`. That command wraps an upstream installer (`bash -c "$(curl -fsSL https://raw.githubusercontent.com/trycua/cua/main/libs/cua-driver/scripts/install.sh)"`, verified in `~/.hermes/hermes-agent/tools/computer_use/cua_backend.py`), which downloads the `cua-driver` binary (~50MB, default pin `HERMES_CUA_DRIVER_VERSION=0.5.0`) and registers it. Total wall time 10–90s; `ShellRunner.run` is bulk-blocking so no per-line progress streaming in v1. On non-zero exit, `installError = result.output.prefix(500)` — note `ShellRunner.Result` has a single combined `output` field (no separate stderr stream), so we can't distinguish stdout from stderr in error reporting (out of scope for v1; if a later session needs it, extend `ShellRunner` first). **Hermes CLI exit-0 ≠ install success** (observed 2026-05-17): `cmd_computer_use` at `~/.hermes/hermes-agent/hermes_cli/main.py:11351` calls `install_cua_driver()` *without checking its return value*, so the CLI exits 0 even when the upstream `install.sh` failed silently (network blip / curl missing / write permission on `/usr/local/bin`). NotchNotch papered over this by adding a second `ShellRunner.commandExists("cua-driver")` probe inside `install()` after the exit-0 path: if the binary still isn't on PATH, we synthesise an explicit `installError` (French: "L'installation s'est terminée sans réussir à poser cua-driver sur ton PATH…") instead of returning to the pre-install state and letting the user think nothing happened. If/when the upstream CLI starts propagating the return value, this belt-and-suspenders probe stays — it's correct regardless.
-- **`openAccessibilitySettings()` / `openScreenRecordingSettings()` / `openAutomationSettings()`** open the corresponding panes in System Settings via `NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_<Pane>")!)`. Strictly speaking these are macOS deeplinks, not Hermes-side writes, so they're not a Hermes exception per se — but the same "structured UI never via chat" doctrine applies: a button opens the pane and the user grants the TCC consent themselves; NotchNotch never tries to bypass the consent dialog or prompt the user via chat to "grant Accessibility access".
-
-Justification: same as `SkillsHubClient` (the chat alternative is slow + misroutable by weak free-tier models + opaque pass/fail; the CLI alternative requires the user to leave NotchNotch and read a man page). `install()` is never called automatically — only an explicit UI button (added in a later session) may trigger it.
-
-Coupling: `~/.local/bin/hermes` is a symlink to `~/.hermes/hermes-agent/venv/bin/hermes` on the dev machine. The hardcoded path `\(NSHomeDirectory())/.local/bin/hermes` will break loud-and-visible if the symlink is missing or moved — that's the desired failure mode for the v1 install button.
-
-**Documented exception — `approvals.mode` direct config write**: `ComputerUseService.install()` writes `approvals.mode: manual` to `~/.hermes/config.yaml` via `HermesConfig.shared.setImmediate("approvals.mode", value: "manual")` at the end of a successful install. The Settings → Computer Use → "Mode d'approbation" 3-way picker (`SettingsView.approvalModePicker`) also writes this key on every segment tap. Legal values are `manual` / `smart` / `off` — verified in `~/.hermes/hermes-agent/tools/approval.py:840` (`Returns 'manual', 'smart', or 'off'`). Do NOT use `auto` — it does not exist on the Hermes side.
-
-To support live state seeding in the picker without a typed `@Published` property, `HermesConfig` exposes a generic public reader: `func readKey(_ keyPath: String) -> String?` that wraps the private `yamlString` helper and re-parses `~/.hermes/config.yaml` on demand. `SettingsView.onAppear` calls `HermesConfig.shared.readKey("approvals.mode") ?? "manual"` to seed the picker state — Hermes default if the key is absent is `manual`.
-
-Justification: same as memory provider direct write — the chat alternative (`sendCompletion("Set approvals.mode to manual")`) adds LLM latency and can be misrouted by weak free-tier models; the CLI alternative (`hermes config set ...`) requires the user to leave NotchNotch. For non-tech users this is a discoverable, inspectable Settings row that maps 1:1 to the underlying config.
-
-Read-only fields: NotchNotch never writes any other key under `approvals.*` (`approvals.timeout`, `approvals.cron_mode`). Those stay Hermes territory, edited via CLI or chat.
-
-**Documented exception — LaunchAgent for hermes gateway**: `HermesGatewayLauncher` ([BoaNotch/Services/HermesGatewayLauncher.swift](BoaNotch/Services/HermesGatewayLauncher.swift)) runs `~/.local/bin/hermes gateway start` / `restart` / `uninstall` as subprocesses (`ShellRunner`) and reads launchd state with `launchctl print`. It never writes a plist.
-
-History: until H1 (2026-10-11) NotchNotch wrote its own `ai.hermes.gateway.plist` (`venv/bin/python3 hermes gateway run --replace`) because Hermes's installer registered no service. Hermes v0.21 now owns that plist (osascript wrapper + `--external-supervisor` on its bundled Python, rewritten by `hermes update`), so writing ours would clobber it. `hermes gateway start` covers every case we used to handle: writes the plist when missing, refreshes an outdated one (older NotchNotch template included), loads an unloaded job, no-op when running.
-
-Justification for a subprocess rather than chat: the gateway is exactly what's down when we need this — chat can't reach it. The CLI alternative requires the user to open Terminal.
-
-State machine: `LaunchAgentState ∈ {notInstalled, installedAndLoaded, installedNotLoaded}` derived from `(plist file exists, launchctl print exit code)`. NotchNotch never installs the service at boot without prior user consent — the boot probe (`AppDelegate.reinstallLaunchAgentIfNeeded`) only acts on `.installedNotLoaded`. The `.notInstalled` path is handled lazily via the actionable toast `"Hermes ne répond pas. Tape pour réparer."` (`ChatViewModel.offerHermesRepair` → `repairAndRetry`).
-
-Repair flow: on `HermesError.unreachable` (or `Connection refused` shape), and on HTTP 401/403 (toast `"Clé API Hermes invalide. Tape pour réparer."`), the toast closure (1) runs `ensureApiServerEnv()` — a missing key keeps :8642 closed, so it is the usual cause of "unreachable"; it restarts a loaded gateway when it wrote, (2) `install()` if not installed / not loaded, else `restart()` when step 1 wrote nothing (a 401 with a valid key in `.env` means the gateway still holds an older one — restart, never rotate), (3) polls `/health` for up to 10s, (4) retries the last user message. Failures surface their own `.error` toast.
-
-Onboarding integration: `OnboardingViewModel.ensureLaunchAgentAndAwaitHealth()` runs `ensureApiServerEnv()` then `install()` at the end of `installHermes()`. Soft-failure — if `install()` throws we still advance; the actionable toast handles it later. 10s poll covers the cold start.
-
-Settings UI: the "Hermes" section in `SettingsView` shows a status pill (green = loaded AND `/health` ok, amber = loaded but `/health` silent OR plist present but not loaded, red = not installed) and exposes *Installer* (`start`) / *Redémarrer* (`restart`) / *Désinstaller* (`uninstall`) / *Voir les logs*.
-
-**Documented exception — `API_SERVER_ENABLED` + `API_SERVER_KEY` + `model.max_tokens` direct writes**: NotchNotch writes these keys outside the chat path, both for non-tech-user UX reasons that match the same doctrine as memory-provider / approvals.mode:
-
-- **`API_SERVER_ENABLED=true` and `API_SERVER_CORS_ORIGINS=*` in `~/.hermes/.env`** — Hermes only opens port 8642 when `API_SERVER_ENABLED=true` (gated in `gateway/config.py:1478`, where `Platform.API_SERVER` is only added to the active platforms list when these env vars are present). Hermes's `install.sh` does NOT set them. For a user with no messaging platform configured (typical NotchNotch user — no Telegram, no Discord, no Slack), the gateway then runs in cron-only mode and NotchNotch can't reach it. Written by `HermesGatewayLauncher.ensureApiServerEnv()` at every boot, at onboarding and in the chat repair flow (presence-check only — if `API_SERVER_ENABLED=` is already in `.env` with any value, we respect it). When it writes, it restarts a loaded gateway so `.env` is re-read. CORS=* enables the browser-based Clipper extension to POST to `localhost:8642` without same-origin friction.
-- **`API_SERVER_KEY` in `~/.hermes/.env`** — since Hermes v0.21.6 the API server refuses to start without a key of 16+ chars that isn't a placeholder (`gateway/config_env.py` `_api_server`, `has_usable_secret(min_length=16)`): :8642 stays closed, and every endpoint except `/health` answers 401 without `Authorization: Bearer <key>`. The installer doesn't set it. `ensureApiServerEnv()` generates 32 random bytes (`SecRandomCopyBytes`, hex — no `#`/quote/space for the dotenv parser) through `writeRawEnv` (keeps `.env` at 0600) only when the key is absent or unusable; a valid key is never replaced since other clients (Hermes Desktop, peers, Clipper later) use it. Not via `hermes config set API_SERVER_KEY <key>`: that puts the key on argv, visible to `ps`. `HermesClient` reads it on each request. Known limit: a key supplied by a secret source (`secrets.command`, 1Password, Bitwarden) instead of `.env` is invisible to NotchNotch, which would then write one to `.env`. The Clipper extension does not send the key yet → 401 until its own session.
-- **`model.max_tokens: 8000` in `~/.hermes/config.yaml`** — OpenRouter's free tier rejects any request where the computed `max_tokens` exceeds ~13K (per-request credit floor). Hermes's anthropic_adapter normally derives `max_tokens = max(context_length - 1, 1)` clamped against budget + 4096 (see `~/.hermes/hermes-agent/agent/anthropic_adapter.py:1940-2050`), which balloons to 65K+ on modern free models. Result: every chat returns HTTP 402 *"You requested up to 65536 tokens, but can only afford 13333"*. Written by `HermesConfig.applyMaxTokensCap(for:)` inside `switchModel(_:)` whenever the user picks a model whose ID ends in `:free`. The override is *removed* (via the new `unsetKey(_:)` helper, which strips a YAML line by key path) when switching back to a paid model so Hermes resumes its natural calculation. Boot-time safety net (`AppDelegate.applyMaxTokensCapIfFreeModel()`) handles users upgrading from pre-v1.4.0 who were already on a `:free` model but never went through `switchModel` since the cap was added — writes 8000 only if `model.max_tokens` is absent (any explicit user override is respected). 8000 is a hardcoded comfortable margin under the 13K floor; a future iteration could read OpenRouter's `x-ratelimit-*` response headers to auto-tune, but the v1 hardcode is correct for every observed free model. Doctrine matches the rest: chat alternative is slow + LLM-routable + opaque; CLI alternative requires the user to leave NotchNotch and read docs.
-
-Read-only fields: NotchNotch never writes any other `API_SERVER_*` env var (`API_SERVER_HOST`, `API_SERVER_PORT` — Hermes defaults are correct) or any other `model.*` key beyond `model.default` / `model.provider` / `model.base_url` / `model.max_tokens`. Those stay Hermes territory.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
----
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+- **Tap inside the open notch never closes it.** `NotchViewModel.handleClick()` only opens. Don't add `else { close() }` back.
+- **`Bundle.module` is forbidden** — use `Bundle.main.resourceURL?.appendingPathComponent(...)`. SPM's `Bundle.module` looks at the app root (breaks codesign) or `fatalError`s on first access (shipped as a crash-on-launch in v1.0.1). Never reintroduce it, even behind a fallback.
+- **rpath**: `swift build` doesn't add `@executable_path/../Frameworks`. `run.sh`/`release.sh` run `install_name_tool -add_rpath` after copying Sparkle and before codesign (v1.2.1 crashed on launch without it). Don't remove it.
+- **`@Published` fires in willSet**: a sink on `$prop` reads the OLD value. Add `.receive(on: DispatchQueue.main)` when you need the post-change state (see `NotchWindowController.sizeCancellable`).
+- **SSE `onEvent` runs off-main** — hop to `Task { @MainActor in ... }` before touching UI state.
+- **Tool-call `.added` and `.done` carry identical payloads** — react on `.added` only. See `sse-probe-notes.md`.
+- **Hermes v0.11.0 is the SSE floor** — keep the JSON fallback; older Hermes in the wild must keep working.
+- **Don't "fix" Hermes to stop emitting `<think>`** — models keep writing them; cleanup stays client-side.
+- **Server conversation history includes tool calls/results** — don't strip them from the response store.
+- **`/v1/responses` does not auto-title sessions** (only `/v1/runs` does) — NotchNotch generates titles itself (`TitleStore`).
+- **DropDelegate, not `.onDrop` closure** — the split drop zone needs `DropInfo.location`.
+- **NWListener**: in `ClipperListener`, don't `defer { connection.cancel() }` — cancel in the send completion handler.
+- **`NotchState` is switched exhaustively** in `NotchWindowController` — adding a case breaks the build there.
+- **Hermes has no `config_set` tool** — via chat, ask Hermes to run `hermes config set <key> <value>` with its `terminal` tool.
+- **`cronjob action=run` doesn't execute immediately** — it only advances `next_run_at`. To test a cron prompt, send it directly via `/v1/responses`.
+- **Free-tier models skip skill invocation** — prompts must name the skill explicitly (`Utilise le skill llm-wiki pour ...`).
+- **Memory edit/delete is fire-and-forget** — HTTP 200 means "received", not "rewritten". Never claim more than the optimistic toast.
+- **MiniMax uses `https://api.minimax.io/anthropic`, not `/v1`.** A `MINIMAX_BASE_URL=.../v1` line in `~/.hermes/.env` (from Hermes's `.env.example`) overrides `config.yaml` — affected installs must remove it.
+- **Logging from the GUI bundle needs `os_log`** — `print()` goes nowhere when launched via `open`. Use `%{public}@` for readable strings. Query: `PRED='process == "notchnotch"'; /usr/bin/log show --info --debug --last 2m --predicate "$PRED" | grep "(notchnotch)"`.
+- **`@MainActor` singletons must be touched from a main-actor context** (e.g. inside `applicationDidFinishLaunching`), not from a stored property on the non-isolated `AppDelegate`.
+- **TCC prompts render behind the `.mainMenu + 3` panel** — wrap permission requests in `NotchPanel.withLoweredLevel { ... }`. Mic: request via `AudioRecorder.startRecordingWithPermission()` before recording.
+- **`hermes computer-use install` exits 0 even on failure** — `ComputerUseService.install()` re-checks `cua-driver` on PATH afterwards. Keep that probe.
+- **Sticky install phase in `ComputerUseStep`** — `installAttemptedInThisStep` keeps the installing phase visible until a terminal state; don't remove it.
+- **Skills Hub source quirk** — browse items use `source == "skills.sh"` (dot) while install identifiers use `skills-sh/` (dash). Match what the items emit.
+- **Chrome extension dev path** — Clipper loads from `~/NotchNotch Extension/`, not the repo clone. Copy changes there and reload.
+
+## Design rules (NOT Material Design)
+
+The panel is near-black to camouflage the hardware notch. Native macOS editorial feel: confident typography, dividers, accent sparingly. The user explicitly rejected the MD3 pill+card look.
+
+- **Use `DS.*` tokens for every value** (`DS.Text`, `DS.Icon`, `DS.Surface`, `DS.Status`, `DS.Radius`, `DS.Spacing`, `DS.Padding`, `DS.Layout`, `DS.Stroke`). No `.system(size:)`, `.white.opacity()`, native font aliases (`.callout`, `.caption`, `.headline`…), literal radii or ad-hoc paddings in views. If a value is missing, add a token to `DesignSystem.swift` first. Use the shared primitives in `Views/Components/` instead of re-implementing buttons, segmented controls or section containers.
+- **Lists (Memory, Skills, History, Routines)**: no filled card backgrounds at rest. Hairline dividers between rows, ~32pt min height (`DS.Layout.rowMinHeight`). Hover may use `nnGlass(in:)` on macOS 26+ or a very subtle tint.
+- **Section headers**: uppercase monospaced (`DS.Text.sectionHead`), `DS.Surface.headerLow`, tracking 1.5. Never accent-tinted.
+- **Tab intros**: one French line, `DS.Text.caption` + `AppColors.accent`. Not italic (user rejected italics).
+- **Accent** (`AppColors.accent`, light blue): signature moments only (§ mark, active-state dots, chat toast, primary CTA). Never on headings.
+- **Selected button on accent fill → text `.black.opacity(0.85)`**, never white (illegible).
+- **Pill vs button**: `Capsule()` only for tag-like state chips (routine context tag, ExpandedBar chips, floating toasts). Buttons, segments and CTAs use `RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous)`. The send button is the only Capsule exception.
+- **Icon sizing**: top bar icons are 13pt medium (`DS.Icon.topBar`); bottom input bar icons 14pt medium (`DS.Icon.secondary`); send button 18pt. `xmark.triangle.circle.square` (Tools) gets `sizeBoost: 2` for visual balance.
+- **Liquid Glass**: always via `nnGlass()` / `nnGlass(in:)` / `NNGlassContainer` (fall back below macOS 26). Glass is for floating UI over the desktop (toasts, recording capsule) and the open panel background (`notchPanelBackground`). Never on content rows or cards inside the panel.
+- **Section panels have no inner rectangle**: content sits directly on the panel background with `notchPanelInsets(variant:)`. The "in a section" signal is `notchPanelBackground(inSection: true)`. Don't reintroduce a content-area fill.
+- **Top bar**: an open panel shows its title in the left slot; the right burger owns the close X. Panel content has no internal title header.
+- **`FadingScrollView`** instead of `ScrollView` in panels (bottom fade only).
+- **Settings**: actions go through `settingsActionButton(label:action:)`; labels in French. Advanced sections stay under the collapsed "Avancé" group.
+- **Panel size**: don't enlarge the notch panel to make a UI fit — redesign instead (user rejected this, 2026-04-24).
+- **Toasts**: tinted per `ToastKind` (info lavender, chat accent, success green, error coral, cron amber). Pixel-art SVGs from halfmage/pixelarticons in `Resources/PixelIcons/`.
+- Conditional `foregroundStyle` needs `AnyShapeStyle` on both branches (`DS.Surface.*` already are).
+
+## What NotchNotch never does (except the documented exceptions below)
+
+- Write `~/.hermes/config.yaml` or `~/.hermes/.env` — default path is a chat message asking Hermes to change it.
+- Call Hermes's skill manager, cron API or memory tool directly — default path is natural language via `sendCompletion`.
+- Edit anything under `~/.hermes/brain/wiki/` or `~/.hermes/memories/` (Hermes owns them). Memory edits are chat prompts to Hermes's `memory` tool.
+- Edit `~/.hermes/brain/wiki/SCHEMA.md` (Hermes territory, co-evolved with the user; reading is fine).
+- Write any launchd plist.
+- Connect a curated capability via chat — `ConnectAction` deliberately has no `.viaChat` case. Use structured UI (OAuth, inline API-key form, external doc link).
+
+**Prefer structured UI + direct REST / file write** when Hermes exposes a deterministic endpoint and the data has a fixed shape (user's choice, 2026-04-26 — chat-driven edits hid *what* was editable). Every non-chat path must be listed below. Don't silently add a new exception — add it here in the same diff. The usual justification: chat adds LLM latency, weak free-tier models misroute it, and the CLI forces the user out of NotchNotch.
+
+### Documented exceptions
+
+- **`~/.hermes/google_token.json`** — `GoogleOAuthService` writes it after the in-process Desktop OAuth flow (loopback + PKCE; chat can't catch a browser redirect). The format must byte-match `google.oauth2.credentials.Credentials.to_json()` (9 keys, `expiry` as `YYYY-MM-DDTHH:MM:SS.000000Z`), mode 0600. Its consumer is the `google-workspace` skill.
+- **Cron pause / resume / edit via REST** — `HermesClient.pauseCronJob` / `resumeCronJob` (`POST /api/jobs/{id}/pause|resume`) and `updateCronJob` (`PATCH /api/jobs/{id}`, whitelist `_UPDATE_ALLOWED_FIELDS` in `api_server.py`). Edit patches are minimal: only changed fields, so unknown `deliver` values survive. Schedules that `parseCron` can't round-trip stay read-only in the form. **Create and remove still go through chat.**
+- **Memory provider** — `HermesMemoryConfig.switchTo` writes `memory.provider`; `MemoryProviderSection` writes plugin env vars via `writeRawEnv`. `hermes memory setup` is an interactive TUI with no non-interactive flags. Pip deps for cloud providers are left to the user (the UI shows a hint). Plugins are discovered from `~/.hermes/hermes-agent/plugins/memory/<id>/plugin.yaml`. Never write other `memory.*` keys.
+- **Skills Hub (browse / inspect / install)** — `SkillsHubClient` runs inline Python against `hermes_cli.skills_hub` (`browse_skills`, `inspect_skill`) with the venv Python, and runs `hermes skills install <id> --yes` (`--yes` prevents a stdin hang). A 0 exit can still be "Installation blocked": check stdout. It's tightly coupled to the `~/.hermes/hermes-agent` layout, on purpose (fails loudly). Only `official` and `skills.sh` sources are exposed.
+- **`hermes computer-use install` + macOS privacy-panel deeplinks** — `ComputerUseService.install()` runs `~/.local/bin/hermes computer-use install` (only from an explicit button), then re-probes `cua-driver`. TCC panes are opened via `x-apple.systempreferences:` deeplinks. NotchNotch never tries to bypass consent, and grant confirmation is a UI-side act of faith (`computerUsePermissionsConfirmed`).
+- **`approvals.mode`** — written as `manual` after a successful computer-use install and by the Settings picker. Legal values: `manual` / `smart` / `off` (no `auto`). Read via `HermesConfig.readKey`. Never write other `approvals.*` keys.
+- **Gateway service** — `HermesGatewayLauncher` runs `hermes gateway start` / `restart` / `uninstall` (chat can't fix the gateway when the gateway is down) and reads state with `launchctl print`. At boot it only re-loads an `.installedNotLoaded` plist; installing waits for user consent (onboarding or the "Tape pour réparer" toast). Repair flow: `ensureApiServerEnv()` → `start` or `restart` → poll `/health` 10s → retry. A 401 with a valid key means restart, never rotate.
+- **`API_SERVER_ENABLED`, `API_SERVER_CORS_ORIGINS`, `API_SERVER_KEY`, `model.max_tokens`** —
+  - `ensureApiServerEnv()` writes `API_SERVER_ENABLED=true` and `CORS=*` when absent (respects existing values).
+  - It generates `API_SERVER_KEY` (32 random bytes, hex) only when the key is absent or unusable. A valid key is never replaced. It's written via `writeRawEnv`, never `hermes config set` (argv shows up in `ps`).
+  - `model.max_tokens: 8000` is set when switching to an OpenRouter `:free` model (the free tier rejects >~13K), removed via `unsetKey` when switching to a paid model, and set at boot only if absent.
+  - Never write other `API_SERVER_*` keys, or `model.*` keys beyond `default` / `provider` / `base_url` / `max_tokens`.
+- **`display.language: fr`** — written once at launch (`applyHermesLocaleOnce`, guarded by `didSetHermesLocaleFr`).
+
+## Brain pipeline invariants
+
+- Wiki path is `~/.hermes/brain/wiki/` (fallback `~/.hermes/wiki/`). The llm-wiki skill defaults to `~/wiki`, so setup forces `skills.config.wiki.path` via a chat message telling Hermes to run `hermes config set` in its terminal.
+- Raw sources go to `~/.hermes/brain/raw/{articles,papers,transcripts}` with YAML frontmatter (`source`, `title`, `clipped_at`, `word_count`). The `brain-ingest` cron (every 2h, deliver=local) compiles them; `brain-lint` runs Sundays 9h.
+- The wiki contains `SCHEMA.md`, `index.md`, `log.md` (append-only, `## [YYYY-MM-DD] action | subject`) and `concepts/`, `entities/`, `comparisons/`, `queries/`, `raw/articles/`.
+- `.lint-report.json` is optional: if absent, health is `.unknown`, never an error. Not verified end-to-end yet.
+- Memory files (`MEMORY.md`, `USER.md`) use `§` as the block separator — Hermes's convention. Do not change.
+- User-facing copy never says "wiki", "RAG", "Karpathy" or "lint". It says "cerveau", "intégration", "maintenance".
+
+## Companion: NotchNotch Clipper
+
+[KikinaStudio/NotchNotch-Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper) — Chrome extension. It saves by calling Hermes `POST /v1/responses` itself, then pings `POST localhost:19944/clip` with `{"title","url"}`. `ClipperListener` only shows a `.success` toast (green, pacman icon). It does not send `API_SERVER_KEY` yet, so it gets a 401 on Hermes v0.21.6+ until it's updated.
+
+## UserDefaults keys (maintained list — add new keys here)
+
+- `onboardingCompleted` — main onboarding
+- `hasCompletedBrainOnboarding` — brain setup sheet
+- `hermesConversationId` — server-side conversation UUID
+- `notchnotchSessionId` — current chat session ID (`X-Hermes-Session-Id`)
+- `hermesSessionId` — legacy Telegram-derived session ID (informational)
+- `textSize` — `"medium"` | `"large"` (legacy `"small"` falls back to medium)
+- `panelSize` — `"standard"` | `"large"`
+- `googleConnectedEmail` — connected Gmail address; absent = not connected
+- `userCustomModels` — JSON `[String: [HermesConfig.CustomModel]]`
+- `didSetHermesLocaleFr` — `display.language: fr` written once
+- `computerUsePermissionsConfirmed` — user confirmed the 3 TCC panes (unverifiable, act of faith)
+- `openrouterFreeModelsCacheV1` — cached OpenRouter `:free` list, 24h TTL; bump `V1` on a schema change
+
+## Working rules
+
+- **Hermes v0.21 plan**: read [PLAN-HERMES-V021.md](PLAN-HERMES-V021.md) before an H-session (next session, done work, open questions) and update its table + journal in the same commit at the end.
+- **Read first, report back** on multi-file changes: surface assumptions, confirm signatures, list impacted files, then code.
+- Match local idioms (e.g. the `.onChange` closure signature already used in the file).
+- After a change: build with `scripts/run.sh` and manually test the feature; check `git diff` for unexpected edits; document new `@AppStorage` keys above.
+- **Audit protocol**: when asked to audit your own work, don't modify anything. Read, verify, report as ✅ OK / ⚠️ + explanation / ❓ + question per item.
