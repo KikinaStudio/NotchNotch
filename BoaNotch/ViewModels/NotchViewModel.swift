@@ -171,7 +171,7 @@ class NotchViewModel: ObservableObject {
         onStateChange?(.closed)
     }
 
-    func showToast(_ message: String, kind: ToastKind = .info) {
+    func showToast(_ message: String, kind: ToastKind = .info, duration: TimeInterval? = nil) {
         toastTask?.cancel()
         pendingCronOutput = nil
         pendingToastAction = nil
@@ -183,7 +183,7 @@ class NotchViewModel: ObservableObject {
         onStateChange?(next)
 
         toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(kind.displayDuration))
+            try? await Task.sleep(for: .seconds(duration ?? kind.displayDuration))
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 self.state = .closed
@@ -198,7 +198,8 @@ class NotchViewModel: ObservableObject {
     /// flow including any follow-up toasts; the tap handler does NOT also
     /// open the notch.
     func showActionableToast(_ message: String, kind: ToastKind, action: @escaping () -> Void) {
-        showToast(message, kind: kind)
+        // 8s: the user has to read it AND reach it; 3s was missed in practice.
+        showToast(message, kind: kind, duration: 8)
         // showToast clears pendingToastAction; reassign after so the tap
         // wires through to the action (same pattern as showCronToast).
         pendingToastAction = action

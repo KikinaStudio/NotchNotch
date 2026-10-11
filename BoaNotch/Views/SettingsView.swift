@@ -371,8 +371,8 @@ struct SettingsView: View {
                             .font(DS.Text.micro)
                             .foregroundStyle(.tertiary)
                         Button {
-                            hermesLauncher.kickstart()
                             Task {
+                                await hermesLauncher.restart()
                                 try? await Task.sleep(for: .seconds(2))
                                 hermesLauncher.refreshState()
                                 isHermesHealthy = await hermesLauncher.isHermesReachable()
@@ -390,8 +390,8 @@ struct SettingsView: View {
                         .font(DS.Text.micro)
                         .foregroundStyle(.tertiary)
                     Button {
-                        try? hermesLauncher.uninstall()
                         Task {
+                            await hermesLauncher.uninstall()
                             isHermesHealthy = await hermesLauncher.isHermesReachable()
                         }
                     } label: {
@@ -464,7 +464,7 @@ struct SettingsView: View {
         isHermesActionInFlight = true
         defer { isHermesActionInFlight = false }
         do {
-            try hermesLauncher.install()
+            try await hermesLauncher.install()
         } catch {
             notchVM.showToast(
                 "Installation échouée : \(error.localizedDescription)",

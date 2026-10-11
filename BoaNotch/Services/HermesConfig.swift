@@ -207,8 +207,7 @@ class HermesConfig: ObservableObject {
     /// Write or replace a single KEY=VALUE line in ~/.hermes/.env atomically.
     /// Idempotent: existing line for the same key is replaced, not duplicated.
     func writeRawEnv(key: String, value: String) {
-        let hermesHome = ProcessInfo.processInfo.environment["HERMES_HOME"]
-            ?? "\(NSHomeDirectory())/.hermes"
+        let hermesHome = Self.hermesHome
         let envPath = "\(hermesHome)/.env"
         try? FileManager.default.createDirectory(atPath: hermesHome, withIntermediateDirectories: true)
 
@@ -225,6 +224,26 @@ class HermesConfig: ObservableObject {
             content += "\(key)=\(value)\n"
         }
         try? content.write(toFile: envPath, atomically: true, encoding: .utf8)
+    }
+
+    /// Value of `key` in ~/.hermes/.env, nil when the key is absent. Mirrors
+    /// Hermes's dotenv parsing: last occurrence wins, surrounding quotes are
+    /// stripped, an unquoted value stops at ` #`.
+    func readRawEnv(key: String) -> String? {
+        guard let content = try? String(contentsOfFile: "\(Self.hermesHome)/.env", encoding: .utf8),
+              let line = content.split(whereSeparator: \.isNewline).last(where: { $0.hasPrefix("\(key)=") })
+        else { return nil }
+        var value = line.dropFirst(key.count + 1).trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.count >= 2, let quote = value.first, quote == "\"" || quote == "'", value.last == quote {
+            value = String(value.dropFirst().dropLast())
+        } else if let comment = value.range(of: " #") {
+            value = value[..<comment.lowerBound].trimmingCharacters(in: .whitespaces)
+        }
+        return value
+    }
+
+    private static var hermesHome: String {
+        ProcessInfo.processInfo.environment["HERMES_HOME"] ?? "\(NSHomeDirectory())/.hermes"
     }
 
     // MARK: - Custom model storage (UserDefaults)

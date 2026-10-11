@@ -3,6 +3,17 @@ import Foundation
 class HermesClient {
     private let baseURL = "http://localhost:8642"
 
+    /// Every call except `/health` needs `API_SERVER_KEY` (Hermes v0.21.6+ answers 401
+    /// without it). Re-read from .env on each request so a key written by
+    /// `HermesGatewayLauncher.ensureApiServerEnv()` is used without relaunching. Never log it.
+    private func makeRequest(_ url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
+        if let key = HermesConfig.shared.readRawEnv(key: "API_SERVER_KEY"), !key.isEmpty {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
+        return request
+    }
+
     /// The current NotchNotch session ID. Persisted across launches so each
     /// conversation maps to a single session row in Hermes's state.db.
     var sessionId: String? {
@@ -70,7 +81,7 @@ class HermesClient {
             throw HermesError.invalidURL
         }
 
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // Always send a session header so all turns of one NotchNotch
@@ -252,7 +263,7 @@ class HermesClient {
             throw HermesError.invalidURL
         }
 
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
@@ -538,7 +549,7 @@ class HermesClient {
         guard let url = URL(string: "\(baseURL)/v1/responses") else {
             throw HermesError.invalidURL
         }
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body: [String: Any] = [
@@ -591,7 +602,7 @@ class HermesClient {
               let url = URL(string: "\(baseURL)/api/jobs/\(encodedId)") else {
             throw HermesError.invalidURL
         }
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: patch)
@@ -613,7 +624,7 @@ class HermesClient {
               let url = URL(string: "\(baseURL)/api/jobs/\(encodedId)/\(action)") else {
             throw HermesError.invalidURL
         }
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -649,7 +660,7 @@ class HermesClient {
         Assistant: \(assistantSnippet)
         """
 
-        var request = URLRequest(url: url)
+        var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30

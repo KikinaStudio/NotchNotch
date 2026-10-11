@@ -287,7 +287,8 @@ class ChatViewModel: ObservableObject {
                     } else if let hermesError = error as? HermesError,
                               case .httpErrorWithBody(let code, let body) = hermesError {
                         if code == 401 || code == 403 {
-                            connectionError = "Authentication error. If you set API_SERVER_KEY in ~/.hermes/.env, notchnotch doesn't send it yet. Remove API_SERVER_KEY or leave it empty for local use."
+                            connectionError = "Clé API Hermes manquante ou invalide (API_SERVER_KEY dans ~/.hermes/.env)."
+                            offerHermesRepair("Clé API Hermes invalide. Tape pour réparer.")
                         } else if body.contains("Nous Portal") || body.contains("hermes auth add nous") {
                             connectionError = "Nous Portal sign-in required. Open Terminal and run: hermes auth add nous"
                         } else if code >= 500 {
@@ -322,18 +323,19 @@ class ChatViewModel: ObservableObject {
     }
 
     /// Surface an actionable toast that says "tap to fix" — when tapped,
-    /// installs (or kickstarts) the LaunchAgent that auto-starts Hermes,
+    /// writes any missing API_SERVER_* env (key included), starts or
+    /// restarts the gateway,
     /// waits up to 10s for `/health`, then retries the last user message.
     /// Inline `connectionError` stays in the bubble for context; the toast
     /// is the one-tap recovery path for users who shouldn't have to know
     /// what a gateway is.
     @MainActor
-    func offerHermesRepair() {
+    func offerHermesRepair(_ message: String = "Hermes ne répond pas. Tape pour réparer.") {
         // The closure captures notchVM/self weakly; toast tap-only triggers
         // the work (we don't fire it eagerly to avoid running on transient
         // network blips that resolve on their own).
         notchVM?.showActionableToast(
-            "Hermes ne répond pas. Tape pour réparer.",
+            message,
             kind: .error
         ) { [weak self] in
             Task { @MainActor in
@@ -353,10 +355,14 @@ class ChatViewModel: ObservableObject {
 
         notchVM?.showToast("Réparation d'Hermes…", kind: .info)
 
+        // A missing key keeps :8642 closed, so this is the usual root cause of
+        // "unreachable". Already restarts a loaded gateway when it wrote.
+        let wroteEnv = await launcher.ensureApiServerEnv()
+
         switch launcher.state {
         case .notInstalled, .installedNotLoaded:
             do {
-                try launcher.install()
+                try await launcher.install()
             } catch {
                 notchVM?.showToast(
                     "Échec de la réparation : \(error.localizedDescription)",
@@ -365,9 +371,9 @@ class ChatViewModel: ObservableObject {
                 return
             }
         case .installedAndLoaded:
-            // LaunchAgent reports loaded but /health was silent — the
-            // gateway process is stuck. Force-restart it.
-            launcher.kickstart()
+            // Loaded but /health silent (stuck), or 401 with a valid key in
+            // .env (gateway still on an older one): restart, never rotate the key.
+            if !wroteEnv { await launcher.restart() }
         }
 
         // Poll /health for up to 10s. Hermes takes a few seconds to import

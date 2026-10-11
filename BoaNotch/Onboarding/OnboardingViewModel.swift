@@ -286,18 +286,14 @@ class OnboardingViewModel: ObservableObject {
     /// the chat side if we couldn't bring it up here.
     @MainActor
     private func ensureLaunchAgentAndAwaitHealth() async {
-        // API_SERVER_ENABLED=true gates Platform.API_SERVER in
-        // gateway/config.py:1478 — without it Hermes runs in cron-only
-        // mode (no port 8642) and NotchNotch can't reach it. The
-        // upstream install.sh doesn't set this, so we do it here on
-        // every onboarding pass. CORS=* lets the browser-based Clipper
-        // extension talk to the local gateway. writeRawEnv is idempotent.
-        HermesConfig.shared.writeRawEnv(key: "API_SERVER_ENABLED", value: "true")
-        HermesConfig.shared.writeRawEnv(key: "API_SERVER_CORS_ORIGINS", value: "*")
-
+        // Without API_SERVER_ENABLED + a 16+ char API_SERVER_KEY Hermes
+        // runs cron-only (no port 8642) and NotchNotch can't reach it.
+        // The upstream installer sets neither. CORS=* lets the
+        // browser-based Clipper extension talk to the local gateway.
         let launcher = HermesGatewayLauncher.shared
+        await launcher.ensureApiServerEnv()
         do {
-            try launcher.install()
+            try await launcher.install()
         } catch {
             // Hermes binary missing or launchctl refused — log and bail.
             // The chat-side actionable toast covers this case on first

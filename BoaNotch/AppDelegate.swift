@@ -115,8 +115,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Re-load the LaunchAgent plist if it exists but isn't loaded. Covers
     /// two scenarios: (1) the user unloaded it manually with `launchctl
-    /// bootout` and didn't reboot, (2) a NotchNotch update changed the
-    /// plist template and the on-disk file needs replacing.
+    /// bootout` and didn't reboot, (2) a stale plist that `hermes gateway
+    /// start` refreshes while loading it.
     ///
     /// `.notInstalled` is intentionally a no-op here — touching the
     /// LaunchAgent without user consent at boot would be invasive. The
@@ -125,14 +125,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `.installedAndLoaded` is also a no-op — the gateway is up. If it's
     /// up-but-silent (process stuck), the same toast handles it via
-    /// `kickstart` in `repairAndRetry`.
+    /// `restart()` in `repairAndRetry`.
     private func reinstallLaunchAgentIfNeeded() {
         Task { @MainActor in
             let launcher = HermesGatewayLauncher.shared
             launcher.refreshState()
             guard launcher.state == .installedNotLoaded else { return }
             do {
-                try launcher.install()
+                try await launcher.install()
                 os_log("[notchnotch] LaunchAgent re-loaded at launch", type: .info)
             } catch {
                 os_log("[notchnotch] LaunchAgent re-load failed: %{public}@",
@@ -142,46 +142,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Idempotent: ensure `API_SERVER_ENABLED=true` is in ~/.hermes/.env so
-    /// Hermes opens port 8642. Covers the upgrade path from pre-v1.4.0 (where
-    /// users may have Hermes installed without these env vars) and the case
-    /// where a user nuked `.env` between launches. Detection is presence-only —
-    /// if the user set `API_SERVER_ENABLED=false` explicitly we respect it
-    /// and don't overwrite.
-    ///
-    /// If we wrote anything AND the LaunchAgent is currently loaded, we
-    /// kickstart so Hermes re-reads `.env`. Otherwise it would keep running
-    /// in cron-only mode until the next launch.
+    /// Ensure ~/.hermes/.env lets Hermes open :8642 (enabled, CORS, API key).
+    /// Covers upgrades from pre-v1.4.0 / pre-v0.21.6 Hermes and a nuked `.env`.
+    /// Restarts a loaded gateway when something was written — see
+    /// `HermesGatewayLauncher.ensureApiServerEnv()`.
     private func ensureApiServerEnvVars() {
-        let homeDir = NSHomeDirectory()
-        let configPath = "\(homeDir)/.hermes/config.yaml"
-        // Don't create an orphan .env when Hermes isn't even installed yet.
-        guard FileManager.default.fileExists(atPath: configPath) else { return }
-
-        let envPath = "\(homeDir)/.hermes/.env"
-        let envContent = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
-        let hasEnabled = envContent.range(of: #"(?m)^API_SERVER_ENABLED="#, options: .regularExpression) != nil
-        let hasCors = envContent.range(of: #"(?m)^API_SERVER_CORS_ORIGINS="#, options: .regularExpression) != nil
-
-        guard !hasEnabled || !hasCors else { return }
-
-        if !hasEnabled {
-            hermesConfig.writeRawEnv(key: "API_SERVER_ENABLED", value: "true")
-        }
-        if !hasCors {
-            hermesConfig.writeRawEnv(key: "API_SERVER_CORS_ORIGINS", value: "*")
-        }
-
-        os_log("[notchnotch] Wrote missing API_SERVER env vars to ~/.hermes/.env", type: .info)
-
-        // Kickstart so a running gateway picks up the new env on next boot.
         Task { @MainActor in
-            let launcher = HermesGatewayLauncher.shared
-            launcher.refreshState()
-            if launcher.state == .installedAndLoaded {
-                launcher.kickstart()
-                os_log("[notchnotch] Kickstarted gateway to apply new API_SERVER env vars", type: .info)
-            }
+            await HermesGatewayLauncher.shared.ensureApiServerEnv()
         }
     }
 
