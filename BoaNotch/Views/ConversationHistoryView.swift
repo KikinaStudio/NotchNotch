@@ -38,14 +38,10 @@ struct ConversationHistoryView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "plus")
-                            .font(DS.Text.bodySmall.weight(.semibold))
                         Text("New")
-                            .font(DS.Text.labelMedium)
                     }
-                    .foregroundStyle(AppColors.accent)
                 }
-                .buttonStyle(.plain)
-                .pointingHandCursor()
+                .buttonStyle(PrimaryButtonStyle())
             }
             .padding(.bottom, 12)
 

@@ -44,7 +44,6 @@ struct BrainView: View {
     @State private var hoveredCuratedId: String?
     @State private var hoveredSystemId: String?
     @State private var capabilitiesSearchQuery: String = ""
-    @State private var browseButtonHovered: Bool = false
     @State private var syncPulseScale: CGFloat = 1.0
 
     /// Categories of `technicalSkillCategories` whose row list is collapsed.
@@ -455,8 +454,13 @@ struct BrainView: View {
             FadingScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     appsSection
-                    capabilitiesSection
+                    Text("Les capacités c'est l'instinct de ton agent : ce qu'il sait faire par défaut. Elles sont déjà actives — tu peux les utiliser tout de suite en lui parlant.")
+                        .font(DS.Text.caption)
+                        .foregroundStyle(DS.Surface.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 24)
+                        .padding(.bottom, 12)
+                    capabilitiesSection
                 }
                 .padding(.bottom, 8)
             }
@@ -526,12 +530,14 @@ struct BrainView: View {
             // panel `.standard` donne ~180pt par card, `.large` ~250pt.
             LazyVGrid(
                 columns: [
-                    GridItem(.flexible(), spacing: 10),
-                    GridItem(.flexible(), spacing: 10),
-                    GridItem(.flexible(), spacing: 10)
+                    GridItem(.flexible(), spacing: 6),
+                    GridItem(.flexible(), spacing: 6),
+                    GridItem(.flexible(), spacing: 6),
+                    GridItem(.flexible(), spacing: 6),
+                    GridItem(.flexible(), spacing: 6)
                 ],
                 alignment: .leading,
-                spacing: 10
+                spacing: 6
             ) {
                 // SystemCapabilities first (Contrôle du Mac) — visually
                 // distinct from curated Apps : no "Officiel" checkmark stamp,
@@ -589,36 +595,22 @@ struct BrainView: View {
                 selectedSystemCapability = capability
             }
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                // No "Officiel" seal — see doctrine above. Spacer keeps the
-                // baseline aligned with sibling appCards (which have the seal
-                // on this row).
-                Color.clear.frame(height: 13)
-
-                HStack(spacing: 8) {
-                    BrandIconView(
-                        kind: capability.icon,
-                        size: 22,
-                        desaturated: state == .notInstalled,
-                        tint: systemCardIconTint(state)
-                    )
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(capability.displayName)
-                            .font(DS.Text.bodyMedium)
-                            .foregroundStyle(state == .ready
-                                             ? AnyShapeStyle(.primary)
-                                             : AnyShapeStyle(.secondary))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Text(systemCardStateLabel(state))
-                            .font(DS.Text.nano)
-                            .foregroundStyle(systemCardStateLabelStyle(state))
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
+            VStack(alignment: .leading, spacing: 6) {
+                BrandIconView(
+                    kind: capability.icon,
+                    size: 18,
+                    desaturated: state == .notInstalled,
+                    tint: systemCardIconTint(state)
+                )
+                Text(capability.displayName)
+                    .font(DS.Text.caption)
+                    .foregroundStyle(state == .ready
+                                     ? AnyShapeStyle(.primary)
+                                     : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .padding(10)
+            .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(shape)
             .background(shape.fill(.quaternary.opacity(fillOpacity)))
@@ -700,28 +692,15 @@ struct BrainView: View {
                 selectedCuratedSkill = skill
             }
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                // Top-left officiality stamp — small seal in accent. Replaces
-                // the previous "Officiel" text tag (took its own row width).
-                Image(systemName: "checkmark.seal.fill")
-                    .font(DS.Text.captionSemibold)
-                    .foregroundStyle(AppColors.accent)
-                    .help("App officielle NotchNotch")
-
-                // Main row : brand icon + title side-by-side. Card height is
-                // now driven by a single content line (~50pt total) instead
-                // of the previous 2-row vertical stack (~76pt).
-                HStack(spacing: 8) {
-                    BrandIconView(kind: skill.icon, size: 22, desaturated: !isConnected)
-                    Text(skill.displayName)
-                        .font(DS.Text.bodyMedium)
-                        .foregroundStyle(isConnected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                }
+            VStack(alignment: .leading, spacing: 6) {
+                BrandIconView(kind: skill.icon, size: 18, desaturated: !isConnected)
+                Text(skill.displayName)
+                    .font(DS.Text.caption)
+                    .foregroundStyle(isConnected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-            .padding(10)
+            .padding(8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(shape)
             .background(shape.fill(.quaternary.opacity(fillOpacity)))
@@ -814,23 +793,11 @@ struct BrainView: View {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "plus")
-                    .font(DS.Text.captionSemibold)
                 Text("Parcourir")
-                    .font(DS.Text.caption.weight(.semibold))
             }
-            .foregroundStyle(Color.black.opacity(0.85))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(AppColors.accent.opacity(browseButtonHovered ? 1.0 : 0.85))
-            )
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        .buttonStyle(PrimaryButtonStyle())
         .help("Parcourir le catalogue de capacités")
-        .onHover { browseButtonHovered = $0 }
-        .animation(.easeInOut(duration: 0.15), value: browseButtonHovered)
     }
 
     private func technicalCategoryBlock(_ group: SkillCategoryGroup) -> some View {
@@ -927,6 +894,8 @@ struct BrainView: View {
 
     private var tasksTab: some View {
         VStack(alignment: .leading, spacing: 14) {
+            tabIntro("Ce que ton agent fait pour toi.")
+
             MissionsActivityBanner(
                 cost: brainVM.costThisMonth,
                 forecast: brainVM.costForecastMonth,

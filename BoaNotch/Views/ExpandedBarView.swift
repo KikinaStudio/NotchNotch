@@ -133,9 +133,9 @@ struct ExpandedBarView: View {
             .help("\(chatVM.lastInputTokens) tokens · \(pct)% du contexte")
             .accessibilityLabel("Contexte utilisé : \(pct) pour cent")
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .background(RoundedRectangle(cornerRadius: 6).fill(.quinary))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(.quinary))
     }
 
     private var contextWindowLimit: Int {

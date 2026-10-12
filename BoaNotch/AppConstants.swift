@@ -4,7 +4,7 @@ import AppKit
 // MARK: - Colors
 
 enum AppColors {
-    static let accent = Color(red: 0.6, green: 0.87, blue: 1.0)
+    static let accent = Color.white
     static let recordingDot = Color(red: 0.3, green: 0.77, blue: 1.0)
     static let recordingLabel = Color(red: 0.5, green: 0.84, blue: 1.0)
     static let kittDeep = Color(red: 0.15, green: 0.72, blue: 1.0)

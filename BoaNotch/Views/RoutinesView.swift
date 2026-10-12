@@ -122,12 +122,6 @@ struct RoutinesView: View {
             enterEditMode(job)
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: Self.iconName(for: job.routineType))
-                    .font(DS.Icon.caption)
-                    .foregroundStyle(DS.Surface.primary)
-                    .frame(width: 14, alignment: .center)
-                    .accessibilityLabel(Self.accessibilityLabel(for: job.routineType))
-
                 Text(title)
                     .font(DS.Text.bodySmall)
                     .foregroundStyle(DS.Surface.primary)
@@ -141,6 +135,12 @@ struct RoutinesView: View {
                     .foregroundStyle(DS.Surface.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+
+                Image(systemName: Self.iconName(for: job.routineType))
+                    .font(DS.Icon.caption)
+                    .foregroundStyle(DS.Surface.primary)
+                    .frame(width: 14, alignment: .center)
+                    .accessibilityLabel(Self.accessibilityLabel(for: job.routineType))
 
                 StatusPill(status: job.routineStatus) {
                     onSetPaused?(job, isActive)
@@ -217,15 +217,23 @@ struct RoutinesView: View {
         )
     }
 
-    /// Header `+ New` button label, kept consistent with the bottom add row.
+    /// Header `+ New` button label — matches PrimaryButtonStyle visuals.
+    /// Inlined rather than wrapped because the trigger is a Menu, not a Button
+    /// (Menu ignores ButtonStyle on the label content). Visuals identical to
+    /// PrimitiveButtons.PrimaryButtonStyle so the design system stays singular.
     private var newButtonLabel: some View {
         HStack(spacing: 4) {
             Image(systemName: "plus")
-                .font(DS.Text.bodySmallSemibold)
             Text("New")
-                .font(DS.Text.labelMedium)
         }
-        .foregroundStyle(AppColors.accent)
+        .font(DS.Text.caption.weight(.semibold))
+        .foregroundStyle(Color.black.opacity(0.85))
+        .padding(.horizontal, DS.Padding.buttonH)
+        .padding(.vertical, DS.Padding.buttonV)
+        .background(
+            RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous)
+                .fill(AppColors.accent)
+        )
     }
 
     /// Native macOS popup menu — "From a template" / "Blank routine".
