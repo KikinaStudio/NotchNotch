@@ -1051,7 +1051,7 @@ extension HermesClient {
         return out
     }
 
-    private static func scrubSecrets(_ s: String) -> String {
+    static func scrubSecrets(_ s: String) -> String {
         var r = s
         let subs: [(pattern: String, template: String)] = [
             (#"([A-Z][A-Z0-9_]{2,})=\"[^\"]{8,}\""#, "$1=***"),
