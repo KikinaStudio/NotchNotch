@@ -142,6 +142,9 @@ enum DS {
         static let paletteFill = AnyShapeStyle(Color.white.opacity(0.07))
         /// Ligne choisie de la palette `/`, posée sur `paletteFill`. Blanc 8%.
         static let paletteSelection = AnyShapeStyle(Color.white.opacity(0.08))
+        /// Lien externe discret (« Voir tous les fournisseurs ↗ »). Accent 70 %,
+        /// la valeur déjà écrite en dur dans Réglages et l'onboarding.
+        static let link = AnyShapeStyle(AppColors.accent.opacity(0.7))
     }
 
     // MARK: - Status

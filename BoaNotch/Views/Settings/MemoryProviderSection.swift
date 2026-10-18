@@ -9,76 +9,62 @@ struct MemoryProviderSection: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Memory provider")
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("Fournisseur de mémoire")
                 .font(DS.Text.caption)
                 .foregroundStyle(.secondary)
 
-            FlowLayout(spacing: 4) {
+            FlowLayout(spacing: DS.Spacing.xs) {
                 ForEach(memConfig.availableProviders) { provider in
-                    pillButton(provider: provider)
+                    Button(provider.displayName) { tap(provider) }
+                        .buttonStyle(SegmentedButtonStyle(isSelected: memConfig.currentProvider == provider.id))
+                        .pointingHandCursor()
                 }
             }
 
-            if let info = memConfig.info(for: memConfig.currentProvider) {
-                Text(info.tagline)
+            if let line = currentProviderLine {
+                Text(line)
                     .font(DS.Text.micro)
                     .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if let pending = pendingProvider, let envKey = pending.requiresEnv.first {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(envKey) (paste from \(pending.displayName) dashboard)")
+                VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+                    Text("\(envKey) : clé à copier depuis ton compte \(pending.displayName)")
                         .font(DS.Text.micro)
                         .foregroundStyle(.tertiary)
-                    HStack(spacing: 6) {
-                        SecureField("Paste your key…", text: $apiKey)
+                    HStack(spacing: DS.Spacing.sm) {
+                        SecureField("Colle ta clé…", text: $apiKey)
                             .textFieldStyle(.plain)
                             .font(DS.Text.caption)
                             .foregroundStyle(.primary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 5)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
+                            .padding(.horizontal, DS.Padding.inputH)
+                            .padding(.vertical, DS.Padding.inputV)
+                            .background(RoundedRectangle(cornerRadius: DS.Radius.chip, style: .continuous).fill(.quaternary))
 
-                        Button {
+                        Button("Enregistrer et activer") {
                             HermesConfig.shared.writeRawEnv(key: envKey, value: apiKey)
                             apiKey = ""
                             memConfig.switchTo(pending.id)
                             pendingProvider = nil
                             errorMessage = nil
-                        } label: {
-                            Text("Save & activate")
-                                .font(DS.Text.caption.weight(.semibold))
-                                .foregroundStyle(apiKey.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.primary))
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background {
-                                    let saveShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    if apiKey.isEmpty {
-                                        saveShape.fill(.clear)
-                                    } else {
-                                        saveShape.fill(AppColors.accent.opacity(0.35))
-                                    }
-                                }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PrimaryButtonStyleSubtle(enabled: !apiKey.isEmpty))
                         .disabled(apiKey.isEmpty)
-                        .pointingHandCursor()
                     }
                 }
             }
 
-            if !memConfig.currentProvider.isEmpty,
-               let info = memConfig.info(for: memConfig.currentProvider),
-               !info.isLocal {
-                HStack(spacing: 4) {
+            if let info = memConfig.info(for: memConfig.currentProvider), !info.isLocal, !info.isMissing {
+                HStack(spacing: DS.Spacing.xs) {
                     Image(systemName: "info.circle")
                         .font(DS.Text.micro)
-                    (Text("If responses fail with ImportError, run ")
+                    (Text("Si les réponses échouent sur une ImportError, lance une fois ")
                         .font(DS.Text.micro)
                      + Text("hermes memory setup")
                         .font(DS.Text.captionMono)
-                     + Text(" once in Terminal to install pip deps.")
+                     + Text(" dans le Terminal pour installer ses dépendances.")
                         .font(DS.Text.micro))
                     Spacer()
                 }
@@ -88,23 +74,27 @@ struct MemoryProviderSection: View {
             if let err = errorMessage {
                 Text(err)
                     .font(DS.Text.micro)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(DS.Status.failure)
             }
 
             Button {
-                NSWorkspace.shared.open(
-                    URL(string: "https://hermes-agent.nousresearch.com/docs/user-guide/features/memory-providers")!
-                )
+                NSWorkspace.shared.open(memConfig.info(for: memConfig.currentProvider)?.docURL
+                                        ?? HermesMemoryConfig.builtIn.docURL)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: DS.Spacing.xs) {
                     Image(systemName: "arrow.up.right.square")
-                    Text("Browse all providers")
+                    Text("Voir tous les fournisseurs")
                 }
                 .font(DS.Text.micro)
-                .foregroundStyle(AppColors.accent.opacity(0.7))
+                .foregroundStyle(DS.Surface.link)
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
+        }
+        .onAppear {
+            // Plugins and memory.provider can change outside NotchNotch (catalog install, CLI, chat).
+            memConfig.loadCurrentProvider()
+            memConfig.scanInstalledPlugins()
         }
         .onChange(of: memConfig.currentProvider) { _, _ in
             pendingProvider = nil
@@ -112,31 +102,20 @@ struct MemoryProviderSection: View {
         }
     }
 
-    @ViewBuilder
-    private func pillButton(provider: MemoryProviderInfo) -> some View {
-        let isSelected = memConfig.currentProvider == provider.id
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        Button {
-            tap(provider)
-        } label: {
-            Text(provider.displayName)
-                .font(DS.Text.caption.weight(isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected
-                                 ? AnyShapeStyle(Color.black.opacity(0.85))
-                                 : AnyShapeStyle(.secondary))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background {
-                    if isSelected { shape.fill(AppColors.accent) }
-                    else { shape.stroke(Color.gray.opacity(0.45), lineWidth: 1) }
-                }
+    /// Tagline of the selected provider, or why Hermes isn't using it. A provider that resolves
+    /// nowhere leaves Hermes on the built-in store (`agent_init.py`: no memory manager; a catalog
+    /// provider may be fetched once at agent start, `recover_at_startup`).
+    private var currentProviderLine: String? {
+        guard let info = memConfig.info(for: memConfig.currentProvider) else { return nil }
+        if info.isMissing {
+            return "Introuvable sur ce Mac : tant qu'il n'est pas installé, Hermes n'utilise que la mémoire intégrée."
         }
-        .buttonStyle(.plain)
-        .pointingHandCursor()
+        return info.tagline
     }
 
     private func tap(_ provider: MemoryProviderInfo) {
         errorMessage = nil
+        guard provider.id != memConfig.currentProvider else { return }
         if provider.id.isEmpty {
             memConfig.switchTo("")
             pendingProvider = nil

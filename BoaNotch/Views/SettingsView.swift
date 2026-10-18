@@ -85,6 +85,10 @@ struct SettingsView: View {
 
                         providerKeyLink
 
+                        if hermesConfig.modelProvider == "openrouter" {
+                            openRouterPrivacyRow
+                        }
+
                         if let err = openRouterError {
                             HStack(spacing: 6) {
                                 Image(systemName: "exclamationmark.triangle.fill")
@@ -825,6 +829,28 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .pointingHandCursor()
         }
+    }
+
+    /// OpenRouter applies its account privacy settings (training opt-out for paid and free
+    /// models, ZDR per model group) server-side to every request of the account: chat, Missions,
+    /// Telegram, Hermes's auxiliary calls. NotchNotch writes nothing and shows no state: a regular
+    /// key can't read those settings (`GET /key` doesn't carry them). See PLAN-HERMES-V021.md, H10.
+    private var openRouterPrivacyRow: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack(spacing: DS.Spacing.sm) {
+                Text("Confidentialité")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                settingsActionButton(label: "Ouvrir les réglages OpenRouter") {
+                    NSWorkspace.shared.open(URL(string: "https://openrouter.ai/settings/privacy")!)
+                }
+            }
+            Text("OpenRouter applique ces réglages à toutes tes requêtes : chat, Missions, Telegram. Refuser l'entraînement ou exiger le ZDR (aucune donnée conservée) coupe la plupart des modèles gratuits.")
+                .font(DS.Text.micro)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, DS.Spacing.xs)
     }
 
     private func runOpenRouterSignIn() async {
