@@ -311,22 +311,22 @@ struct RoutinesView: View {
 
         let (countNoun, lastLabel, nextLabel): (String, String, String) = {
             switch job.routineType {
-            case .silent: return ("runs", "Last run", "Next run")
-            case .digest: return ("deliveries", "Last", "Next")
-            case .alert:  return ("checks", "Last check", "Next check")
+            case .silent: return ("lancement", "Dernier lancement", "Prochain lancement")
+            case .digest: return ("envoi", "Dernier envoi", "Prochain envoi")
+            case .alert:  return ("vérification", "Dernière vérification", "Prochaine vérification")
             }
         }()
 
         var lines: [String] = []
-        if runs > 0 { lines.append("\(runs) \(countNoun)") }
-        if let lastRel { lines.append("\(lastLabel): \(lastRel)") }
-        if let nextRel { lines.append("\(nextLabel): \(nextRel)") }
+        if runs > 0 { lines.append("\(runs) \(countNoun)\(runs > 1 ? "s" : "")") }
+        if let lastRel { lines.append("\(lastLabel) : \(lastRel)") }
+        if let nextRel { lines.append("\(nextLabel) : \(nextRel)") }
 
-        if job.routineStatus == .failed, let err = job.last_error, !err.isEmpty {
-            lines.insert("Error: \(err)", at: 0)
+        if job.routineStatus == .failed, let summary = job.lastErrorSummary {
+            lines.insert("Échec du dernier lancement : \(summary)", at: 0)
         }
 
-        return lines.isEmpty ? "No data yet" : lines.joined(separator: "\n")
+        return lines.isEmpty ? "Pas encore lancée" : lines.joined(separator: "\n")
     }
 
     private func relativeTime(_ iso: String?) -> String? {
@@ -963,8 +963,8 @@ struct StatusPill: View {
     private var label: String {
         switch status {
         case .nominal: return "active"
-        case .failed:  return "failed"
-        case .paused:  return "paused"
+        case .failed:  return "en échec"
+        case .paused:  return "en pause"
         }
     }
 

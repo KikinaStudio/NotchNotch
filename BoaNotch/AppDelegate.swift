@@ -86,7 +86,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         registerTripleTapMonitor()
         setupMenuBarItem()
         startClipperListener()
-        wireCronOutputToasts()
+        wireCronToasts()
         probeCompressionEndpointOnce()
 
         // After Sparkle relaunches us, surface the Gatekeeper hint so users know
@@ -191,10 +191,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func wireCronOutputToasts() {
+    private func wireCronToasts() {
         cronStore.onNewOutput = { [weak self] jobId, jobName, content in
             DispatchQueue.main.async {
                 self?.notchVM.showCronToast(jobId: jobId, jobName: jobName, fullContent: content)
+            }
+        }
+        // First failure of a series only (CronStore). The why lives in Missions (pill tooltip),
+        // so the tap opens that tab rather than injecting anything into the chat.
+        // Status first: the toast is notch-wide, two lines, tail-truncated — a long name gets cut, not « en échec ».
+        cronStore.onFirstFailure = { [weak self] _, jobName in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.notchVM.showActionableToast("Mission en échec : « \(jobName) »", kind: .error) { [weak self] in
+                    guard let self else { return }
+                    self.notchVM.openBrain()
+                    self.brainVM.activeTab = .tasks
+                    self.notchVM.open()
+                }
             }
         }
     }
