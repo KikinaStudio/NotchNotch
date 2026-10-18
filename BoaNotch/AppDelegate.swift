@@ -247,6 +247,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         notchVM.open()
     }
 
+    /// Relaunching the running app (Spotlight, Finder) opens the notch
+    /// instead of letting SwiftUI show the empty placeholder Settings window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        notchVM.open()
+        return false
+    }
+
     @objc private func quitApp() {
         NSApp.terminate(nil)
     }
