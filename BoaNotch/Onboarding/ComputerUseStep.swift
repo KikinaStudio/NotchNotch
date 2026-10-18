@@ -12,13 +12,14 @@ import AppKit
 /// - `isInstalling == true` ET pas d'erreur → spinner + progress
 /// - `installError != nil` → bloc inset + "Réessayer" / "Plus tard"
 /// - `.installedPendingPermissions` → 3 deeplinks macOS + "C'est bon" /
-///   "Plus tard"
+///   "Plus tard", et "Autoriser" (`permissions grant`) en tête quand
+///   `service.canGrant` (H13)
 /// - `.ready` → "C'est déjà actif" + Continuer
 ///
 /// `install()` est non-throwing : les erreurs remontent via le
 /// `@Published var installError` du service, observable directement.
 /// `confirmPermissions()` set `state = .ready` synchrone côté service,
-/// pas besoin de `refreshState()` derrière.
+/// puis demande le vrai état à Hermes en arrière-plan (H13).
 struct ComputerUseStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
     @ObservedObject private var service = ComputerUseService.shared
@@ -188,7 +189,9 @@ struct ComputerUseStep: View {
                 .foregroundStyle(DS.Surface.primary)
                 .padding(.bottom, 6)
 
-            Text("Autorise macOS à laisser ton agent contrôler ces capacités.")
+            Text(service.canGrant
+                 ? "macOS va te demander d'autoriser CuaDriver, le programme qui pilote ton Mac. Ou ouvre les Réglages ci-dessous."
+                 : "Autorise macOS à laisser ton agent contrôler ces capacités.")
                 .font(DS.Text.caption)
                 .foregroundStyle(DS.Surface.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -212,6 +215,14 @@ struct ComputerUseStep: View {
                 )
             }
 
+            if let err = service.grantError {
+                Text(err)
+                    .font(DS.Text.micro)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, DS.Spacing.sm)
+            }
+
             Spacer()
 
             HStack(spacing: 16) {
@@ -219,9 +230,40 @@ struct ComputerUseStep: View {
 
                 Spacer()
 
-                OnboardingButton("C'est bon") {
-                    ComputerUseService.shared.confirmPermissions()
-                    onboardingVM.advance()
+                if service.canGrant {
+                    // "Autoriser" leads (H13); "C'est bon" stays for the
+                    // System Settings route. Success → `.ready` → readyPhase.
+                    Button {
+                        ComputerUseService.shared.confirmPermissions()
+                        onboardingVM.advance()
+                    } label: {
+                        Text("C'est bon")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(DS.Surface.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                    .disabled(service.isGranting)
+
+                    if service.isGranting {
+                        HStack(spacing: DS.Spacing.sm) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.85)
+                            Text("Réponds aux fenêtres de macOS…")
+                                .font(DS.Text.micro)
+                                .foregroundStyle(DS.Surface.tertiary)
+                        }
+                    } else {
+                        OnboardingButton("Autoriser") {
+                            Task { await ComputerUseService.shared.requestPermissionsGrant() }
+                        }
+                    }
+                } else {
+                    OnboardingButton("C'est bon") {
+                        ComputerUseService.shared.confirmPermissions()
+                        onboardingVM.advance()
+                    }
                 }
             }
             .padding(.top, 10)

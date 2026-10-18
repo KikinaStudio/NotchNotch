@@ -8,12 +8,12 @@ import AppKit
 /// states (notInstalled / installing / installedPendingPermissions / ready)
 /// vs. CuratedSkill's binary connected/available.
 ///
-/// **NotchNotch cannot verify cua-driver permissions programmatically** —
-/// cua-driver is a separate binary with its own bundle-id, and macOS TCC
-/// grants are scoped per bundle. The "C'est bon" button in the
-/// `.installedPendingPermissions` action zone is a UI-side act of faith:
-/// we trust the user walked through the 3 panels and persist their
-/// confirmation in UserDefaults (`ComputerUseService.confirmPermissions`).
+/// **The TCC grants belong to cua-driver** (`com.trycua.driver`), not to
+/// NotchNotch: `ComputerUseService.refreshState()` asks Hermes
+/// (`hermes computer-use permissions status --json`) when the view appears
+/// and after "C'est bon". When Hermes can't tell (no CuaDriver daemon
+/// running, old Hermes), the "C'est bon" click stays a UI-side act of faith
+/// persisted in UserDefaults (`ComputerUseService.confirmPermissions`).
 struct ComputerUseDetailView: View {
     let capability: SystemCapability
     @ObservedObject var service: ComputerUseService
@@ -56,6 +56,7 @@ struct ComputerUseDetailView: View {
                 .padding(.bottom, 12)
             }
         }
+        .task { await service.refreshState() }
     }
 
     // MARK: - Hero + status
@@ -224,11 +225,22 @@ struct ComputerUseDetailView: View {
         }
     }
 
+    /// With `service.canGrant` (Hermes v0.21.6+): "Autoriser" first, the
+    /// System Settings rows and "C'est bon" become the fallback. Without it,
+    /// the pre-H13 layout (rows + "C'est bon" as the primary button).
     private var pendingPermissionsActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: DS.Spacing.md) {
             Text("Une dernière chose : autorise macOS")
                 .font(DS.Text.bodyMedium)
                 .foregroundStyle(.primary)
+
+            if service.canGrant {
+                grantBlock
+                Text("Ou ouvre les Réglages Système :")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, DS.Spacing.xs)
+            }
 
             permissionRow(
                 icon: "accessibility",
@@ -248,16 +260,65 @@ struct ComputerUseDetailView: View {
 
             HStack {
                 Spacer()
-                Button {
-                    service.confirmPermissions()
-                    onBack()
-                } label: {
-                    Text("C'est bon")
+                if service.canGrant {
+                    Button {
+                        service.confirmPermissions()
+                        onBack()
+                    } label: {
+                        Text("C'est bon")
+                    }
+                    .buttonStyle(PrimaryButtonStyleSubtle())
+                    .disabled(service.isGranting)
+                } else {
+                    Button {
+                        service.confirmPermissions()
+                        onBack()
+                    } label: {
+                        Text("C'est bon")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .pointingHandCursor()
                 }
-                .buttonStyle(PrimaryButtonStyle())
-                .pointingHandCursor()
             }
             .padding(.top, 4)
+        }
+    }
+
+    /// "Autoriser" → `hermes computer-use permissions grant`: macOS asks in
+    /// CuaDriver's name (the notch is lowered meanwhile). Can wait minutes for
+    /// the user's answer, hence the spinner line instead of the button.
+    private var grantBlock: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.sm) {
+            Text("macOS va te demander d'autoriser CuaDriver, le programme qui pilote ton Mac pour Hermes.")
+                .font(DS.Text.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: DS.Spacing.md) {
+                if service.isGranting {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.85)
+                    Text("Réponds aux fenêtres de macOS…")
+                        .font(DS.Text.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button {
+                        Task { await service.requestPermissionsGrant() }
+                    } label: {
+                        Text("Autoriser")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+                Spacer()
+            }
+
+            if let err = service.grantError {
+                Text(err)
+                    .font(DS.Text.micro)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
