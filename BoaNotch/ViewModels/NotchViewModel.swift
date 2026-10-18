@@ -241,6 +241,13 @@ class NotchViewModel: ObservableObject {
         pendingCronOutput = (jobId, jobName, fullContent)
     }
 
+    /// The composer's expanded bar, which holds the model menu (`/model` typed in the chat).
+    func openExpandedBar() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            isExpandedBarOpen = true
+        }
+    }
+
     func openHistory() {
         isHistoryOpen = true
         isSettingsOpen = false

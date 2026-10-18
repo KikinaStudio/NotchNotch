@@ -27,6 +27,8 @@ class ChatViewModel: ObservableObject {
     @Published var routineCreationMode: Bool = false
     @Published var editingMessageId: UUID? = nil
     @Published var lastInputTokens: Int = 0
+    /// Notice for a Hermes slash command NotchNotch doesn't run (`HermesSlashCommand`).
+    @Published var slashNotice: String?
     /// Regenerated whenever the composer needs to grab focus from a remote
     /// trigger (e.g. tapping "Affine" on a routine delivery). ChatView
     /// observes `.onChange` and sets `isInputFocused = true`. UUID rather
@@ -70,6 +72,8 @@ class ChatViewModel: ObservableObject {
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !pendingAttachments.isEmpty else { return }
+        slashNotice = nil
+        if runSlashCommand(text) { return }
 
         var fullContent = ""
         for attachment in pendingAttachments {
@@ -86,6 +90,26 @@ class ChatViewModel: ObservableObject {
         pendingAttachments = []
 
         startRequest(input: fullContent)
+    }
+
+    /// Runs `text` when it is a Hermes slash command and returns true: it never reaches the model
+    /// (see `HermesSlashCommand`). The draft stays for a command NotchNotch doesn't run.
+    private func runSlashCommand(_ text: String) -> Bool {
+        guard let command = HermesSlashCommand.match(text) else { return false }
+        let name = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix { !$0.isWhitespace })
+        os_log("[notchnotch] slash command kept from the model: %{public}@", type: .info, name)
+        switch command {
+        case .unavailable, .nearMiss:
+            slashNotice = command.notice
+            return true
+        case .newConversation: startNewConversation()
+        case .modelMenu: notchVM?.openExpandedBar()
+        case .history: notchVM?.openHistory()
+        case .stop: cancelStream()
+        }
+        draft = ""
+        editingMessageId = nil
+        return true
     }
 
     func retryLastAssistant() {
@@ -720,6 +744,8 @@ class ChatViewModel: ObservableObject {
         guard !isStreaming else { return }
         guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
         guard messages[index].role == .user else { return }
+        slashNotice = nil
+        if runSlashCommand(newContent) { return }
 
         messages[index].content = newContent
         messages.removeSubrange((index + 1)...)

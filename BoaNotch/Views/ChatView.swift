@@ -102,6 +102,27 @@ struct ChatView: View {
                 .transition(.opacity)
             }
 
+            // Hermes slash command NotchNotch doesn't run: never sent, the draft stays
+            if let notice = chatVM.slashNotice {
+                HStack(alignment: .firstTextBaseline, spacing: DS.Spacing.xs) {
+                    Image(systemName: "info.circle")
+                        .font(DS.Icon.caption)
+                    Text(notice)
+                        .font(DS.Text.caption)
+                        .lineLimit(3)
+                }
+                .foregroundStyle(DS.Surface.secondary)
+                .padding(.horizontal, DS.Padding.inputH)
+                .padding(.vertical, DS.Padding.inputV)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onTapGesture { chatVM.slashNotice = nil }
+                .task(id: notice) {
+                    try? await Task.sleep(for: .seconds(10))
+                    if !Task.isCancelled { chatVM.slashNotice = nil }
+                }
+                .transition(.opacity)
+            }
+
             // Pending attachment chips
             if !chatVM.pendingAttachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -268,15 +289,16 @@ struct ChatView: View {
     }
 
     private func sendAndCloseBar() {
-        if let editId = chatVM.editingMessageId {
-            chatVM.editMessage(id: editId, newContent: chatVM.draft)
-        } else {
-            chatVM.send()
-        }
+        // Close first: a typed `/model` reopens the bar from send().
         if notchVM.isExpandedBarOpen {
             withAnimation(.easeOut(duration: 0.2)) {
                 notchVM.isExpandedBarOpen = false
             }
+        }
+        if let editId = chatVM.editingMessageId {
+            chatVM.editMessage(id: editId, newContent: chatVM.draft)
+        } else {
+            chatVM.send()
         }
     }
 
