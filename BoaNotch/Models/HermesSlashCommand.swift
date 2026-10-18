@@ -4,8 +4,8 @@ import Foundation
 /// to v0.22.2): sent as text, the model improvises ("/new" answered "Nouvelle session prête" with
 /// nothing reset) or acts on it ("/loop 5m ping" created a real cron). Like Hermes Desktop,
 /// `ChatViewModel` never sends one to the model: the few with a NotchNotch equivalent run it, the
-/// others get a notice. Exact name match, as Hermes's `resolve_command`, plus a suggestion for a
-/// near miss ("/models" → "/model"): a path ("/Users/…/rapport.pdf"), a word far from every
+/// others get a notice (`/goal`, `/loop`: where they do work). Exact name match, as Hermes's
+/// `resolve_command`, plus a suggestion for a near miss ("/models" → "/model"): a path ("/Users/…/rapport.pdf"), a word far from every
 /// command ("/bonjour") or a skill ("/llm-wiki …") isn't matched and still goes out.
 enum HermesSlashCommand: Equatable {
     case newConversation
@@ -39,10 +39,31 @@ enum HermesSlashCommand: Equatable {
         (.stop, "stop", [], "Arrête la réponse en cours"),
     ]
 
+    /// Hermes-only commands whose notice points to what runs them (H6). The goal judge and the
+    /// loop / heartbeat ticks only follow a turn of the RPC backend (`hermes serve`, Desktop) or
+    /// of a messaging platform, never one sent over HTTP (v0.22.2 and `main`). A task to repeat
+    /// is a mission (Hermes cron).
+    private static let goalCommands: Set<String> = ["goal", "subgoal"]
+    private static let repeatCommands: Set<String> = ["loop", "proactive", "heartbeat", "hb"]
+
+    /// Greyed description of a Hermes-only command in the `/` palette (`SlashPalette`).
+    static func paletteHint(for name: String) -> String {
+        if goalCommands.contains(name) { return "Marche dans Telegram ou Desktop" }
+        if repeatCommands.contains(name) { return "Crée plutôt une mission" }
+        return "Commande de Hermes, ne marche pas ici"
+    }
+
     /// Line shown above the composer when NotchNotch doesn't run the command; nil otherwise.
     var notice: String? {
         switch self {
         case .unavailable(let name):
+            let bare = String(name.dropFirst())
+            if Self.goalCommands.contains(bare) {
+                return "\(name) ne marche pas ici : un objectif fait travailler Hermes seul sur plusieurs tours, ce que savent faire Telegram et Hermes Desktop. Ici, écris ta demande : Hermes la traite dans ce tour."
+            }
+            if Self.repeatCommands.contains(bare) {
+                return "\(name) ne marche pas ici. Pour répéter une tâche, crée une mission dans l'onglet Missions : elle tourne même notch fermé."
+            }
             return "\(name) est une commande de Hermes qui ne marche pas ici. Écris ta demande avec tes mots, ou utilise /new, /model, /sessions ou /stop."
         case .nearMiss(let typed, let suggestion):
             return "\(typed) n'est pas une commande. Tu voulais dire \(suggestion) ? Rien n'a été envoyé."
