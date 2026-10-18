@@ -13,6 +13,11 @@ struct SkillInfo: Identifiable {
 enum MemorySource: String {
     case user
     case learned
+
+    /// `target` of Hermes's `memory` tool for this file. Required since
+    /// Hermes v0.22.0 (no default any more).
+    var hermesTarget: String { self == .user ? "user" : "memory" }
+    var fileName: String { self == .user ? "USER.md" : "MEMORY.md" }
 }
 
 struct MemoryBlock: Identifiable {
