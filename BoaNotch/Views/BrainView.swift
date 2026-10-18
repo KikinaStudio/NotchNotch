@@ -355,11 +355,11 @@ struct BrainView: View {
                 MemoryCard(
                     block: block,
                     onUpdate: { newContent in
-                        chatVM.updateMemory(oldContent: block.content, newContent: newContent)
+                        chatVM.updateMemory(oldContent: block.content, newContent: newContent, source: block.source)
                         scheduleBrainReload()
                     },
                     onDelete: {
-                        chatVM.deleteMemory(content: block.content)
+                        chatVM.deleteMemory(content: block.content, source: block.source)
                         scheduleBrainReload()
                     }
                 )

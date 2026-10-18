@@ -630,17 +630,26 @@ class ChatViewModel: ObservableObject {
     /// and applies the change through its `memory` tool. UI shows an optimistic
     /// toast; callers should schedule a BrainViewModel reload a few seconds
     /// later to pick up the rewritten MEMORY.md / USER.md.
-    func updateMemory(oldContent: String, newContent: String) {
+    /// Whole-entry rewrite on both tool shapes: `patch` (v0.22.0+) or
+    /// `replace` (older), `old_text` = the whole old entry in both.
+    func updateMemory(oldContent: String, newContent: String, source: MemorySource) {
         let trimmedOld = oldContent.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedNew = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedOld != trimmedNew, !trimmedNew.isEmpty else { return }
+        let target = source.hermesTarget
         let prompt = """
-        Please update my memory. Find the existing block that matches the text below and replace it with the new version. Keep the `§` separators and your usual formatting conventions intact.
+        Please update one entry of my memory with your `memory` tool. The entry is in \(source.fileName), so use target='\(target)'.
 
-        === OLD BLOCK ===
+        Rewrite the whole entry in one `memory` call:
+        - if the tool offers action 'patch': action='patch', target='\(target)', old_text = the entire OLD ENTRY below copied verbatim, content = the entire NEW ENTRY below.
+        - otherwise: action='replace', target='\(target)', old_text = the entire OLD ENTRY below copied verbatim, content = the entire NEW ENTRY below.
+
+        Change no other entry. The tool manages the `§` separators between entries: don't add or remove any. If the tool returns an error, follow its hint and retry.
+
+        === OLD ENTRY ===
         \(trimmedOld)
 
-        === NEW VERSION ===
+        === NEW ENTRY ===
         \(trimmedNew)
         """
         let messages: [[String: String]] = [["role": "user", "content": prompt]]
@@ -655,14 +664,21 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    /// Fire-and-forget request to Hermes to delete a memory block.
-    func deleteMemory(content: String) {
+    /// Fire-and-forget request to Hermes to delete a memory block. `remove`
+    /// and its whole-entry semantics are the same before and after v0.22.0;
+    /// only `target` became mandatory.
+    func deleteMemory(content: String, source: MemorySource) {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        let target = source.hermesTarget
         let prompt = """
-        Please delete this exact memory block from my memory. Remove the entire block and the surrounding `§` separator so nothing dangling remains.
+        Please delete one entry from my memory with your `memory` tool. The entry is in \(source.fileName), so use target='\(target)'.
 
-        === BLOCK TO DELETE ===
+        Delete it in one `memory` call: action='remove', target='\(target)', old_text = the entire ENTRY TO DELETE below copied verbatim. 'remove' deletes the whole entry and the tool removes its `§` separator.
+
+        Change no other entry. If the tool returns an error, follow its hint and retry.
+
+        === ENTRY TO DELETE ===
         \(trimmed)
         """
         let messages: [[String: String]] = [["role": "user", "content": prompt]]
