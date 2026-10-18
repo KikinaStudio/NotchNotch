@@ -6,7 +6,7 @@ import SwiftUI
 /// bundle, le fallback SF Symbol s'affiche.
 enum ToastKind: Equatable {
     /// Avis système générique (showToast par défaut). Inclut les
-    /// notifications de service NotchNotch (compression endpoint, etc.).
+    /// notifications de service NotchNotch.
     case info
     /// Réponse rapide de l'agent quand la notch est fermée — la catégorie
     /// quotidienne, distincte des alertes système.

@@ -517,6 +517,8 @@ struct SettingsView: View {
                 approvalModePicker
             }
         }
+        // Real TCC state from Hermes when Settings opens (H13), not per render.
+        .task { await computerUseService.refreshState() }
     }
 
     private var computerUseStateRow: some View {
@@ -538,7 +540,10 @@ struct SettingsView: View {
         switch computerUseService.state {
         case .notInstalled: return "Pas installé"
         case .installing: return "Installation en cours…"
-        case .installedPendingPermissions: return "Permissions à accorder"
+        case .installedPendingPermissions:
+            if computerUseService.isGranting { return "Réponds aux fenêtres de macOS…" }
+            if computerUseService.grantError != nil { return "macOS n'a pas tout accordé à CuaDriver" }
+            return "Permissions à accorder"
         case .ready: return "Actif"
         }
     }
@@ -556,11 +561,23 @@ struct SettingsView: View {
                 .scaleEffect(0.7)
                 .frame(width: 16, height: 16)
         case .installedPendingPermissions:
-            // Opens Accessibility first — it's the most critical TCC grant
-            // for cua-driver. The detail view (reachable from Brain panel)
-            // walks through all 3. This is the Settings-side shortcut.
-            settingsActionButton(label: "Réglages") {
-                computerUseService.openAccessibilitySettings()
+            // With `canGrant` (H13): macOS asks in CuaDriver's name
+            // (`permissions grant`); the System Settings links stay in the
+            // detail view (Brain panel). Older Hermes: opens Accessibility
+            // first — the most critical TCC grant for cua-driver.
+            if computerUseService.isGranting {
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.7)
+                    .frame(width: 16, height: 16)
+            } else if computerUseService.canGrant {
+                settingsActionButton(label: "Autoriser") {
+                    Task { await computerUseService.requestPermissionsGrant() }
+                }
+            } else {
+                settingsActionButton(label: "Réglages") {
+                    computerUseService.openAccessibilitySettings()
+                }
             }
         case .ready:
             settingsActionButton(label: "Tester") {

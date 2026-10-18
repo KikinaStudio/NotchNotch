@@ -3,12 +3,6 @@ import Combine
 import Yams
 import os.log
 
-enum EndpointHealth {
-    case notConfigured
-    case reachable
-    case unreachable(reason: String)
-}
-
 class HermesConfig: ObservableObject {
     static let shared = HermesConfig()
 
@@ -60,14 +54,6 @@ class HermesConfig: ObservableObject {
     }
 
     private let optionsClient = HermesClient()
-
-    // Compression (read-only — Hermes owns this field, we only observe)
-    private var compressionBaseURLString: String?
-
-    var compressionBaseURL: URL? {
-        guard let str = compressionBaseURLString, !str.isEmpty else { return nil }
-        return URL(string: str)
-    }
 
     var availableModels: [(value: String, label: String)] {
         let base: [(value: String, label: String)] = {
@@ -392,27 +378,6 @@ class HermesConfig: ObservableObject {
             skipMemory = sm
         } else if let sm = yamlBool(yaml, "agent.skip_memory") {
             skipMemory = sm
-        }
-
-        compressionBaseURLString = yamlString(yaml, "compression.summary_base_url")
-    }
-
-    // MARK: - Compression endpoint health probe
-
-    func probeCompressionEndpoint() async -> EndpointHealth {
-        guard let baseURL = compressionBaseURL else { return .notConfigured }
-        let modelsURL = baseURL.appendingPathComponent("models")
-        var request = URLRequest(url: modelsURL)
-        request.timeoutInterval = 2.0
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                return .unreachable(reason: "non-HTTP response")
-            }
-            if (200..<300).contains(http.statusCode) { return .reachable }
-            return .unreachable(reason: "HTTP \(http.statusCode)")
-        } catch {
-            return .unreachable(reason: error.localizedDescription)
         }
     }
 
