@@ -8,11 +8,34 @@ class HermesClient {
     /// without it). Re-read from .env on each request so a key written by
     /// `HermesGatewayLauncher.ensureApiServerEnv()` is used without relaunching. Never log it.
     private func makeRequest(_ url: URL) -> URLRequest {
+        Self.authorizedRequest(url)
+    }
+
+    private static func authorizedRequest(_ url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         if let key = HermesConfig.shared.readRawEnv(key: "API_SERVER_KEY"), !key.isEmpty {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    /// `GET /v1/toolsets` (gateway, Bearer): whether a toolset is enabled for
+    /// the api_server agent, i.e. NotchNotch's chat. Hermes re-reads
+    /// config.yaml on every call. nil = gateway down, route missing (old
+    /// gateway) or toolset not listed.
+    static func isToolsetEnabled(_ name: String) async -> Bool? {
+        guard let url = URL(string: "http://localhost:8642/v1/toolsets") else { return nil }
+        var request = authorizedRequest(url)
+        request.timeoutInterval = 5
+        struct Toolsets: Decodable {
+            struct Toolset: Decodable { let name: String; let enabled: Bool }
+            let data: [Toolset]
+        }
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let list = try? JSONDecoder().decode(Toolsets.self, from: data)
+        else { return nil }
+        return list.data.first { $0.name == name }?.enabled
     }
 
     /// The current conversation's key, `notchnotch-<uuid>`, persisted across launches.

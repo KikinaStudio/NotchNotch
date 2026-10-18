@@ -1,35 +1,71 @@
 import SwiftUI
 import AppKit
 
+/// First screen (H14): logo, tagline, and what happens to the user's data —
+/// only what is true (D7): history on the Mac, messages to the chosen
+/// provider, privacy settings on the provider's side.
 struct WelcomeStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer()
+            Spacer(minLength: 0)
 
             // Logo (full wordmark from SVG)
             if let nsImage = loadAppLogo() {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 340)
+                    .frame(maxWidth: 200)
                     .opacity(0.9)
             }
 
-            Text("Your AI agent, one knock away.")
+            Text("Ton agent IA, à portée de notch.")
                 .font(DS.Text.caption)
                 .foregroundStyle(AppColors.accent.opacity(0.6))
                 .padding(.top, 4)
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                privacyRow(icon: "internaldrive",
+                           title: "L'historique reste sur ton Mac.",
+                           detail: "Hermes, l'agent, tourne ici et garde tes conversations sur ton disque.")
+                privacyRow(icon: "arrow.up.right",
+                           title: "Tes messages partent chez le fournisseur d'IA que tu choisis.",
+                           detail: "OpenRouter par exemple. NotchNotch n'a aucun serveur entre toi et lui.")
+                privacyRow(icon: "slider.horizontal.3",
+                           title: "Sa confidentialité se règle chez lui.",
+                           detail: "Conservation et entraînement sur tes données : dans ton compte chez ce fournisseur.")
+            }
+            .frame(maxWidth: 480, alignment: .leading)
+            .padding(.top, 14)
 
-            OnboardingButton("Get started") { onboardingVM.advance() }
+            Spacer(minLength: 0)
 
-            Spacer().frame(height: 24)
+            OnboardingButton("Commencer") { onboardingVM.advance() }
+
+            Spacer().frame(height: 12)
         }
     }
 
+    private func privacyRow(icon: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(DS.Icon.inline)
+                .foregroundStyle(AppColors.accent.opacity(0.7))
+                .frame(width: 20, alignment: .center)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(DS.Text.captionMedium)
+                    .foregroundStyle(DS.Surface.primary)
+                Text(detail)
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
 }
 
 // MARK: - Shared button styles

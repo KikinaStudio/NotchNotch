@@ -9,11 +9,11 @@ import os.log
 /// Pattern mirrors `GoogleConnectionState`: `@MainActor` so `@Published`
 /// mutations from async `Task`s stay on the main runloop, singleton
 /// (`shared`) so the same state is observable from any panel. Refresh on
-/// init triggers a `which cua-driver` probe and logs the resolved state in
-/// DEBUG builds — this is the signal of Session 1 wiring.
+/// init asks Hermes (`permissions status --json`) and logs the resolved state.
 ///
-/// Install is an explicit user action: nothing here calls `install()`
-/// automatically — that hook is reserved for the UI added in later sessions.
+/// Install is an explicit user action: nothing here calls `install()` or
+/// `enableInChat()` automatically. Since H14 the only entry points are
+/// Settings › Contrôle du Mac and the Brain detail view (no onboarding step).
 @MainActor
 final class ComputerUseService: ObservableObject {
     static let shared = ComputerUseService()
@@ -38,6 +38,13 @@ final class ComputerUseService: ObservableObject {
     @Published var canGrant: Bool = false
     @Published var isGranting: Bool = false
     @Published var grantError: String?
+    /// `computer_use` enabled for the api_server agent (NotchNotch's chat), read
+    /// from `GET /v1/toolsets`. Hermes's default api_server toolset leaves it
+    /// out, so cua-driver alone lets Telegram drive the Mac, not the chat.
+    /// nil = unknown (gateway down, old gateway, nothing installed).
+    @Published var chatEnabled: Bool?
+    @Published var isEnablingInChat: Bool = false
+    @Published var chatEnableError: String?
 
     /// Only the latest `refreshState()` may write `state`: the Hermes check
     /// takes seconds and refreshes can overlap.
@@ -47,10 +54,15 @@ final class ComputerUseService: ObservableObject {
         Task { await refreshState() }
     }
 
-    /// `which cua-driver`, then the real TCC state from Hermes → updates
-    /// `state`. Spawns Hermes's CLI (~1 s, up to ~30 s with its own cua-driver
+    /// Asks Hermes whether cua-driver is installed and what macOS granted it,
+    /// then whether the chat may use it → updates `state` and `chatEnabled`.
+    /// Spawns Hermes's CLI (~1 s, up to ~30 s with its own cua-driver
     /// timeouts): call it on events (launch, install, "C'est bon", opening the
     /// detail view), never from a view body.
+    /// Existence = `installed` from Hermes's JSON: Hermes only runs the driver
+    /// pm put in `~/.hermes/tools/`, never on PATH (and an app opened from the
+    /// Finder has launchd's minimal PATH anyway). `which cua-driver` only when
+    /// Hermes gives no JSON (older than v0.21.6).
     /// State derivation: missing binary → `.notInstalled`; Hermes reports both
     /// grants → `.ready`; Hermes reports one missing → `.installedPendingPermissions`;
     /// Hermes can't tell → the stored flag decides, as before H13.
@@ -63,12 +75,19 @@ final class ComputerUseService: ObservableObject {
     func refreshState() async {
         refreshGeneration += 1
         let generation = refreshGeneration
-        let exists = await ShellRunner.commandExists("cua-driver")
-        let status = exists ? await Self.fetchPermissionsStatus() : nil
+        let status = await Self.fetchPermissionsStatus()
+        let exists: Bool
+        if let status {
+            exists = status.installed
+        } else {
+            exists = await ShellRunner.commandExists("cua-driver")
+        }
         let granted = status?.granted
+        let inChat = exists ? await HermesClient.isToolsetEnabled("computer_use") : nil
         // A newer refresh or an install started meanwhile: they own `state`.
         guard generation == refreshGeneration, !isInstalling else { return }
         canGrant = status?.canOfferGrant ?? false
+        chatEnabled = inChat
         if !exists {
             state = .notInstalled
         } else if let granted {
@@ -79,9 +98,44 @@ final class ComputerUseService: ObservableObject {
         } else {
             state = .installedPendingPermissions
         }
-        os_log("[notchnotch] cua-driver state: %{public}@ (permissions: %{public}@)", type: .info,
+        os_log("[notchnotch] cua-driver state: %{public}@ (permissions: %{public}@, chat: %{public}@)", type: .info,
                String(describing: state),
-               granted.map { $0 ? "granted" : "missing" } ?? (exists ? "unknown" : "-"))
+               granted.map { $0 ? "granted" : "missing" } ?? (exists ? "unknown" : "-"),
+               inChat.map { $0 ? "enabled" : "disabled" } ?? "unknown")
+    }
+
+    /// Whether cua-driver is installed, as Hermes sees it (`installed` of
+    /// `permissions status --json`), else `which` for an older Hermes.
+    private static func isDriverInstalled() async -> Bool {
+        if let status = await fetchPermissionsStatus() { return status.installed }
+        return await ShellRunner.commandExists("cua-driver")
+    }
+
+    /// `hermes tools enable computer_use --platform api_server` (writes
+    /// `platform_toolsets.api_server` in config.yaml, Hermes's own CLI), then
+    /// reads the result back from `GET /v1/toolsets`: the command exits 0 even
+    /// on an unknown toolset. No gateway restart: Hermes re-reads the config
+    /// for every new agent. Run after a successful install and from the
+    /// "Activer dans le chat" button, never automatically otherwise.
+    func enableInChat() async {
+        guard !isEnablingInChat else { return }
+        isEnablingInChat = true
+        chatEnableError = nil
+        let hermesBinary = "\(NSHomeDirectory())/.local/bin/hermes"
+        let result = try? await ShellRunner.run(
+            executable: hermesBinary,
+            arguments: ["tools", "enable", "computer_use", "--platform", "api_server"]
+        )
+        os_log("[notchnotch] tools enable computer_use (api_server): exit %{public}d", type: .info,
+               result?.exitCode ?? -1)
+        let enabled = await HermesClient.isToolsetEnabled("computer_use")
+        chatEnabled = enabled
+        if enabled != true {
+            chatEnableError = enabled == nil
+                ? "Hermes ne répond pas : impossible de vérifier que le chat peut piloter le Mac. Réessaie quand Hermes tourne."
+                : "Hermes n'a pas activé le contrôle du Mac pour le chat. Réessaie dans un instant."
+        }
+        isEnablingInChat = false
     }
 
     /// Called from the "C'est bon" buttons (detail view, onboarding). The user
@@ -187,6 +241,7 @@ final class ComputerUseService: ObservableObject {
     /// before running anything sensitive. For most users the value is already
     /// `manual` (it's the Hermes default), so the write is a no-op; matters
     /// for fresh installs where the user may have explicitly set another value.
+    /// Then `enableInChat()`: the driver is useless to the chat otherwise.
     ///
     /// Never called automatically; an explicit UI button must trigger this.
     func install() async {
@@ -204,21 +259,20 @@ final class ComputerUseService: ObservableObject {
                     ? "Échec de l'installation (code \(result.exitCode))"
                     : String(raw.prefix(500))
             } else {
-                // Hermes CLI exit-0 ≠ install réussie : `cmd_computer_use`
-                // dans hermes_cli/main.py:11351 ignore la valeur de retour de
-                // `install_cua_driver()` et exit toujours 0. Si l'upstream
-                // install.sh a échoué silencieusement (réseau, curl manquant,
-                // permission de download), le binaire n'est pas sur PATH et
-                // l'user retombait sur pitchPhase "comme s'il n'avait pas
-                // cliqué". On re-vérifie le binaire et on synthétise une
-                // erreur explicite si absent.
-                let exists = await ShellRunner.commandExists("cua-driver")
-                if exists {
+                // Hermes CLI exit-0 ≠ install réussie : la commande peut finir
+                // en 0 sans pilote utilisable (réseau, téléchargement refusé).
+                // On redemande à Hermes s'il voit cua-driver (`installed`, pas
+                // `which` : le pilote de pm n'est jamais sur le PATH) et on
+                // synthétise une erreur explicite sinon.
+                if await Self.isDriverInstalled() {
                     HermesConfig.shared.setImmediate("approvals.mode", value: "manual")
+                    // Hermes's api_server toolset leaves computer_use out:
+                    // without this the chat can't use the driver (H14 D4).
+                    await enableInChat()
                 } else {
                     let raw = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
                     let suffix = raw.isEmpty ? "" : "\n\n\(String(raw.prefix(400)))"
-                    installError = "L'installation s'est terminée sans réussir à poser cua-driver sur ton PATH. Vérifie ta connexion et réessaie, ou consulte la doc.\(suffix)"
+                    installError = "L'installation s'est terminée mais Hermes ne trouve pas cua-driver. Vérifie ta connexion et réessaie.\(suffix)"
                 }
             }
         } catch {

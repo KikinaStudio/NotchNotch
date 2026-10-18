@@ -1,29 +1,23 @@
 import SwiftUI
+import AppKit
 
 struct InstallHermesStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
 
-    /// Cosmetic-deterministic progress. The upstream installer (curl | bash)
-    /// emits a single bulk output buffer at exit (see ShellRunner) so we
-    /// can't stream real per-line progress. Five known status milestones
-    /// land at 0, 18, 36, 54, 72s; we interpolate between them at 0.5s
-    /// granularity. After 90s we cap at 95% so we never lie about 100%
-    /// before the subprocess actually finishes; the jump to 100% happens
-    /// when `installStatus == "Done!"`.
-    @State private var progress: Double = 0
-    @State private var elapsedSeconds: Double = 0
-    @State private var progressTimer: Timer?
+    /// Real progress: one notch per installer stage (`install.sh --stage`),
+    /// the bar fills as each stage's JSON line comes back. Stages take very
+    /// different times (the download and Python dependencies are the long
+    /// ones), so the current stage's name matters more than the bar.
+    @State private var elapsedSeconds = 0
+    @State private var patienceTimer: Timer?
 
-    private static let milestoneInterval: Double = 18
-    private static let milestoneCount: Int = 5
-    private static let capAfterSeconds: Double = 90
-    private static let patientMessageAfterSeconds: Double = 120
+    private static let patientMessageAfterSeconds = 120
 
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
 
-            Text("Setting up your AI agent")
+            Text("Installation de ton agent")
                 .font(DS.Text.titleSmall)
                 .foregroundStyle(DS.Surface.primary)
 
@@ -52,19 +46,26 @@ struct InstallHermesStep: View {
                 .font(DS.Icon.large)
                 .foregroundStyle(AppColors.accent.opacity(0.6))
 
-            Text("macOS needs to install a small developer tool first.")
+            Text("macOS doit d'abord installer les outils développeur d'Apple.")
                 .font(DS.Text.caption)
                 .foregroundStyle(DS.Surface.secondary)
                 .multilineTextAlignment(.center)
 
-            Text("A system popup will appear \u{2014} click Install and wait about 1 minute.")
+            Text("Une fenêtre de macOS va s'ouvrir : clique sur Installer et accepte la licence. Compte quelques minutes.")
                 .font(DS.Text.micro)
                 .foregroundStyle(DS.Surface.tertiary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             SpinningRing()
                 .padding(.top, 6)
         }
+    }
+
+    private var progress: Double {
+        let total = onboardingVM.installStages.count
+        guard total > 0 else { return 0 }
+        return Double(onboardingVM.completedStages) / Double(total)
     }
 
     private var installingView: some View {
@@ -80,8 +81,15 @@ struct InstallHermesStep: View {
                 .foregroundStyle(DS.Surface.tertiary)
                 .animation(.easeInOut(duration: 0.3), value: onboardingVM.installStatus)
 
+            if !onboardingVM.installStages.isEmpty,
+               onboardingVM.completedStages < onboardingVM.installStages.count {
+                Text("Étape \(onboardingVM.completedStages + 1) sur \(onboardingVM.installStages.count)")
+                    .font(DS.Text.micro)
+                    .foregroundStyle(DS.Surface.quaternary)
+            }
+
             if elapsedSeconds >= Self.patientMessageAfterSeconds {
-                Text("Encore un peu de patience, l'installation prend parfois plus de temps sur les premières fois.")
+                Text("Encore un peu de patience : la première installation télécharge Python et les composants de Hermes.")
                     .font(DS.Text.micro)
                     .foregroundStyle(DS.Surface.quaternary)
                     .multilineTextAlignment(.center)
@@ -90,45 +98,23 @@ struct InstallHermesStep: View {
                     .transition(.opacity)
             }
         }
-        .onAppear { startProgressTimer() }
-        .onDisappear { stopProgressTimer() }
-        .onChange(of: onboardingVM.installStatus) { _, newStatus in
-            if newStatus == "Done!" {
-                progress = 1.0
-                stopProgressTimer()
-            }
-        }
-        .onChange(of: onboardingVM.isInstalling) { _, installing in
-            if !installing {
-                if onboardingVM.installError == nil {
-                    progress = 1.0
-                }
-                stopProgressTimer()
-            }
-        }
+        .onAppear { startPatienceTimer() }
+        .onDisappear { stopPatienceTimer() }
     }
 
-    private func startProgressTimer() {
-        stopProgressTimer()
+    private func startPatienceTimer() {
+        stopPatienceTimer()
         elapsedSeconds = 0
-        progress = 0
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            Task { @MainActor in
-                elapsedSeconds += 0.5
-                let raw = elapsedSeconds / (Self.milestoneInterval * Double(Self.milestoneCount))
-                // Cap at 95% so we never show a fake 100% before the
-                // subprocess actually returns. The terminal transition
-                // bumps to 1.0 in onChange(installStatus == "Done!").
-                progress = min(0.95, raw)
-            }
+        let timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            Task { @MainActor in elapsedSeconds += 1 }
         }
-        progressTimer = timer
+        patienceTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    private func stopProgressTimer() {
-        progressTimer?.invalidate()
-        progressTimer = nil
+    private func stopPatienceTimer() {
+        patienceTimer?.invalidate()
+        patienceTimer = nil
     }
 
     private func errorView(_ error: String) -> some View {
@@ -137,7 +123,7 @@ struct InstallHermesStep: View {
                 .font(DS.Icon.primary)
                 .foregroundStyle(.red.opacity(0.5))
 
-            Text("Installation failed")
+            Text("L'installation n'a pas abouti")
                 .font(DS.Text.labelMedium)
                 // TODO(design): 0.6 hors bucket DS.Surface (entre secondary 0.55 et primary 0.85).
                 .foregroundStyle(.white.opacity(0.6))
@@ -147,6 +133,7 @@ struct InstallHermesStep: View {
                     .font(DS.Text.nanoMono)
                     .foregroundStyle(DS.Surface.tertiary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
             }
             .frame(maxHeight: 80)
             .padding(8)
@@ -159,16 +146,30 @@ struct InstallHermesStep: View {
                     .stroke(.white.opacity(0.05), lineWidth: 0.5)
             )
 
-            OnboardingButton("Retry") {
-                onboardingVM.installError = nil
-                onboardingVM.installHermes()
+            HStack(spacing: 14) {
+                if let logURL = onboardingVM.installLogURL,
+                   FileManager.default.fileExists(atPath: logURL.path) {
+                    Button {
+                        NSWorkspace.shared.activateFileViewerSelecting([logURL])
+                    } label: {
+                        Text("Voir le journal")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(DS.Surface.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .pointingHandCursor()
+                }
+
+                OnboardingButton("Réessayer") {
+                    onboardingVM.installHermes()
+                }
             }
         }
     }
 
     private var readyToInstallView: some View {
         VStack(spacing: 10) {
-            Text("Preparing installation...")
+            Text("Préparation de l'installation…")
                 .font(DS.Text.caption)
                 .foregroundStyle(DS.Surface.tertiary)
             SpinningRing()
