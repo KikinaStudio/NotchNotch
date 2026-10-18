@@ -361,3 +361,51 @@ Le reste tient : chat sur `/v1/chat/completions` (en-têtes, raisonnement, statu
 2. Sur `main`, un `X-Hermes-Session-Id` égal à l'ancienne clé est-il résolu par le registre `state_meta` (C2) ? À vérifier au curl en H16.
 3. Gateway « canonical » : quelle route annule un tour en cours (C5) ?
 4. Après la mise à jour : `/health` dit-il `0.22.2` ? une édition de mémoire passe-t-elle avec le modèle gratuit par défaut ? `SkillsHubClient` (ancien `venv/`) marche-t-il toujours (#17) ?
+
+## Probe RPC slash (H6, 2026-10-18)
+
+Lecture seule, sur l'install locale passée en **v0.22.2** (`install-stamp.json` `baseVersion: 0.22.2`, commit `d923a5e`, `git describe` `v0.22.2`, `/health` `0.22.2`, dernière release GitHub `v0.22.2`) et sur `main` (`9e01b44`, fichiers lus par `gh api …/contents/…?ref=main`). Aucun `hermes dashboard` ni `serve` lancé, aucun appel RPC, aucun curl hors `/health`. `ps` : seul le gateway tourne (`:8642`). Code de Desktop et de `tui_gateway` lu par deux sous-agents, points décisifs relus à la main. Chemins relatifs à `~/.hermes/hermes-agent`.
+
+### Ce qu'on savait (ligne 7 du probe v0.21.6) : confirmé ou corrigé
+
+| Point | Verdict |
+|---|---|
+| Aucune route HTTP de `:8642` n'exécute les slash | ✅ v0.22.2 (`gateway/platforms/api_server.py:1718-1765`, seul WebSocket : `/v1/browser-control/ws`) et `main`. |
+| JSON-RPC sur `/api/ws` | ✅ `hermes_cli/web_routers/chat_ws.py:701-719`. Un objet JSON par trame WebSocket (`tui_gateway/ws.py:401-418`) ; « ligne par ligne » = mode stdio. |
+| Servi par un autre process | ✅ `hermes dashboard` ou `hermes serve` (même app sans interface, `hermes_cli/main_dashboard.py:1025`, port 9119 par défaut). Le gateway ne le sert pas : `host-gateway.json` sans port. Un seul `serve` par Mac et par utilisateur (`gateway/host_rendezvous.py:1-30`). |
+| Auth `?token=` + Host/Origin | ✅ `HERMES_DASHBOARD_SESSION_TOKEN`, sinon aléatoire à chaque démarrage (`hermes_cli/web_server.py:397-405`) ; comparaison `web_server_chat.py:369-374` ; Host contrôlé, `Origin` vérifié seulement s'il est http(s) (`web_server_chat.py:167-194`). Jeton retrouvable par un client local : page `GET /` (`web_server_dashboard.py:119-181`) ou fichier 0600 `~/.local/state/hermes/gateway-locks/host-serve.token` (`host_rendezvous.py:216-225`). |
+| Méthodes `slash.exec`, `command.dispatch`, `commands.catalog`, `complete.slash` | ✅ (`tui_gateway/methods_tools.py:1115-1192`, `1095-1112`, `505-541`, `methods_complete.py:278-335`). ⚠️ `session_id` = ID en mémoire (8 caractères, `methods_session.py:65-67`) obtenu par `session.resume <ligne state.db>` (`methods_session.py:798-806`, aucun filtre de source), sinon 4001 (`server.py:1228-1243`). `slash.exec` renvoie `goal`, `loop`, `retry`, `undo`, `steer`, `queue`, `compress`… vers `command.dispatch` (`server.py:3559-3562`) ; le reste part dans un sous-process « slash worker » par session (`server.py:254-334`). Nouveau : `session.control` / `session.control.read` (cartes Goal / Loop / Heartbeat, `methods_session_control.py:26-45`). |
+| Requêtes serveur → client après `client.capabilities` | ✅ `methods_voice.py:442-449`, `session_transports.py:37-56`. |
+| v0.22.0 : Desktop « attaches to the running backend » | ✅ Desktop s'attache d'abord (`apps/desktop/electron/primary-backend-startup.ts:136-143`, via `~/.hermes/spawn-ledger.json`), sinon lance `serve --host 127.0.0.1 --port 0` (`electron/backend-command.ts:20-27`). Ici : rien à quoi s'attacher (ledger : une entrée morte du 3/9). `/Applications/Hermes.app` est l'installeur (`com.nousresearch.hermes.setup`), pas Desktop. |
+| Desktop : `slash.exec`, `command.dispatch` en secours | ✅ `apps/desktop/src/app/chat/composer/hooks/use-prompt-actions/slash.ts:410-471`. ⚠️ « Unknown command … nothing was sent » vient du CLI dans le slash worker (`hermes_cli/cli_unknown_command.py:11-21`), renvoyé en texte. |
+
+### La question clé : `/goal` sur la session du chat HTTP
+
+- Une session RPC peut viser la ligne de NotchNotch (`session.resume` accepte une ligne `api_server`). Mais :
+- La relance d'objectif ne suit qu'un tour du backend RPC (`tui_gateway/prompt_turn.py:1194`, `_run_post_turn_followups` l. 1249) ou d'une messagerie (`gateway/run_inbound.py:1380` → `_run_post_turn_hooks`, `gateway/run_goals.py:322-343`). Les tours HTTP appellent `run_conversation` directement (`api_server.py:4290`) : jamais de relance. Pareil sur `main` (`_run_post_turn_hooks` n'est appelé que par `run_inbound.py`).
+- `/goal <texte>` par RPC renvoie `{type: "send", notice, message}` : le prompt de lancement est à envoyer par le client avec `prompt.submit` (`methods_tools.py:889-912`).
+- `/loop` et `/heartbeat` : état dans `state_meta` (`loop:<id>`, `heartbeat:<id>`), ticks par un fil par session du backend, seulement tant qu'il tient la session (`tui_gateway/session_notifications.py:732-770`). `hermes_cli/heartbeat.py:1-6` : « session-scoped and in-process ». Le gateway ne les déclenche pas pour une ligne `api_server` (`run_goals.py:393-394`, `run_heartbeat_restore.py:44-60`).
+- Mélanger HTTP et RPC sur une conversation : le backend garde l'historique en mémoire (`prompt_turn.py:695`), non resynchronisé après un tour HTTP (déduit).
+- **Conclusion** : `/goal`, `/loop`, `/heartbeat` demandent tout le chat sur le RPC, comme Desktop (`prompt.submit`, `methods_prompt.py:735`).
+- Telegram (gateway) les gère nativement : `gateway/slash_commands_goals.py:33` (`/goal`), `:92` (`/heartbeat`), `:249` (`/loop`).
+
+### Commandes qui gagneraient au RPC
+
+| Commande | Chat par RPC nécessaire ? |
+|---|---|
+| `/goal`, `/subgoal` | Oui (relance + prompt de lancement). |
+| `/loop`, `/heartbeat` | Oui, et le backend doit rester lancé. Les Missions (cron) font le même travail, durablement. |
+| `/steer`, `/queue`, `/btw` | Oui (tour ou session vivant dans le backend). |
+| `/retry`, `/undo`, `/compress` | Oui, sinon les historiques divergent. NotchNotch a déjà Modifier / Régénérer. |
+| `/usage`, `/status`, `/context` | Non (une reprise suffit), gain faible : `state.db` déjà lu. |
+| `/title` | Non : `PATCH /api/sessions/{id}` existe sur `:8642` (`api_server.py:3206-3226`). |
+
+Coût d'un branchement : `hermes serve` à lancer et surveiller (nouvelle exception), port aléatoire et jeton qui changent à chaque relance, partage du backend de Desktop s'il tourne (il meurt avec Desktop), `dashboard --no-open` pour les Hermes sans `serve` (`backend-command.ts:40-52`), contrats qui bougent vite (paramètre inconnu → 4000, `tui_gateway/contracts/registry.py:94-109`).
+
+### `main` (futur v0.23.0)
+
+`/api/ws` passe dans le process du gateway (`gateway/run_api.py`, en-tête : « the native session WebSocket (ticketed /api/ws — every local CLI/TUI/Desktop session) »). Accès par un ticket de 30 s demandé au socket de contrôle `~/.hermes/gateway.sock` (verbe `session-ticket`, paramètres `profile_id`, `instance_id`, `purpose`, pair du même utilisateur vérifié par uid, `gateway/control_socket.py:289-375`), ticket passé en sous-protocole WebSocket, tout en-tête `Origin` refusé, loopback seulement (`run_api.py:318-376`). Plus de 2e process, mais découverte et auth différentes de v0.22.2.
+
+### Décision (question ouverte 4)
+
+Option (a), « se démarquer » (Jérémie) : pas de RPC. H5 reste ; la ligne d'info de `/goal` `/subgoal` renvoie vers Telegram et Hermes Desktop, celle de `/loop` `/proactive` `/heartbeat` `/hb` vers une mission (texte seul). L'option (c), « tout le chat sur le RPC », est à réévaluer en H16 avec v0.23.0. L'option (b) (RPC à côté du chat HTTP) est écartée : elle ne débloque pas `/goal`.

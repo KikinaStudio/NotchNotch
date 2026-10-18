@@ -60,7 +60,7 @@ enum SlashPalette {
         // Not for one-letter aliases (`/s`, `/q`, `/v`): every name typed starts with one.
         let isRunnable = HermesSlashCommand.runnable.contains { $0.name == query || $0.aliases.contains(query) }
         if query.count >= 2, HermesSlashCommand.registry.contains(query), !isRunnable {
-            items.append(SlashSuggestion(name: query, description: "Commande de Hermes, ne marche pas ici", kind: .hermesOnly))
+            items.append(SlashSuggestion(name: query, description: HermesSlashCommand.paletteHint(for: query), kind: .hermesOnly))
         }
         return items
     }
