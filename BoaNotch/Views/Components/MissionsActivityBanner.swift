@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Top-of-tab banner for the Brain panel's Missions tab.
 /// Three side-by-side micro-cards reading from Hermes-native data only:
-///   - 30-day USD cost (state.db sessions, with month-end forecast)
+///   - 30-day USD cost (state.db sessions, with month-end forecast, or the
+///     count of sessions Hermes couldn't price)
 ///   - 7-day session sparkline (state.db sessions)
 ///   - 7-day cron health (CronStore in-memory)
 /// No REST, no log parsing, no FX conversion. USD shown natively because
@@ -16,12 +17,14 @@ import SwiftUI
 struct MissionsActivityBanner: View {
     let cost: Double?
     let forecast: Double?
+    let unpricedSessions: Int
     let dailyCounts: [Int]
     let failures: Int
     let healthyJobs: Int
 
     private var isEmpty: Bool {
         cost == nil
+            && unpricedSessions == 0
             && dailyCounts.allSatisfy { $0 == 0 }
             && healthyJobs == 0
             && failures == 0
@@ -37,7 +40,7 @@ struct MissionsActivityBanner: View {
                 .padding(.vertical, 12)
         } else {
             HStack(spacing: 8) {
-                CostCard(cost: cost, forecast: forecast)
+                CostCard(cost: cost, forecast: forecast, unpricedSessions: unpricedSessions)
                 SparklineCard(dailyCounts: dailyCounts)
                 HealthCard(failures: failures, healthyJobs: healthyJobs)
             }
@@ -51,6 +54,7 @@ struct MissionsActivityBanner: View {
 private struct CostCard: View {
     let cost: Double?
     let forecast: Double?
+    let unpricedSessions: Int
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -64,7 +68,7 @@ private struct CostCard: View {
                 .font(DS.Text.titleSmall.monospacedDigit())
                 .foregroundStyle(DS.Surface.primary)
 
-            Text(forecastDisplay)
+            Text(subtitleDisplay)
                 .font(DS.Text.micro)
                 .foregroundStyle(DS.Surface.secondary)
                 .lineLimit(1)
@@ -73,16 +77,33 @@ private struct CostCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(cardBackground)
+        .help(helpText)
     }
 
     private var costDisplay: String {
         guard let c = cost else { return "—" }
-        return String(format: "$%.2f", c)
+        return Self.usd(c)
     }
 
-    private var forecastDisplay: String {
+    /// Unpriced sessions take the forecast's line: their spend is missing
+    /// from the amount above, which matters more than a projection.
+    private var subtitleDisplay: String {
+        if unpricedSessions == 1 { return "1 session sans tarif" }
+        if unpricedSessions > 1 { return "\(unpricedSessions) sessions sans tarif" }
         guard let f = forecast else { return "—" }
-        return String(format: "$%.2f mois prév.", f)
+        return "\(Self.usd(f)) mois prév."
+    }
+
+    private var helpText: String {
+        guard unpricedSessions > 0 else { return "" }
+        return "Hermes ne connaît pas le prix de ces sessions : leur coût n'est pas compté."
+    }
+
+    /// "$0.00" only for a true zero; under a cent "< $0.01" so a small spend
+    /// never reads as nothing.
+    private static func usd(_ amount: Double) -> String {
+        if amount > 0, amount < 0.01 { return "< $0.01" }
+        return String(format: "$%.2f", amount)
     }
 }
 
