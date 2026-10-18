@@ -246,7 +246,7 @@ struct NotchView: View {
                                     .notchPanelInsets(variant: .standard)
                                     .transition(.opacity)
                             } else {
-                                ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig)
+                                ChatView(chatVM: chatVM, notchVM: notchVM, searchVM: searchVM, hermesConfig: hermesConfig, brainVM: brainVM)
                                     .notchPanelInsets(variant: .chat)
                             }
                         }

@@ -46,6 +46,9 @@ class ChatViewModel: ObservableObject {
     /// rewrites jobs.json.
     weak var cronStore: CronStore?
 
+    /// Installed skills, for the `/` palette and `/skill` messages. Wired by AppDelegate.
+    weak var brainVM: BrainViewModel?
+
     var sessionId: String? { client.sessionId }
     private var streamTask: Task<Void, Never>?
     private var streamingCancellable: AnyCancellable?
@@ -96,6 +99,8 @@ class ChatViewModel: ObservableObject {
     /// (see `HermesSlashCommand`). The draft stays for a command NotchNotch doesn't run.
     private func runSlashCommand(_ text: String) -> Bool {
         guard let command = HermesSlashCommand.match(text) else { return false }
+        // A skill one letter away from a command (`goals`) is the skill, not a typo.
+        if case .nearMiss = command, SlashPalette.invokedSkill(in: text, skills: installedSkills) != nil { return false }
         let name = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix { !$0.isWhitespace })
         os_log("[notchnotch] slash command kept from the model: %{public}@", type: .info, name)
         switch command {
@@ -110,6 +115,20 @@ class ChatViewModel: ObservableObject {
         draft = ""
         editingMessageId = nil
         return true
+    }
+
+    private var installedSkills: [SkillInfo] {
+        brainVM?.loadSkillsIfNeeded()
+        return brainVM?.skills ?? []
+    }
+
+    /// System line for a message starting with an installed skill (`/llm-wiki …`). Hermes's API
+    /// takes it as plain text (only Telegram and the terminal load the skill), and free-tier
+    /// models skip it. Attachments come first in `input`, the typed text after the last one.
+    private func skillContext(for input: String) -> String? {
+        let text = input.range(of: "[End attachment]\n\n", options: .backwards).map { String(input[$0.upperBound...]) } ?? input
+        guard let skill = SlashPalette.invokedSkill(in: text, skills: installedSkills) else { return nil }
+        return "The user invoked the \"\(skill.name)\" skill by starting their message with /\(skill.slug). Load it with skill_view(\"\(skill.name)\") before answering, then follow its instructions for the rest of the message."
     }
 
     func retryLastAssistant() {
@@ -143,6 +162,9 @@ class ChatViewModel: ObservableObject {
                 } else if routineCreationMode {
                     systemContext = "The user dropped a file from the Routines screen. They want to create a new scheduled routine (cron job). Analyze the attached file and, based on its content and what you know about the user, suggest 1-2 routine ideas that would be useful. Explain each suggestion briefly. Ask the user to confirm or adjust before creating the cron job. Do not create any job until the user explicitly agrees."
                     routineCreationMode = false
+                }
+                if let skill = skillContext(for: input) {
+                    systemContext = [systemContext, skill].compactMap { $0 }.joined(separator: "\n\n")
                 }
 
                 // streamResponse fires onEvent from the URLSession iterator's

@@ -28,14 +28,16 @@ enum HermesSlashCommand: Equatable {
         guard registry.contains(name) else {
             return closestCommand(to: name).map { .nearMiss(typed: "/" + word, suggestion: "/" + $0) }
         }
-        switch name {
-        case "new", "reset", "clear": return .newConversation
-        case "model": return .modelMenu
-        case "sessions", "resume": return .history
-        case "stop": return .stop
-        default: return .unavailable("/" + name)
-        }
+        return runnable.first { $0.name == name || $0.aliases.contains(name) }?.command ?? .unavailable("/" + name)
     }
+
+    /// The commands NotchNotch runs, with the French line of the `/` palette (`SlashPalette`).
+    static let runnable: [(command: HermesSlashCommand, name: String, aliases: [String], description: String)] = [
+        (.newConversation, "new", ["reset", "clear"], "Commence une nouvelle conversation"),
+        (.modelMenu, "model", [], "Choisis le modèle de cette conversation"),
+        (.history, "sessions", ["resume"], "Ouvre l'historique pour reprendre une conversation"),
+        (.stop, "stop", [], "Arrête la réponse en cours"),
+    ]
 
     /// Line shown above the composer when NotchNotch doesn't run the command; nil otherwise.
     var notice: String? {

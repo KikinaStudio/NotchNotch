@@ -1,19 +1,31 @@
 import SwiftUI
+import Carbon.HIToolbox
 
 struct ChatView: View {
     @ObservedObject var chatVM: ChatViewModel
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var searchVM: SearchViewModel
     @ObservedObject var hermesConfig: HermesConfig
+    @ObservedObject var brainVM: BrainViewModel
     @FocusState private var isInputFocused: Bool
     @State private var pasteMonitor: Any?
+    @State private var paletteMonitor: Any?
+    /// Row picked in the `/` palette; reset on every keystroke.
+    @State private var paletteSelection = 0
+    /// Draft the palette was closed on with Esc; typing reopens it.
+    @State private var paletteDismissedDraft: String?
 
     @EnvironmentObject var appearanceSettings: AppearanceSettings
 
     var body: some View {
         VStack(spacing: 0) {
             if chatVM.messages.isEmpty {
-                WelcomeExamplesCarousel(chatVM: chatVM)
+                // The palette takes the carousel's room: both don't fit the standard panel.
+                if paletteItems.isEmpty {
+                    WelcomeExamplesCarousel(chatVM: chatVM)
+                } else {
+                    Spacer(minLength: 0)
+                }
             } else {
                 // Messages — bottom-anchored, with alpha-mask fade at top + bottom.
                 // Mask (not paint overlay) so the fade is to *transparency*, letting
@@ -172,15 +184,92 @@ struct ChatView: View {
                 }
                 return event
             }
+            paletteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                handlePaletteKey(event) ? nil : event
+            }
         }
         .onChange(of: chatVM.focusComposerTrigger) {
             isInputFocused = true
+        }
+        .onChange(of: chatVM.draft) { _, draft in
+            paletteSelection = 0
+            if draft.hasPrefix("/") {
+                brainVM.loadSkillsIfNeeded()
+            } else {
+                paletteDismissedDraft = nil
+            }
         }
         .onDisappear {
             if let monitor = pasteMonitor {
                 NSEvent.removeMonitor(monitor)
                 pasteMonitor = nil
             }
+            if let monitor = paletteMonitor {
+                NSEvent.removeMonitor(monitor)
+                paletteMonitor = nil
+            }
+        }
+    }
+
+    // MARK: - Slash palette
+
+    /// Rows of the `/` palette for the draft; empty while it's closed (`SlashPalette`).
+    private var paletteItems: [SlashSuggestion] {
+        guard chatVM.draft != paletteDismissedDraft, let query = SlashPalette.query(for: chatVM.draft) else { return [] }
+        return SlashPalette.suggestions(for: query, skills: brainVM.skills)
+    }
+
+    /// The picked row, else the first selectable one (a greyed Hermes row never is).
+    private func selectedIndex(in items: [SlashSuggestion]) -> Int? {
+        if items.indices.contains(paletteSelection), items[paletteSelection].isSelectable { return paletteSelection }
+        return items.firstIndex(where: \.isSelectable)
+    }
+
+    /// ↑ ↓ move, Tab completes, Enter picks, Esc closes the palette. Returns true to swallow the
+    /// key; every other key, and every key while the palette is closed, reaches the field.
+    private func handlePaletteKey(_ event: NSEvent) -> Bool {
+        let items = paletteItems
+        guard notchVM.isOpen, isInputFocused, !items.isEmpty else { return false }
+        // An input method composing a character (accents, CJK) keeps its keys.
+        if (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true { return false }
+        guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
+        let selected = selectedIndex(in: items)
+        switch Int(event.keyCode) {
+        case kVK_DownArrow, kVK_UpArrow:
+            let selectable = items.indices.filter { items[$0].isSelectable }
+            guard let selected, let position = selectable.firstIndex(of: selected) else { return false }
+            let step = Int(event.keyCode) == kVK_DownArrow ? 1 : -1
+            paletteSelection = selectable[(position + step + selectable.count) % selectable.count]
+        case kVK_Tab:
+            guard let selected else { return false }
+            completePaletteItem(items[selected])
+        case kVK_Return, kVK_ANSI_KeypadEnter:
+            guard let selected else { return false }
+            pickPaletteItem(items[selected])
+        case kVK_Escape:
+            paletteDismissedDraft = chatVM.draft
+        default:
+            return false
+        }
+        return true
+    }
+
+    /// Tab: the name goes in the field. A skill gets a space: the request comes after it.
+    private func completePaletteItem(_ item: SlashSuggestion) {
+        chatVM.draft = "/" + item.name + (item.kind == .skill ? " " : "")
+    }
+
+    /// Enter or click: a command runs at once (none of them takes an argument), a skill is completed.
+    private func pickPaletteItem(_ item: SlashSuggestion) {
+        switch item.kind {
+        case .command:
+            chatVM.draft = "/" + item.name
+            sendAndCloseBar()
+        case .skill:
+            completePaletteItem(item)
+            isInputFocused = true
+        case .hermesOnly:
+            break
         }
     }
 
@@ -226,6 +315,19 @@ struct ChatView: View {
                     .padding(.horizontal, 2)
                     .padding(.bottom, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            let palette = paletteItems
+            if !palette.isEmpty {
+                SlashPaletteView(
+                    query: SlashPalette.query(for: chatVM.draft) ?? "",
+                    items: palette,
+                    selectedIndex: selectedIndex(in: palette),
+                    onHover: { paletteSelection = $0 },
+                    onPick: { pickPaletteItem($0) }
+                )
+                .padding(.horizontal, 2)
+                .padding(.bottom, DS.Spacing.xs)
             }
 
             HStack(alignment: .center, spacing: 10) {

@@ -403,6 +403,11 @@ class BrainViewModel: ObservableObject {
 
     // MARK: - Skills
 
+    /// For the chat's `/` palette, which can open before the Brain panel ever loaded.
+    func loadSkillsIfNeeded() {
+        if skills.isEmpty { loadSkills() }
+    }
+
     private func loadSkills() {
         let skillsDir = (hermesHome as NSString).appendingPathComponent("skills")
         let fm = FileManager.default

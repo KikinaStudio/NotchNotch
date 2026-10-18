@@ -48,6 +48,8 @@ enum DS {
         /// 12pt regular monospaced. Cron expression display (advancedScheduleNotice),
         /// stepper digits (dayOfMonthControl).
         static let labelMono     = Font.system(size: 12, design: .monospaced)
+        /// 12pt semibold monospaced. Partie tapée d'une commande dans la palette `/`.
+        static let labelMonoSemibold = Font.system(size: 12, weight: .semibold, design: .monospaced)
         /// 11pt regular. Labels UI standards, hints, status text.
         static let caption       = Font.system(size: 11)
         /// 11pt medium. Titre de carte sélectionnée (model card name, privacy row title).
@@ -135,6 +137,11 @@ enum DS {
         static let headerLow  = AnyShapeStyle(Color.white.opacity(0.28))
         /// Hairlines dividers. ShapeStyle natif .separator.
         static let separator  = AnyShapeStyle(.separator)
+        /// Fond de la palette `/` du chat. Blanc 7% : un cran au-dessus du
+        /// panneau noir pour qu'elle se détache (demande de Jérémie, 2026-10-18).
+        static let paletteFill = AnyShapeStyle(Color.white.opacity(0.07))
+        /// Ligne choisie de la palette `/`, posée sur `paletteFill`. Blanc 8%.
+        static let paletteSelection = AnyShapeStyle(Color.white.opacity(0.08))
     }
 
     // MARK: - Status
@@ -155,6 +162,8 @@ enum DS {
     enum Stroke {
         /// 0.06 — hairline standard list rows et cards (CLAUDE.md "1pt hairline dividers").
         static let hairline = Color.white.opacity(0.06)
+        /// 0.10 — contour de la palette `/` (sur `DS.Surface.paletteFill`).
+        static let paletteBorder = Color.white.opacity(0.10)
         /// Épaisseur trait standard pour overlays.
         static let lineWidth: CGFloat = 0.5
     }
@@ -286,5 +295,21 @@ enum DS {
         /// 18pt — bottom inset variant ChatView. Espace pour l'input bar fixée
         /// en bas (qui a son propre padding interne).
         static let chatBottomInset = CGFloat(18)
+
+        /// 24pt — ligne de la palette `/` du chat. Densité menu (Claude Code,
+        /// Hermes Desktop), plus serrée que `rowMinHeight` : c'est une liste
+        /// éphémère au-dessus du champ, pas une liste de contenu.
+        static let paletteRowHeight = CGFloat(24)
+
+        /// 20pt — intertitre (COMMANDES, SKILLS) de la palette `/`.
+        static let paletteHeaderHeight = CGFloat(20)
+
+        /// 5 — lignes visibles de la palette `/` avant défilement : elle doit
+        /// tenir dans le panneau standard au-dessus du champ.
+        static let paletteVisibleRows = 5
+
+        /// 150pt — largeur mini de la colonne des noms de la palette `/`, pour
+        /// aligner les descriptions.
+        static let paletteNameWidth = CGFloat(150)
     }
 }
