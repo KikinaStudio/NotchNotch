@@ -23,7 +23,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var flagsMonitor: Any?
     private var controlTapTimestamps: [Date] = []
     private var controlWasDown = false
-    private var didProbeCompression = false
     private static weak var shared: AppDelegate?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -87,7 +86,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBarItem()
         startClipperListener()
         wireCronToasts()
-        probeCompressionEndpointOnce()
 
         // After Sparkle relaunches us, surface the Gatekeeper hint so users know
         // macOS may block the new binary on first run (we ship ad-hoc-signed).
@@ -173,21 +171,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         for sub in ["raw", "wiki"] {
             let path = NSString(string: "~/.hermes/brain/\(sub)").expandingTildeInPath
             try? fm.createDirectory(atPath: path, withIntermediateDirectories: true)
-        }
-    }
-
-    private func probeCompressionEndpointOnce() {
-        guard !didProbeCompression else { return }
-        didProbeCompression = true
-        let config = hermesConfig
-        let vm = notchVM
-        Task.detached {
-            let health = await config.probeCompressionEndpoint()
-            guard case .unreachable(let reason) = health else { return }
-            os_log("Compression endpoint unreachable: %{public}@", type: .info, reason)
-            await MainActor.run {
-                vm.showToast("Modèle de compression injoignable. Vérifie ta config Hermes.", kind: .error)
-            }
         }
     }
 

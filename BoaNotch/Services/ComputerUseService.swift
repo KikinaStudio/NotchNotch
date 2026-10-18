@@ -46,7 +46,7 @@ final class ComputerUseService: ObservableObject {
     /// shows up in Console.app and `log show` for both Debug and Release
     /// builds — Swift `print` doesn't reach the unified log for GUI bundles
     /// launched via `open`. Matches the existing `os_log` usage in
-    /// `AppDelegate.probeCompressionEndpointOnce` and `LoginItemService`.
+    /// `LoginItemService`.
     func refreshState() async {
         let exists = await ShellRunner.commandExists("cua-driver")
         if !exists {
