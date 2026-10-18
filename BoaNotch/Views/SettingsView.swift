@@ -231,6 +231,10 @@ struct SettingsView: View {
                 settingsSection("Hermes") {
                     hermesGatewaySection
                 }
+                sectionDivider
+                settingsSection("Clés") {
+                    secretVaultRow
+                }
             }
         } label: {
             Text("AVANCÉ")
@@ -588,6 +592,7 @@ struct SettingsView: View {
 
     private func settingsActionButton(label: String, action: @escaping () -> Void) -> some View {
         Button(label, action: action)
+            .font(DS.Text.caption)
             .buttonStyle(.plain)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
@@ -634,13 +639,9 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
             }
             Spacer()
-            Button("Check now") {
+            settingsActionButton(label: "Check now") {
                 UpdaterService.shared.checkForUpdates()
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
         }
     }
 
@@ -868,6 +869,28 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, DS.Spacing.xs)
+    }
+
+    /// Keys stay in ~/.hermes/.env (0600): a Keychain item the gateway can read at startup
+    /// without a prompt is readable by any process of the user, the agent's terminal included.
+    /// Users who already have a vault get Hermes's native sources (1Password, Bitwarden); NotchNotch
+    /// writes nothing. Both vaults default to `override_existing: true`, hence the two warnings.
+    /// See PLAN-HERMES-V021.md, H11.
+    private var secretVaultRow: some View {
+        VStack(alignment: .leading, spacing: DS.Spacing.xs) {
+            HStack(spacing: DS.Spacing.sm) {
+                Text("Coffre de mots de passe")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                settingsActionButton(label: "Ouvrir la doc Hermes") {
+                    NSWorkspace.shared.open(URL(string: "https://hermes-agent.nousresearch.com/docs/user-guide/secrets/")!)
+                }
+            }
+            Text("Tu utilises 1Password ou Bitwarden ? Hermes peut y prendre tes clés au démarrage, au lieu de ~/.hermes/.env. Le coffre l'emporte alors sur une clé saisie dans NotchNotch : change-la dans le coffre. Garde API_SERVER_KEY dans .env.")
+                .font(DS.Text.micro)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func runOpenRouterSignIn() async {
