@@ -899,6 +899,7 @@ struct BrainView: View {
             MissionsActivityBanner(
                 cost: brainVM.costThisMonth,
                 forecast: brainVM.costForecastMonth,
+                unpricedSessions: brainVM.unpricedSessions30Days,
                 dailyCounts: brainVM.dailySessionCounts,
                 failures: cronFailures7Days,
                 healthyJobs: cronJobsHealthy7Days
