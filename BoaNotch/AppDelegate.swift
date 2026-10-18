@@ -10,7 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let audioRecorder = AudioRecorder()
     let sessionStore = SessionStore()
     let searchVM = SearchViewModel()
-    let hermesConfig = HermesConfig()
+    let hermesConfig = HermesConfig.shared  // one instance: in-memory state set via `.shared` must reach the UI
     let onboardingVM = OnboardingViewModel()
     let cronStore = CronStore()
     let brainVM = BrainViewModel()

@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Yams
+import os.log
 
 enum EndpointHealth {
     case notConfigured
@@ -47,6 +48,18 @@ class HermesConfig: ObservableObject {
         let value: String
         let label: String?
     }
+
+    /// Connected providers from Hermes (`/api/model/options`), for the notch bar's chat model.
+    /// Empty = old gateway or not loaded yet: the bar falls back to `availableModels`.
+    @Published var modelOptions: [ModelProvider] = []
+
+    struct ModelProvider: Decodable, Equatable {
+        let slug: String
+        let name: String
+        let models: [String]
+    }
+
+    private let optionsClient = HermesClient()
 
     // Compression (read-only — Hermes owns this field, we only observe)
     private var compressionBaseURLString: String?
@@ -135,6 +148,16 @@ class HermesConfig: ObservableObject {
         return customs + base
     }
 
+    /// Choices for the global default: Hermes's models for the configured provider (custom IDs
+    /// first), else the built-in `availableModels` (old gateway, or a provider Hermes doesn't list).
+    var defaultModelChoices: [(value: String, label: String)] {
+        guard let hermes = modelOptions.first(where: { $0.slug == modelProvider }) else { return availableModels }
+        let customs = userCustomModels[modelProvider]?.map { (value: $0.value, label: $0.label ?? $0.value) } ?? []
+        return customs + hermes.models
+            .filter { id in !customs.contains { $0.value == id } }
+            .map { (value: $0, label: $0) }
+    }
+
     static func defaultBaseURL(for provider: String) -> String? {
         switch provider {
         case "openai": return "https://api.openai.com/v1"
@@ -161,9 +184,48 @@ class HermesConfig: ObservableObject {
     }
 
     func switchModel(_ model: (value: String, label: String)) {
+        // Provider and model are saved together (a Settings provider click writes nothing).
+        // "custom" maps to provider:openai — Hermes has no "custom" id; OpenAI-compatible
+        // endpoints use provider:openai with model.base_url overridden. Only on a provider
+        // change, so a hand-edited base_url survives a model switch.
+        let providerForConfig = (modelProvider == "custom") ? "openai" : modelProvider
+        if readKey("model.provider") != providerForConfig {
+            setImmediate("model.provider", value: providerForConfig)
+            if let baseURL = Self.defaultBaseURL(for: modelProvider) {
+                setImmediate("model.base_url", value: baseURL)
+            }
+        }
         modelDefault = model.value
         setImmediate("model.default", value: model.value)
         applyMaxTokensCap(for: model.value)
+        clearChatModel()  // last pick wins: the chat follows the new default again
+    }
+
+    /// Refreshes `modelOptions` from Hermes (notch bar and Settings, on appear). A failure keeps
+    /// the previous list.
+    func refreshModelOptions() async {
+        guard let providers = await optionsClient.fetchModelOptions() else {
+            os_log("[notchnotch] Model options unavailable", type: .info)
+            return
+        }
+        os_log("[notchnotch] Model options: %d providers", type: .info, providers.count)
+        await MainActor.run { applyModelOptions(providers) }
+    }
+
+    func applyModelOptions(_ providers: [ModelProvider]) {
+        modelOptions = providers
+        // A pick whose provider was disconnected would fail every turn: back to the default.
+        // Provider only: Hermes's curated model lists vary between refreshes.
+        if let provider = UserDefaults.standard.string(forKey: "chatModelProvider"),
+           !providers.contains(where: { $0.slug == provider }) {
+            clearChatModel()
+        }
+    }
+
+    /// Back to `model.default` for the chat (keys read by `HermesClient.chatModelFields`).
+    func clearChatModel() {
+        UserDefaults.standard.removeObject(forKey: "chatModelProvider")
+        UserDefaults.standard.removeObject(forKey: "chatModelID")
     }
 
     /// OpenRouter's free tier rejects requests where the computed `max_tokens`

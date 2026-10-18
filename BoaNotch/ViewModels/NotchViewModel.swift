@@ -34,6 +34,28 @@ class NotchViewModel: ObservableObject {
 
     var onStateChange: ((NotchState) -> Void)?
 
+    /// Open NSMenus (the bar's model submenus hang below the panel): a hover-out under an open
+    /// menu must not close the notch. A count, in case submenus post their own begin/end pair.
+    private var openMenuCount = 0
+    private var menuObservers: [NSObjectProtocol] = []
+
+    init() {
+        let center = NotificationCenter.default
+        menuObservers = [
+            center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.openMenuCount += 1
+            },
+            center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                self.openMenuCount = max(0, self.openMenuCount - 1)
+            },
+        ]
+    }
+
+    deinit {
+        menuObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
     /// Action closures wired by AppDelegate for recording toast buttons
     var onTalkAction: (() -> Void)?
     var onBrainDumpAction: (() -> Void)?
@@ -136,7 +158,7 @@ class NotchViewModel: ObservableObject {
             hoverTask = Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 guard !Task.isCancelled else { return }
-                if !self.suppressAutoClose { self.close() }
+                if !self.suppressAutoClose && self.openMenuCount == 0 { self.close() }
             }
         }
     }

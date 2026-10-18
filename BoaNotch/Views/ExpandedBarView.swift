@@ -4,6 +4,9 @@ struct ExpandedBarView: View {
     @ObservedObject var config: HermesConfig
     @ObservedObject var notchVM: NotchViewModel
     @ObservedObject var chatVM: ChatViewModel
+    // The chat's own model (H4), sent per request by HermesClient. Empty = `model.default`.
+    @AppStorage("chatModelProvider") private var chatModelProvider = ""
+    @AppStorage("chatModelID") private var chatModelID = ""
 
     var body: some View {
         HStack(spacing: 12) {
@@ -36,24 +39,45 @@ struct ExpandedBarView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
-            // Model picker
+            // Model picker: the chat's model when Hermes lists its providers, else the global default
             Menu {
-                ForEach(config.availableModels, id: \.value) { model in
+                if config.modelOptions.isEmpty {
+                    DefaultModelMenuItems(config: config)
+                } else {
                     Button {
-                        config.switchModel(model)
+                        chatModelProvider = ""
+                        chatModelID = ""
                     } label: {
                         HStack {
-                            Text(model.label)
-                            if model.value == config.modelDefault {
+                            Text("Par défaut (\(config.modelDisplayName))")
+                            if chatModelID.isEmpty {
                                 Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                    Divider()
+                    ForEach(config.modelOptions, id: \.slug) { provider in
+                        Menu(provider.name) {
+                            ForEach(provider.models, id: \.self) { model in
+                                Button {
+                                    chatModelProvider = provider.slug
+                                    chatModelID = model
+                                } label: {
+                                    HStack {
+                                        Text(model)
+                                        if provider.slug == chatModelProvider && model == chatModelID {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             } label: {
                 HStack(spacing: 4) {
-                    ProviderIcon(providerID: config.modelProvider, size: 6)
-                    Text(config.modelDisplayName)
+                    ProviderIcon(providerID: chatModelID.isEmpty ? config.modelProvider : chatModelProvider, size: 6)
+                    Text(chatModelID.isEmpty ? config.modelDisplayName : OpenRouterCatalog.niceLabel(for: chatModelID))
                         .font(DS.Text.microMedium)
                 }
                 .foregroundStyle(.secondary)
@@ -136,10 +160,11 @@ struct ExpandedBarView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Capsule().fill(.quinary))
+        .task { await config.refreshModelOptions() }
     }
 
     private var contextWindowLimit: Int {
-        let m = config.modelDefault.lowercased()
+        let m = (chatModelID.isEmpty ? config.modelDefault : chatModelID).lowercased()
         if m.contains("claude") { return 200_000 }
         if m.contains("gpt-4o") || m.contains("gpt-4.1") { return 128_000 }
         if m.contains("gpt-5") || m.contains("o1") || m.contains("o3") { return 200_000 }
@@ -164,6 +189,27 @@ struct ExpandedBarView: View {
         case "high": return "high"
         case "xhigh": return "xhi"
         default: return level
+        }
+    }
+}
+
+/// The global default model (`model.default`, also used by routines and Telegram): the Settings
+/// picker, and the notch bar's picker on gateways without `/api/model/options`.
+struct DefaultModelMenuItems: View {
+    @ObservedObject var config: HermesConfig
+
+    var body: some View {
+        ForEach(config.defaultModelChoices, id: \.value) { model in
+            Button {
+                config.switchModel(model)
+            } label: {
+                HStack {
+                    Text(model.label)
+                    if model.value == config.modelDefault {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
         }
     }
 }

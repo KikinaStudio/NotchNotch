@@ -46,12 +46,12 @@ hermes gateway run --replace    # foreground; stop the service first or KeepAliv
 
 ## Core architecture (one-liners — details in docs/architecture.md)
 
-- `HermesClient` — two chat transports, picked per turn by `streamResponse`: `POST /v1/chat/completions` (stream) when `/health` reports `version` (v0.21.6+), else `POST /v1/responses` (SSE, JSON fallback for pre-v0.11 servers). Both emit the same `StreamEvent`s. One `notchnotch-<uuid>` key per conversation. On /v1/responses it is sent as `conversation`, `X-Hermes-Session-Id` (row id on pre-v0.21.6 gateways) and `X-Hermes-Session-Key` (v0.21.6+ store it in `sessions.session_key`; only with the Bearer, else 403). On /v1/chat/completions history follows `X-Hermes-Session-Id` = the latest state.db row whose `session_key` is the key (`SessionStore.latestRowId`), else the key itself; `X-Hermes-Session-Key` still rides along; only the new user message (+ routine system context) is sent. Never share a key across conversations: Hermes would reuse the previous row. Resuming = restoring the key. Retries only on dead-agent disconnects (cannotConnect / connectionLost / EOF before the final event), never on 5xx/4xx/timeout. Reads `API_SERVER_KEY` fresh from `.env` on every request.
+- `HermesClient` — two chat transports, picked per turn by `streamResponse`: `POST /v1/chat/completions` (stream) when `/health` reports `version` (v0.21.6+), else `POST /v1/responses` (SSE, JSON fallback for pre-v0.11 servers). Both emit the same `StreamEvent`s. One `notchnotch-<uuid>` key per conversation. On /v1/responses it is sent as `conversation`, `X-Hermes-Session-Id` (row id on pre-v0.21.6 gateways) and `X-Hermes-Session-Key` (v0.21.6+ store it in `sessions.session_key`; only with the Bearer, else 403). On /v1/chat/completions history follows `X-Hermes-Session-Id` = the latest state.db row whose `session_key` is the key (`SessionStore.latestRowId`), else the key itself; `X-Hermes-Session-Key` still rides along; only the new user message (+ routine system context) is sent. Never share a key across conversations: Hermes would reuse the previous row. Resuming = restoring the key. Retries only on dead-agent disconnects (cannotConnect / connectionLost / EOF before the final event), never on 5xx/4xx/timeout. Reads `API_SERVER_KEY` fresh from `.env` on every request. The chat model picked in the notch bar (`chatModelProvider` + `chatModelID`) goes out as `model` + `provider` on both chat transports, else `hermes-agent` (gateway default); `sendCompletion` and titles always use the default.
 - `ThinkTagSplitter` / `postProcessResult` / `scrubSecrets` (in `HermesClient.swift`) — client-side cleanup of `<think>` blocks, tool-arg previews and secrets. Keep it client-side even though Hermes 0.13+ redacts server-side: it's the fallback for stale gateways.
 - `ChatViewModel` — send/stream/retry/edit, brain saves, memory edit/delete, routine actions.
 - `CronStore` — watches `~/.hermes/cron/jobs.json` (`{"jobs": [...]}` wrapper); reattaches on atomic rename; diffs `last_run_at` to surface `deliver: local` outputs as notch toasts (filters `[SILENT]`).
 - `BrainViewModel` / `BrainView` — Memory · Tools · Missions tabs (internal identifiers stay `brain` / `tasks`; rawValue = user-visible label).
-- `HermesConfig` — reads `config.yaml` via Yams, writes via line-level regex (preserves comments) with `Data.write(options: .atomic)` — NOT tmp+moveItem. `writeRawEnv` / `readRawEnv` for `.env`.
+- `HermesConfig` — reads `config.yaml` via Yams, writes via line-level regex (preserves comments) with `Data.write(options: .atomic)` — NOT tmp+moveItem. `writeRawEnv` / `readRawEnv` for `.env`. `modelOptions` = connected providers from `GET /api/model/options?include_unconfigured=0` (the notch bar's per-chat picker, like Hermes Desktop's composer); empty (old gateway) → the bar falls back to `availableModels` + `switchModel` (global default). The default model is picked in Settings (Hermes's list for the configured provider, else `availableModels`); a provider click writes nothing, `switchModel` saves provider + base_url + model together and clears the chat pick (last pick wins). One instance: `AppDelegate.hermesConfig` is `HermesConfig.shared`.
 - `HermesGatewayLauncher`, `ComputerUseService`, `GoogleConnectionState` — `@MainActor` singletons.
 - `NotchWindowController` — owns the `NotchPanel` and sizing; invariant `openSize = dimensions - 2 × shadowPadding`.
 - `DesignSystem.swift` — all visual tokens (`DS.*`). Shared primitives in `BoaNotch/Views/Components/` (`PrimaryButtonStyle`, `SegmentedButtonStyle`, `PanelSection`, `CardCompact`, `CardProminent`, `ListRow`, `Hairline`, `notchPanelInsets`).
@@ -59,6 +59,7 @@ hermes gateway run --replace    # foreground; stop the service first or KeepAliv
 ## Important gotchas
 
 - **Tap inside the open notch never closes it.** `NotchViewModel.handleClick()` only opens. Don't add `else { close() }` back.
+- **An open menu blocks the hover-out close.** `NotchViewModel.openMenuCount` follows `NSMenu.didBegin/EndTrackingNotification`: the bar's model submenus hang below the panel, and the cursor following them used to close the notch under the open menu.
 - **`Bundle.module` is forbidden** — use `Bundle.main.resourceURL?.appendingPathComponent(...)`. SPM's `Bundle.module` looks at the app root (breaks codesign) or `fatalError`s on first access (shipped as a crash-on-launch in v1.0.1). Never reintroduce it, even behind a fallback.
 - **rpath**: `swift build` doesn't add `@executable_path/../Frameworks`. `run.sh`/`release.sh` run `install_name_tool -add_rpath` after copying Sparkle and before codesign (v1.2.1 crashed on launch without it). Don't remove it.
 - **`@Published` fires in willSet**: a sink on `$prop` reads the OLD value. Add `.receive(on: DispatchQueue.main)` when you need the post-change state (see `NotchWindowController.sizeCancellable`).
@@ -131,7 +132,7 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 - **`API_SERVER_ENABLED`, `API_SERVER_CORS_ORIGINS`, `API_SERVER_KEY`, `model.max_tokens`** —
   - `ensureApiServerEnv()` writes `API_SERVER_ENABLED=true` and `CORS=*` when absent (respects existing values).
   - It generates `API_SERVER_KEY` (32 random bytes, hex) only when the key is absent or unusable. A valid key is never replaced. It's written via `writeRawEnv`, never `hermes config set` (argv shows up in `ps`).
-  - `model.max_tokens: 8000` is set when switching to an OpenRouter `:free` model (the free tier rejects >~13K), removed via `unsetKey` when switching to a paid model, and set at boot only if absent.
+  - `model.max_tokens: 8000` is set when switching to an OpenRouter `:free` model (the free tier rejects >~13K), removed via `unsetKey` when switching to a paid model, and set at boot only if absent. Hermes ignores it since v0.21.6 (`fd3565d`, no user output cap any more): only older gateways read it.
   - Never write other `API_SERVER_*` keys, or `model.*` keys beyond `default` / `provider` / `base_url` / `max_tokens`.
 - **`display.language: fr`** — written once at launch (`applyHermesLocaleOnce`, guarded by `didSetHermesLocaleFr`).
 
@@ -162,6 +163,7 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 - `didSetHermesLocaleFr` — `display.language: fr` written once
 - `computerUsePermissionsConfirmed` — user confirmed the 3 TCC panes (unverifiable, act of faith)
 - `openrouterFreeModelsCacheV1` — cached OpenRouter `:free` list, 24h TTL; bump `V1` on a schema change
+- `chatModelProvider` / `chatModelID` — model picked in the notch bar for the chat only (H4), sent per request; absent = `model.default`
 
 ## Working rules
 

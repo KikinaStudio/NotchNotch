@@ -248,13 +248,13 @@ class HermesClient {
             inputValue = input
         }
 
-        let body: [String: Any] = [
-            "model": "hermes-agent",
+        var body: [String: Any] = [
             "input": inputValue,
             "conversation": conversationId,
             "store": true,
             "stream": true,
         ]
+        body.merge(chatModelFields) { $1 }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (bytes, httpResponse) = try await openStream(request)
@@ -468,7 +468,8 @@ class HermesClient {
         var messages: [[String: String]] = []
         if let systemContext { messages.append(["role": "system", "content": systemContext]) }
         messages.append(["role": "user", "content": input])
-        let body: [String: Any] = ["model": "hermes-agent", "messages": messages, "stream": true]
+        var body: [String: Any] = ["messages": messages, "stream": true]
+        body.merge(chatModelFields) { $1 }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (bytes, _) = try await openStream(request)
@@ -868,6 +869,32 @@ class HermesClient {
         guard !t.isEmpty else { return nil }
         if t.count > 80 { t = String(t.prefix(80)) }
         return t
+    }
+
+    // MARK: - Model (H4)
+
+    /// Model picked in the notch bar for the chat only: sent per request (Hermes honors
+    /// `model` + `provider` on both chat transports), never written to config.yaml, so routines
+    /// and Telegram keep `model.default`. No pick → `hermes-agent`, the gateway default.
+    private var chatModelFields: [String: Any] {
+        let defaults = UserDefaults.standard
+        guard let provider = defaults.string(forKey: "chatModelProvider"), !provider.isEmpty,
+              let model = defaults.string(forKey: "chatModelID"), !model.isEmpty
+        else { return ["model": "hermes-agent"] }
+        return ["model": model, "provider": provider]
+    }
+
+    /// Connected providers and their models from `GET /api/model/options` (the Desktop / TUI
+    /// picker inventory). nil when the endpoint is missing (old gateway) or Hermes is down.
+    func fetchModelOptions() async -> [HermesConfig.ModelProvider]? {
+        guard let url = URL(string: "\(baseURL)/api/model/options?include_unconfigured=0") else { return nil }
+        var request = makeRequest(url)
+        request.timeoutInterval = 10
+        struct Payload: Decodable { let providers: [HermesConfig.ModelProvider] }
+        guard let (data, response) = try? await session.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
+        return payload.providers.filter { !$0.models.isEmpty }
     }
 
     // MARK: - Health check

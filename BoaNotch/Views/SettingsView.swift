@@ -60,6 +60,23 @@ struct SettingsView: View {
                             }
                         }
 
+                        HStack(spacing: 6) {
+                            Text("Modèle par défaut")
+                                .font(DS.Text.caption)
+                                .foregroundStyle(.secondary)
+                            Menu {
+                                DefaultModelMenuItems(config: hermesConfig)
+                            } label: {
+                                Text(hermesConfig.modelDisplayName)
+                                    .font(DS.Text.captionMedium)
+                            }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                        }
+                        Text("Routines, Telegram, et le chat quand le notch est sur « Par défaut ».")
+                            .font(DS.Text.micro)
+                            .foregroundStyle(.tertiary)
+
                         if hermesConfig.modelProvider == "openrouter" {
                             openRouterSignInRow
                         }
@@ -185,6 +202,7 @@ struct SettingsView: View {
             // pill is accurate the moment the user opens Settings.
             hermesLauncher.refreshState()
             Task { isHermesHealthy = await hermesLauncher.isHermesReachable() }
+            Task { await hermesConfig.refreshModelOptions() }
         }
     }
 
@@ -657,15 +675,9 @@ struct SettingsView: View {
         let isSelected = hermesConfig.modelProvider == value
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         return Button {
+            // Shows this provider's key field and models only: config.yaml changes when a
+            // default model is picked (`switchModel`), so provider and model never mismatch.
             hermesConfig.modelProvider = value
-            // "custom" maps to provider:openai in config.yaml — Hermes has no
-            // "custom" provider id; OpenAI-compatible endpoints use provider:openai
-            // with model.base_url overridden.
-            let providerForConfig = (value == "custom") ? "openai" : value
-            hermesConfig.setImmediate("model.provider", value: providerForConfig)
-            if let baseURL = HermesConfig.defaultBaseURL(for: value) {
-                hermesConfig.setImmediate("model.base_url", value: baseURL)
-            }
             customBaseURL = ""
         } label: {
             HStack(spacing: 5) {
