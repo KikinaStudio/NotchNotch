@@ -61,6 +61,7 @@ hermes gateway run --replace    # foreground; stop the service first or KeepAliv
 
 - **Tap inside the open notch never closes it.** `NotchViewModel.handleClick()` only opens. Don't add `else { close() }` back.
 - **An open menu blocks the hover-out close.** `NotchViewModel.openMenuCount` follows `NSMenu.didBegin/EndTrackingNotification`: the bar's model submenus hang below the panel, and the cursor following them used to close the notch under the open menu.
+- **A `Menu` label keeps only its text and image**: `.frame`, `.padding`, `.background` are dropped, and an `NSImage` is drawn at its own size. `ProviderIcon` therefore sizes the `NSImage` itself (the 24pt SVGs used to render at 24pt in the bar's model chip).
 - **`Bundle.module` is forbidden** — use `Bundle.main.resourceURL?.appendingPathComponent(...)`. SPM's `Bundle.module` looks at the app root (breaks codesign) or `fatalError`s on first access (shipped as a crash-on-launch in v1.0.1). Never reintroduce it, even behind a fallback.
 - **rpath**: `swift build` doesn't add `@executable_path/../Frameworks`. `run.sh`/`release.sh` run `install_name_tool -add_rpath` after copying Sparkle and before codesign (v1.2.1 crashed on launch without it). Don't remove it.
 - **`@Published` fires in willSet**: a sink on `$prop` reads the OLD value. Add `.receive(on: DispatchQueue.main)` when you need the post-change state (see `NotchWindowController.sizeCancellable`).
