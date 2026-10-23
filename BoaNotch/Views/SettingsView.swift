@@ -116,8 +116,8 @@ struct SettingsView: View {
 
                 sectionDivider
 
-                // ── Computer Use ──
-                settingsSection("Computer Use") {
+                // ── Contrôle du Mac ── (out of the onboarding since H14)
+                settingsSection("Contrôle du Mac") {
                     computerUseSection
                 }
 
@@ -506,12 +506,26 @@ struct SettingsView: View {
         isHermesHealthy = false
     }
 
-    // MARK: - Computer Use section
+    // MARK: - Contrôle du Mac section
 
     @ViewBuilder
     private var computerUseSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             computerUseStateRow
+
+            if let err = computerUseService.installError {
+                computerUseErrorText(err)
+            }
+
+            if computerUseService.state != .notInstalled,
+               computerUseService.state != .installing,
+               computerUseService.chatEnabled == false {
+                computerUseChatRow
+            }
+
+            if let err = computerUseService.chatEnableError {
+                computerUseErrorText(err)
+            }
 
             if computerUseService.state != .notInstalled {
                 approvalModePicker
@@ -524,7 +538,7 @@ struct SettingsView: View {
     private var computerUseStateRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Contrôle du Mac")
+                Text("Accès à tes apps")
                     .font(DS.Text.caption)
                     .foregroundStyle(.secondary)
                 Text(computerUseStateDetail)
@@ -534,6 +548,41 @@ struct SettingsView: View {
             Spacer()
             computerUseActionButton
         }
+    }
+
+    /// cua-driver installed but `computer_use` off for the api_server agent:
+    /// only Telegram can drive the Mac (Hermes's default, H14 #11).
+    private var computerUseChatRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Dans le chat NotchNotch")
+                    .font(DS.Text.caption)
+                    .foregroundStyle(.secondary)
+                Text("Désactivé : l'agent ne peut pas encore utiliser tes apps depuis le notch")
+                    .font(DS.Text.micro)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+            if computerUseService.isEnablingInChat {
+                ProgressView()
+                    .controlSize(.mini)
+                    .scaleEffect(0.7)
+                    .frame(width: 16, height: 16)
+            } else {
+                settingsActionButton(label: "Activer") {
+                    Task { await computerUseService.enableInChat() }
+                }
+            }
+        }
+    }
+
+    private func computerUseErrorText(_ message: String) -> some View {
+        Text(message)
+            .font(DS.Text.micro)
+            .foregroundStyle(DS.Status.failure)
+            .lineLimit(4)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
     }
 
     private var computerUseStateDetail: String {

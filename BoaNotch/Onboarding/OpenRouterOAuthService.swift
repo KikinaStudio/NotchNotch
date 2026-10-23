@@ -9,8 +9,10 @@ import AppKit
 /// - Writes `OPENROUTER_API_KEY=<key>` into `~/.hermes/.env`
 /// - Sets `model.provider: openrouter` and `model.base_url:
 ///   https://openrouter.ai/api/v1` in `~/.hermes/config.yaml`
-/// - Picks a tool-capable free model via `GET /v1/models` and writes
-///   `model.default` (fallback `stepfun/step-3.5-flash:free` if the fetch fails)
+/// - Picks a tool-capable free model from the live list
+///   (`OpenRouterCatalog.pickFreeToolModel`) and writes `model.default`; leaves
+///   it untouched when no such model can be read (no hard-coded fallback: the
+///   IDs retire within weeks, H14 #13)
 final class OpenRouterOAuthService {
     static let shared = OpenRouterOAuthService()
 
@@ -41,33 +43,22 @@ final class OpenRouterOAuthService {
 
         var errorDescription: String? {
             switch self {
-            case .userCancelled: return "Sign-in cancelled"
-            case .exchangeFailed(let m): return "Token exchange failed: \(m)"
-            case .invalidResponse: return "Invalid response from OpenRouter"
-            case .stateMismatch: return "OAuth state mismatch (possible CSRF)"
-            case .timeout: return "Sign-in timed out"
-            case .listenerFailed(let m): return "Local server failed: \(m)"
+            case .userCancelled: return "Connexion annulée."
+            case .exchangeFailed(let m): return "OpenRouter a refusé la connexion : \(m)"
+            case .invalidResponse: return "Réponse inattendue d'OpenRouter. Réessaie."
+            case .stateMismatch: return "La réponse reçue ne correspond pas à cette connexion. Réessaie."
+            case .timeout: return "Connexion trop longue (2 minutes). Réessaie."
+            case .listenerFailed(let m): return "Impossible d'attendre la réponse d'OpenRouter sur ce Mac : \(m)"
             }
         }
     }
 
-    // MARK: - Preferred free model order (best-for-agentic first)
-
-    private let preferredFreeIDs: [String] = [
-        "stepfun/step-3.5-flash:free",
-        "deepseek/deepseek-chat-v3.1:free",
-        "qwen/qwen-2.5-coder-32b-instruct:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "google/gemini-2.0-flash-exp:free",
-    ]
-
-    private let fallbackFreeID = "stepfun/step-3.5-flash:free"
-
     // MARK: - Public API
 
-    /// Runs the full OAuth flow. Returns the chosen free model ID on success
-    /// (already written into `config.yaml`).
-    func connect() async throws -> String {
+    /// Runs the full OAuth flow. Returns the chosen free model ID (already
+    /// written into `config.yaml`), or nil when the key is saved but no
+    /// tool-capable free model could be read.
+    func connect() async throws -> String? {
         let verifier = Self.generateCodeVerifier()
         let challenge = Self.codeChallenge(from: verifier)
         let state = UUID().uuidString
@@ -111,9 +102,10 @@ final class OpenRouterOAuthService {
         )
 
         // Pick a tool-capable :free model from the live catalog
-        let chosenModel = await pickFreeModel()
-        HermesConfig.shared.setImmediate("model.default", value: chosenModel)
-
+        let chosenModel = await OpenRouterCatalog.shared.pickFreeToolModel()
+        if let chosenModel {
+            HermesConfig.shared.setImmediate("model.default", value: chosenModel)
+        }
         return chosenModel
     }
 
@@ -170,44 +162,6 @@ final class OpenRouterOAuthService {
             throw OAuthError.invalidResponse
         }
         return key
-    }
-
-    // MARK: - Free model picker (inline /v1/models)
-
-    /// Picks the highest-priority preferred free model that's currently listed
-    /// as `pricing.prompt == "0"` AND supports `tools` in OpenRouter's catalog.
-    /// Falls back optimistically to `fallbackFreeID` on any failure.
-    private func pickFreeModel() async -> String {
-        guard let url = URL(string: "https://openrouter.ai/api/v1/models") else {
-            return fallbackFreeID
-        }
-        do {
-            let (data, resp) = try await URLSession.shared.data(from: url)
-            guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let listed = json["data"] as? [[String: Any]] else {
-                return fallbackFreeID
-            }
-
-            // Build a set of (id) that are free + tool-capable
-            var qualified = Set<String>()
-            for entry in listed {
-                guard let id = entry["id"] as? String else { continue }
-                let pricing = entry["pricing"] as? [String: Any]
-                let promptPrice = (pricing?["prompt"] as? String) ?? ""
-                guard promptPrice == "0" else { continue }
-                let supported = entry["supported_parameters"] as? [String] ?? []
-                guard supported.contains("tools") else { continue }
-                qualified.insert(id)
-            }
-
-            for preferred in preferredFreeIDs where qualified.contains(preferred) {
-                return preferred
-            }
-            return fallbackFreeID
-        } catch {
-            return fallbackFreeID
-        }
     }
 }
 
@@ -328,7 +282,7 @@ private final class LoopbackServer: @unchecked Sendable {
         let firstLine = raw.components(separatedBy: "\r\n").first ?? ""
         let parts = firstLine.split(separator: " ")
         guard parts.count >= 2, parts[0] == "GET" else {
-            respond(connection: connection, html: Self.errorHTML("Bad request"))
+            respond(connection: connection, html: Self.errorHTML("Requête invalide"))
             return
         }
 
@@ -336,7 +290,7 @@ private final class LoopbackServer: @unchecked Sendable {
         guard let url = URL(string: "http://localhost" + path),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         else {
-            respond(connection: connection, html: Self.errorHTML("Invalid URL"))
+            respond(connection: connection, html: Self.errorHTML("Adresse invalide"))
             return
         }
 
@@ -353,14 +307,14 @@ private final class LoopbackServer: @unchecked Sendable {
         }
 
         guard params["state"] == expectedState else {
-            respond(connection: connection, html: Self.errorHTML("State mismatch"))
+            respond(connection: connection, html: Self.errorHTML("Cette réponse ne correspond pas à la connexion en cours"))
             codeContinuation?.resume(throwing: OpenRouterOAuthService.OAuthError.stateMismatch)
             codeContinuation = nil
             return
         }
 
         guard let code = params["code"] else {
-            respond(connection: connection, html: Self.errorHTML("Missing code"))
+            respond(connection: connection, html: Self.errorHTML("Code de connexion manquant"))
             codeContinuation?.resume(throwing: OpenRouterOAuthService.OAuthError.invalidResponse)
             codeContinuation = nil
             return
@@ -389,8 +343,8 @@ private final class LoopbackServer: @unchecked Sendable {
     private static func successHTML() -> String {
         """
         <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>NotchNotch · Connected</title>
+        <html lang="fr">
+        <head><meta charset="utf-8"><title>NotchNotch · Connecté</title>
         <style>
         html,body{margin:0;padding:0;height:100%;}
         body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0a;color:#eee;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0.6rem;}
@@ -401,8 +355,8 @@ private final class LoopbackServer: @unchecked Sendable {
         </head>
         <body>
         <div class="dot"></div>
-        <h1>Connected to NotchNotch</h1>
-        <p>You can close this window.</p>
+        <h1>OpenRouter est connecté à NotchNotch</h1>
+        <p>Tu peux fermer cette fenêtre.</p>
         </body>
         </html>
         """
@@ -415,8 +369,8 @@ private final class LoopbackServer: @unchecked Sendable {
             .replacingOccurrences(of: ">", with: "&gt;")
         return """
         <!DOCTYPE html>
-        <html>
-        <head><meta charset="utf-8"><title>NotchNotch · Failed</title>
+        <html lang="fr">
+        <head><meta charset="utf-8"><title>NotchNotch · Échec</title>
         <style>
         html,body{margin:0;padding:0;height:100%;}
         body{font-family:-apple-system,system-ui,sans-serif;background:#0a0a0a;color:#eee;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0.5rem;}
@@ -425,7 +379,7 @@ private final class LoopbackServer: @unchecked Sendable {
         </style>
         </head>
         <body>
-        <h1>Sign-in failed</h1>
+        <h1>La connexion a échoué</h1>
         <p>\(escaped)</p>
         </body>
         </html>

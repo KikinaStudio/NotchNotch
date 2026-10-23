@@ -1,14 +1,14 @@
 import SwiftUI
 import AppKit
 
-/// Step 4 of onboarding. Sign-in with OpenRouter via OAuth (one tap, no key
-/// to copy/paste) — or, expandable "use your own provider" row for users who
-/// already have a paid key with OpenAI / Anthropic / MiniMax / their own
-/// OpenRouter account.
+/// Connexion step (3rd of 4, H14). Sign-in with OpenRouter via OAuth (one tap,
+/// no key to copy/paste) — or, second, the "ta propre clé" row for users who
+/// already have a key with OpenRouter / OpenAI / Anthropic / MiniMax.
 ///
 /// The Choose-Model step was retired alongside this rewrite — the model is
-/// auto-picked from OpenRouter's free `:free` tier in the OAuth flow, or
-/// seeded from `HermesConfig.availableModels` for the paste-a-key path.
+/// auto-picked from OpenRouter's live free list (tool-capable) in the OAuth
+/// flow and the pasted OpenRouter key, or seeded from
+/// `HermesConfig.availableModels` for the other providers.
 struct ConnectProviderStep: View {
     @ObservedObject var onboardingVM: OnboardingViewModel
 
@@ -21,12 +21,12 @@ struct ConnectProviderStep: View {
 
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
-            Text("Connect to OpenRouter")
+            Text("Connecte-toi à OpenRouter")
                 .font(DS.Text.titleSmall)
                 .foregroundStyle(DS.Surface.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("Free, takes about 10 seconds. No credit card.")
+            Text("Gratuit, une dizaine de secondes, sans carte bancaire.")
                 .font(DS.Text.micro)
                 .foregroundStyle(AppColors.accent.opacity(0.6))
                 .padding(.top, 3)
@@ -47,7 +47,7 @@ struct ConnectProviderStep: View {
                 Rectangle()
                     .fill(DS.Stroke.hairline)
                     .frame(height: 1)
-                Text("or use your own provider")
+                Text("ou utilise ta propre clé")
                     .font(DS.Text.nano)
                     .foregroundStyle(DS.Surface.tertiary)
                     .fixedSize()
@@ -86,7 +86,7 @@ struct ConnectProviderStep: View {
                     ProgressView()
                         .controlSize(.small)
                         .scaleEffect(0.8)
-                    Text("Waiting for sign in…")
+                    Text("En attente de la connexion…")
                         .font(DS.Text.labelMedium)
                         .foregroundStyle(DS.Surface.secondary)
                 }
@@ -106,7 +106,7 @@ struct ConnectProviderStep: View {
                 Button {
                     onboardingVM.cancelOpenRouterOAuth()
                 } label: {
-                    Text("Cancel")
+                    Text("Annuler")
                         .font(DS.Text.micro)
                         .foregroundStyle(DS.Surface.secondary)
                 }
@@ -196,12 +196,12 @@ struct ConnectProviderStep: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 5)
                     .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary))
-                    .onSubmit { onboardingVM.saveAdvancedKey(provider: provider) }
+                    .onSubmit { Task { await onboardingVM.saveAdvancedKey(provider: provider) } }
 
                 Button {
-                    onboardingVM.saveAdvancedKey(provider: provider)
+                    Task { await onboardingVM.saveAdvancedKey(provider: provider) }
                 } label: {
-                    Text("Save")
+                    Text("Enregistrer")
                         .font(DS.Text.caption.weight(.semibold))
                         .foregroundStyle(onboardingVM.advancedAPIKey.isEmpty
                                          ? AnyShapeStyle(.tertiary)
@@ -227,7 +227,7 @@ struct ConnectProviderStep: View {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
-                    Text("Get a key at \(url.host ?? urlString)")
+                    Text("Obtenir une clé sur \(url.host ?? urlString)")
                         .font(DS.Text.nano)
                         .foregroundStyle(AppColors.accent.opacity(0.55))
                 }
@@ -243,7 +243,7 @@ struct ConnectProviderStep: View {
         case "openai":     return "sk-..."
         case "anthropic":  return "sk-ant-..."
         case "minimax":    return "sk-..."
-        default:           return "API key"
+        default:           return "Clé API"
         }
     }
 }
@@ -262,7 +262,7 @@ private struct SignInWithOpenRouterButton: View {
             HStack(spacing: 8) {
                 ProviderIcon(providerID: "openrouter", size: 14)
                     .foregroundStyle(DS.Surface.primary)
-                Text("Sign in with OpenRouter")
+                Text("Se connecter avec OpenRouter")
                     .font(DS.Text.labelMedium)
                     .foregroundStyle(DS.Surface.primary)
             }

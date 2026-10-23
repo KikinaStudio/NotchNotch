@@ -24,6 +24,9 @@ final class OpenRouterCatalog: ObservableObject {
         let id: String           // "nvidia/nemotron-3-super-120b-a12b:free"
         let name: String         // "Nvidia Nemotron 3 Super (free)"
         let contextLength: Int   // 1000000
+        /// `tools` in `supported_parameters`. nil = cached before H14
+        /// (unknown until the next refresh).
+        var supportsTools: Bool?
     }
 
     @Published private(set) var freeModels: [FreeModel] = []
@@ -91,7 +94,8 @@ final class OpenRouterCatalog: ObservableObject {
                 FreeModel(
                     id: api.id,
                     name: api.name,
-                    contextLength: api.context_length ?? 0
+                    contextLength: api.context_length ?? 0,
+                    supportsTools: api.supported_parameters?.contains("tools") ?? false
                 )
             }
 
@@ -107,6 +111,28 @@ final class OpenRouterCatalog: ObservableObject {
         } catch {
             // Network/decode error — keep existing list intact.
         }
+    }
+
+    // MARK: - Default free model (onboarding)
+
+    /// Agent-friendly free models, best first, all with tool calling in the
+    /// live list on 2026-10-18. Only an order: a retired ID is skipped.
+    private static let preferredToolModelIDs = [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "thinkingmachines/inkling:free",
+        "nvidia/nemotron-3.5-super-vl:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "google/gemma-4-31b-it:free",
+    ]
+
+    /// Free model with tool calling for a new OpenRouter connection: refreshes
+    /// the list, then the first `preferredToolModelIDs` entry still listed,
+    /// else the first tool-capable free model of the list. nil when OpenRouter
+    /// can't be read: never a hard-coded ID (they retire within weeks).
+    func pickFreeToolModel() async -> String? {
+        await refresh()
+        let tooled = await MainActor.run { freeModels.filter { $0.supportsTools == true }.map(\.id) }
+        return Self.preferredToolModelIDs.first(where: tooled.contains) ?? tooled.first
     }
 
     // MARK: - Label generation
@@ -145,6 +171,7 @@ final class OpenRouterCatalog: ObservableObject {
         let name: String
         let context_length: Int?
         let pricing: Pricing?
+        let supported_parameters: [String]?
 
         struct Pricing: Decodable {
             let prompt: String?

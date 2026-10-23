@@ -7,41 +7,44 @@ struct OnboardingContainerView: View {
         VStack(spacing: 0) {
             Group {
                 switch onboardingVM.currentStep {
-                case 0: WelcomeStep(onboardingVM: onboardingVM)
-                case 1: PrivacyStep(onboardingVM: onboardingVM)
-                case 2: InstallHermesStep(onboardingVM: onboardingVM)
-                case 3: ConnectProviderStep(onboardingVM: onboardingVM)
-                case 4: ComputerUseStep(onboardingVM: onboardingVM)
-                case 5: TelegramStep(onboardingVM: onboardingVM)
-                case 6: ReadyStep(onboardingVM: onboardingVM)
-                default: ReadyStep(onboardingVM: onboardingVM)
+                case .welcome: WelcomeStep(onboardingVM: onboardingVM)
+                case .install: InstallHermesStep(onboardingVM: onboardingVM)
+                case .connect: ConnectProviderStep(onboardingVM: onboardingVM)
+                case .ready: ReadyStep(onboardingVM: onboardingVM)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Navigation — back + dots (no back on welcome/ready, no dots on welcome/ready)
-            if onboardingVM.currentStep > 0 && onboardingVM.currentStep < 6 {
+            // Navigation — dots on install/connect. « Retour » only on the
+            // install step while nothing runs: going back from Connexion would
+            // only re-run the (finished) install, which advances on its own.
+            if onboardingVM.currentStep == .install || onboardingVM.currentStep == .connect {
                 HStack {
-                    Button { onboardingVM.goBack() } label: {
-                        HStack(spacing: 3) {
-                            Image(systemName: "chevron.left")
-                                .font(DS.Icon.chevron)
-                            Text("Back")
-                                .font(DS.Text.micro)
+                    if onboardingVM.currentStep == .install && !onboardingVM.isInstalling {
+                        Button { onboardingVM.goBack() } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: "chevron.left")
+                                    .font(DS.Icon.chevron)
+                                Text("Retour")
+                                    .font(DS.Text.micro)
+                            }
+                            .foregroundStyle(DS.Surface.secondary)
                         }
-                        .foregroundStyle(DS.Surface.secondary)
+                        .buttonStyle(.plain)
+                        .pointingHandCursor()
+                        .frame(width: 56, alignment: .leading)
+                    } else {
+                        Color.clear.frame(width: 56, height: 1)
                     }
-                    .buttonStyle(.plain)
-                    .pointingHandCursor()
 
                     Spacer()
 
                     // Step dots
                     HStack(spacing: 5) {
-                        ForEach(0..<7, id: \.self) { i in
+                        ForEach(OnboardingStep.allCases, id: \.self) { step in
                             Circle()
                                 // TODO(design): pas de bucket DS.Surface pour 0.1 (étape inactive); 0.5 ≈ secondary mais ternaire mixte conservé en littéral pour cohérence visuelle.
-                                .fill(.white.opacity(i == onboardingVM.currentStep ? 0.5 : 0.1))
+                                .fill(.white.opacity(step == onboardingVM.currentStep ? 0.5 : 0.1))
                                 .frame(width: 4, height: 4)
                         }
                     }
@@ -49,7 +52,7 @@ struct OnboardingContainerView: View {
                     Spacer()
 
                     // Invisible spacer for symmetry
-                    Color.clear.frame(width: 44, height: 1)
+                    Color.clear.frame(width: 56, height: 1)
                 }
                 .padding(.top, 6)
             }
