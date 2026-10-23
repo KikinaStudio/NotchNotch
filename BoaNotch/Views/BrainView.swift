@@ -797,7 +797,7 @@ struct BrainView: View {
             }
         }
         .buttonStyle(PrimaryButtonStyle())
-        .help("Parcourir le catalogue de capacités")
+        .nnTooltip("Parcourir le catalogue de capacités")
     }
 
     private func technicalCategoryBlock(_ group: SkillCategoryGroup) -> some View {
@@ -1152,7 +1152,7 @@ struct BrainView: View {
         .buttonStyle(.plain)
         .disabled(brainVM.pendingRawCount == 0 || brainVM.isIngesting)
         .pointingHandCursor()
-        .help(syncTooltip)
+        .nnTooltip(syncTooltip)
         .onAppear {
             if brainVM.pendingRawCount > 0 { startSyncPulse() }
         }
@@ -1274,7 +1274,7 @@ struct BrainView: View {
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
-                .help("Ouvrir le dossier de la capacité")
+                .nnTooltip("Ouvrir le dossier de la capacité", edge: .top)
             }
             .padding(.top, 8)
         }
@@ -1401,7 +1401,7 @@ struct MemoryCard: View {
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
-                .help("Modifier")
+                .nnTooltip("Modifier", edge: .top)
 
                 Button {
                     confirmingDelete = true
@@ -1412,7 +1412,7 @@ struct MemoryCard: View {
                 }
                 .buttonStyle(.plain)
                 .pointingHandCursor()
-                .help("Supprimer")
+                .nnTooltip("Supprimer", edge: .top)
             }
         }
     }

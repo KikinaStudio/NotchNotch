@@ -156,7 +156,7 @@ struct RoutinesView: View {
             .animation(DS.Motion.standard, value: hoveredJobId == job.id)
         }
         .buttonStyle(.plain)
-        .help(tooltipText(for: job))
+        .nnTooltip(tooltipText(for: job))
         .onHover { over in hoveredJobId = over ? job.id : nil }
         .pointingHandCursor()
         .contextMenu {
@@ -301,7 +301,7 @@ struct RoutinesView: View {
         }
     }
 
-    /// Multi-line content for the native `.help()` tooltip on the pill.
+    /// Multi-line content for the `nnTooltip` on the pill.
     /// Phrasing varies by routine type (runs/deliveries/checks) but the
     /// data shape is identical: count + last_run + next_run + optional error.
     private func tooltipText(for job: CronJob) -> String {

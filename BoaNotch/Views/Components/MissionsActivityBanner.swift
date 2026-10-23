@@ -77,7 +77,7 @@ private struct CostCard: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(cardBackground)
-        .help(helpText)
+        .nnTooltip(helpText)
     }
 
     private var costDisplay: String {

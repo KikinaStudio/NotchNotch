@@ -63,7 +63,7 @@ struct SkillsHubView: View {
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
-            .help("Fermer")
+            .nnTooltip("Fermer")
         }
     }
 

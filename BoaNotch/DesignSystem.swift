@@ -142,6 +142,9 @@ enum DS {
         static let paletteFill = AnyShapeStyle(Color.white.opacity(0.07))
         /// Ligne choisie de la palette `/`, posée sur `paletteFill`. Blanc 8%.
         static let paletteSelection = AnyShapeStyle(Color.white.opacity(0.08))
+        /// Fond de l'infobulle maison (`nnTooltip`). Opaque : elle passe au-dessus
+        /// du texte du chat et doit rester lisible.
+        static let tooltipFill = AnyShapeStyle(Color(white: 0.13))
         /// Lien externe discret (« Voir tous les fournisseurs ↗ »). Accent 70 %,
         /// la valeur déjà écrite en dur dans Réglages et l'onboarding.
         static let link = AnyShapeStyle(AppColors.accent.opacity(0.7))
@@ -249,6 +252,10 @@ enum DS {
         /// que le label est saisi par l'utilisateur, pas affiché statiquement.
         static let inputH = CGFloat(10)
         static let inputV = CGFloat(6)
+
+        /// 8H × 4V — infobulle maison (`nnTooltip`), une ou deux lignes de caption.
+        static let tooltipH = CGFloat(8)
+        static let tooltipV = CGFloat(4)
     }
 
     // MARK: - Hairline weights

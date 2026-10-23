@@ -129,7 +129,7 @@ struct ExpandedBarView: View {
             }
             .buttonStyle(.plain)
             .pointingHandCursor()
-            .help(config.skipMemory ? "Incognito" : "Incognito")
+            .nnTooltip(config.skipMemory ? "Incognito" : "Incognito", edge: .top)
 
             Spacer()
 
@@ -150,7 +150,7 @@ struct ExpandedBarView: View {
                         .frame(width: innerWidth * visibleRatio, height: 4)
                         .padding(.leading, 2)
                 }
-                .help("Contexte : \(chatVM.lastInputTokens) tokens · \(pct) %")
+                .nnTooltip("Contexte : \(chatVM.lastInputTokens) tokens · \(pct) %", edge: .top)
             .accessibilityLabel("Contexte utilisé : \(pct) pour cent")
         }
         .padding(.horizontal, 12)

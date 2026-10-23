@@ -97,7 +97,7 @@ struct MessageBubble: View {
                             .onHover { isHoveredRefine = $0 }
                             .disabled(isChatStreaming)
                             .opacity(isChatStreaming ? 0.4 : 1.0)
-                            .help(isChatStreaming ? "Hermes répond…" : "Affine cette routine")
+                            .nnTooltip(isChatStreaming ? "Hermes répond…" : "Affine cette routine", edge: .top)
                         }
                     }
                     .padding(.top, 2)
