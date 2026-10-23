@@ -170,6 +170,7 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 ## Working rules
 
 - **Hermes v0.21 plan**: read [PLAN-HERMES-V021.md](PLAN-HERMES-V021.md) before an H-session (next session, done work, open questions) and update its table + journal in the same commit at the end.
+- **v3 (agent team) plan**: read [PLAN-V3-EQUIPE.md](PLAN-V3-EQUIPE.md) before an E- or P-session (verified Hermes facts, decisions D1–D7, session order) and update its table + journal in the same commit at the end.
 - **Read first, report back** on multi-file changes: surface assumptions, confirm signatures, list impacted files, then code.
 - Match local idioms (e.g. the `.onChange` closure signature already used in the file).
 - After a change: build with `scripts/run.sh` and manually test the feature; check `git diff` for unexpected edits; document new `@AppStorage` keys above.
