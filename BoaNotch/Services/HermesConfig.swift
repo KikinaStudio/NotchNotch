@@ -258,6 +258,12 @@ class HermesConfig: ObservableObject {
         let hermesHome = Self.hermesHome
         let envPath = "\(hermesHome)/.env"
         try? FileManager.default.createDirectory(atPath: hermesHome, withIntermediateDirectories: true)
+        // Atomic writes keep an existing file's mode, but a new file gets the umask's 0644:
+        // create it owner-only first, like Hermes's own `_secure_file` (H11). An existing
+        // mode is left alone (managed installs use 0640).
+        if !FileManager.default.fileExists(atPath: envPath) {
+            FileManager.default.createFile(atPath: envPath, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
 
         var content = (try? String(contentsOfFile: envPath, encoding: .utf8)) ?? ""
         let pattern = "(?m)^" + NSRegularExpression.escapedPattern(for: key) + "=.*$"
