@@ -39,7 +39,7 @@ struct ProviderIcon: View {
 
     var body: some View {
         if let slug = ProviderIconCatalog.slug(for: providerID),
-           let image = Self.cachedImage(for: slug) {
+           let image = Self.cachedImage(for: slug, size: size) {
             image
                 .resizable()
                 .renderingMode(.template)
@@ -51,18 +51,21 @@ struct ProviderIcon: View {
         }
     }
 
-    // MARK: - Cache (load each SVG once at first use)
+    // MARK: - Cache (load each SVG once per size at first use)
     private static var cache: [String: Image] = [:]
 
-    private static func cachedImage(for slug: String) -> Image? {
-        if let hit = cache[slug] { return hit }
+    private static func cachedImage(for slug: String, size: CGFloat) -> Image? {
+        let key = "\(slug)@\(size)"
+        if let hit = cache[key] { return hit }
         guard let url = Bundle.main.url(forResource: "provider_\(slug)", withExtension: "svg"),
               let nsImage = NSImage(contentsOf: url) else {
             return nil
         }
         nsImage.isTemplate = true
+        // A Menu label ignores `.frame` and draws the NSImage at its own size (24pt SVGs).
+        nsImage.size = NSSize(width: size, height: size)
         let image = Image(nsImage: nsImage)
-        cache[slug] = image
+        cache[key] = image
         return image
     }
 }

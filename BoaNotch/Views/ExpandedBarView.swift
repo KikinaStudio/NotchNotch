@@ -76,7 +76,7 @@ struct ExpandedBarView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    ProviderIcon(providerID: chatModelID.isEmpty ? config.modelProvider : chatModelProvider, size: 6)
+                    ProviderIcon(providerID: chatModelID.isEmpty ? config.modelProvider : chatModelProvider, size: 10)
                     Text(chatModelID.isEmpty ? config.modelDisplayName : OpenRouterCatalog.niceLabel(for: chatModelID))
                         .font(DS.Text.microMedium)
                 }
@@ -140,21 +140,17 @@ struct ExpandedBarView: View {
             let trackWidth: CGFloat = 120
             let innerWidth = trackWidth - 4
             let visibleRatio = chatVM.lastInputTokens > 0 ? max(rawRatio, 0.05) : 0
-            HStack(spacing: 6) {
-                Text("Contexte")
-                    .font(DS.Text.micro)
-                    .foregroundStyle(.secondary)
-                Capsule()
-                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
-                    .frame(width: trackWidth, height: 8)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(color)
-                            .frame(width: innerWidth * visibleRatio, height: 4)
-                            .padding(.leading, 2)
-                    }
-            }
-            .help("\(chatVM.lastInputTokens) tokens · \(pct)% du contexte")
+            // No "Contexte" word: in a tight row (long model name) it wrapped and stretched the bar.
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                .frame(width: trackWidth, height: 8)
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(color)
+                        .frame(width: innerWidth * visibleRatio, height: 4)
+                        .padding(.leading, 2)
+                }
+                .help("Contexte : \(chatVM.lastInputTokens) tokens · \(pct) %")
             .accessibilityLabel("Contexte utilisé : \(pct) pour cent")
         }
         .padding(.horizontal, 12)
