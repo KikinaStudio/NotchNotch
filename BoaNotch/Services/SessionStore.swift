@@ -6,7 +6,8 @@ struct SessionSummary: Identifiable {
     let source: String
     let title: String?
     let model: String?
-    let startedAt: Date?
+    /// Last message, else the session start. Sorts the history and shows its relative date.
+    let lastActiveAt: Date?
     let messageCount: Int
     let firstUserMessage: String?
     let inputTokens: Int
@@ -93,8 +94,8 @@ class SessionStore: ObservableObject {
         }
     }
 
-    /// Load recent sessions from Hermes state.db (max 30, newest first).
-    /// Excludes one-shot stubs (`message_count < 2`) and stale sessions older than 60 days.
+    /// Load recent sessions from Hermes state.db (max 30, most recently active first).
+    /// Excludes one-shot stubs (`message_count < 2`) and sessions idle for more than 60 days.
     /// Pulls the first user message in the same query so the history view can
     /// fall back to a message preview when no title exists.
     func loadRecentSessions() {
@@ -108,23 +109,42 @@ class SessionStore: ObservableObject {
         let cutoff = Date().timeIntervalSince1970 - (60 * 86_400)
 
         var stmt: OpaquePointer?
+        // Newest activity first (last message, else the start): a resumed conversation moves
+        // back to the top instead of staying at the date it was opened.
         func sql(notchnotchKey: String) -> String { """
-            SELECT s.id, s.source, s.title, s.model, s.started_at,
+            SELECT s.id, s.source, s.title, s.model, a.last_active,
                    s.message_count, s.input_tokens, s.output_tokens,
                    (SELECT m.content FROM messages m
                     WHERE m.session_id = s.id AND m.role = 'user'
                     ORDER BY m.timestamp ASC LIMIT 1) AS first_user_msg,
                    COALESCE(\(notchnotchKey), s.id) AS conversation_key
-            FROM sessions s
-            WHERE s.message_count >= 2
-              AND s.started_at >= ?
-              AND s.source != 'cron'
-            ORDER BY s.started_at DESC
+            FROM (SELECT s2.id AS sid,
+                         COALESCE((SELECT MAX(m.timestamp) FROM messages m WHERE m.session_id = s2.id),
+                                  s2.started_at) AS last_active
+                  FROM sessions s2
+                  WHERE s2.message_count >= 2 AND s2.source != 'cron') a
+            JOIN sessions s ON s.id = a.sid
+            WHERE a.last_active >= ?
+            ORDER BY a.last_active DESC
             LIMIT 30
             """ }
-        // Schemas without sessions.session_key (pre-mid-2026 Hermes) fall back to the row id.
-        guard sqlite3_prepare_v2(db, sql(notchnotchKey: "CASE WHEN s.session_key LIKE 'notchnotch-%' THEN s.session_key END"), -1, &stmt, nil) == SQLITE_OK
-           || sqlite3_prepare_v2(db, sql(notchnotchKey: "NULL"), -1, &stmt, nil) == SQLITE_OK else {
+        // The key is the raw `session_key` (v0.21.6–v0.22.2), the tail of the v0.22.5+ route
+        // (`agent:main:api_server:dm:notchnotch-…`), or, for a conversation whose row id is not
+        // the key, Hermes's key registry (matched on `chat_id`, which compression children keep).
+        // Older schemas drop the registry, then `session_key` (pre-mid-2026), and use the row id.
+        let routeKey = """
+            CASE WHEN s.session_key LIKE 'notchnotch-%' THEN s.session_key
+                 WHEN s.session_key LIKE '%:notchnotch-%'
+                 THEN substr(s.session_key, instr(s.session_key, ':notchnotch-') + 1) END
+            """
+        let registryKey = """
+            (SELECT substr(m.key, \(Self.declaredKeyPrefix.count + 1)) FROM state_meta m
+             WHERE m.key LIKE '\(Self.declaredKeyPrefix)notchnotch-%' AND m.value IN (s.id, s.chat_id) LIMIT 1)
+            """
+        let keyExpressions = ["COALESCE(\(routeKey), \(registryKey))", routeKey, "NULL"]
+        guard keyExpressions.contains(where: {
+            sqlite3_prepare_v2(db, sql(notchnotchKey: $0), -1, &stmt, nil) == SQLITE_OK
+        }) else {
             recentSessions = []
             return
         }
@@ -140,7 +160,7 @@ class SessionStore: ObservableObject {
                 ? String(cString: sqlite3_column_text(stmt, 2)) : nil
             let model: String? = sqlite3_column_type(stmt, 3) != SQLITE_NULL
                 ? String(cString: sqlite3_column_text(stmt, 3)) : nil
-            let startedAt: Date? = sqlite3_column_type(stmt, 4) != SQLITE_NULL
+            let lastActiveAt: Date? = sqlite3_column_type(stmt, 4) != SQLITE_NULL
                 ? Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)) : nil
             let messageCount = Int(sqlite3_column_int64(stmt, 5))
             let inputTokens = Int(sqlite3_column_int64(stmt, 6))
@@ -151,7 +171,7 @@ class SessionStore: ObservableObject {
 
             results.append(SessionSummary(
                 id: id, source: source, title: title, model: model,
-                startedAt: startedAt, messageCount: messageCount,
+                lastActiveAt: lastActiveAt, messageCount: messageCount,
                 firstUserMessage: firstUserMessage,
                 inputTokens: inputTokens, outputTokens: outputTokens,
                 conversationKey: conversationKey
@@ -188,8 +208,16 @@ class SessionStore: ObservableObject {
         return results
     }
 
-    /// Id of the most recent state.db row whose `session_key` is `sessionKey` (read-only), nil if
-    /// none or if the schema predates `session_key`. /v1/chat/completions addresses rows by id.
+    /// Hermes v0.22.5+ registry of conversation keys: `state_meta` row `<prefix><key>` → session id.
+    /// Filled when /v1/responses names a conversation, or when an older row stamped with the raw key
+    /// is adopted (its `session_key` then becomes the route of its own id and loses our key).
+    private static let declaredKeyPrefix = "gateway.api.conversation.v1."
+
+    /// Id of the state.db row a conversation key continues on (read-only), nil if none or if the
+    /// schema predates `session_key`. /v1/chat/completions addresses rows by id. In order: Hermes's
+    /// key registry (v0.22.5+, the server follows compression from it), else the most recent row
+    /// whose `session_key` is the key (v0.21.6–v0.22.2) or ends with `:<key>` (v0.22.5+ route
+    /// `agent:<profile>:api_server:dm:<id>`, where the id is the key for a chat-born conversation).
     static func latestRowId(sessionKey: String) -> String? {
         let path = FileManager.default.homeDirectoryForCurrentUser.path + "/.hermes/state.db"
         var db: OpaquePointer?
@@ -198,13 +226,20 @@ class SessionStore: ObservableObject {
             return nil
         }
         defer { sqlite3_close(db) }
-        var stmt: OpaquePointer?
-        let sql = "SELECT id FROM sessions WHERE session_key = ? ORDER BY started_at DESC LIMIT 1"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
-        defer { sqlite3_finalize(stmt) }
-        sqlite3_bind_text(stmt, 1, (sessionKey as NSString).utf8String, -1, nil)
-        guard sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) else { return nil }
-        return String(cString: text)
+        let queries = [
+            "SELECT s.id FROM state_meta m JOIN sessions s ON s.id = m.value WHERE m.key = '\(declaredKeyPrefix)' || ?1",
+            "SELECT id FROM sessions WHERE session_key = ?1 OR session_key LIKE '%:' || ?1 ORDER BY started_at DESC LIMIT 1",
+        ]
+        for sql in queries {
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { continue }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, (sessionKey as NSString).utf8String, -1, nil)
+            if sqlite3_step(stmt) == SQLITE_ROW, let text = sqlite3_column_text(stmt, 0) {
+                return String(cString: text)
+            }
+        }
+        return nil
     }
 
     private func openDB() -> OpaquePointer? {

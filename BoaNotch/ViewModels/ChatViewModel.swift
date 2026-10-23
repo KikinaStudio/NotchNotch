@@ -51,6 +51,8 @@ class ChatViewModel: ObservableObject {
 
     var sessionId: String? { client.sessionId }
     private var streamTask: Task<Void, Never>?
+    /// Run id of the streaming /v1/chat/completions turn (`.runStarted`), for Stop.
+    private var activeRunId: String?
     private var streamingCancellable: AnyCancellable?
 
     weak var notchVM: NotchViewModel? {
@@ -151,6 +153,7 @@ class ChatViewModel: ObservableObject {
         messages.append(assistantMessage)
         isStreaming = true
         connectionError = nil
+        activeRunId = nil
 
         streamTask = Task { @MainActor in
             do {
@@ -282,6 +285,9 @@ class ChatViewModel: ObservableObject {
                                     notchVM?.open()
                                 }
                             }
+
+                        case .runStarted(let id):
+                            self.activeRunId = id
                         }
                     }
                 }
@@ -529,6 +535,11 @@ class ChatViewModel: ObservableObject {
     }
 
     func cancelStream() {
+        // Hermes v0.22.5+ keeps the agent running when the stream closes: stop the run itself.
+        if isStreaming, let runId = activeRunId {
+            Task { [client] in await client.stopRun(runId: runId) }
+        }
+        activeRunId = nil
         streamTask?.cancel()
         streamTask = nil
         if let lastIndex = messages.indices.last, messages[lastIndex].isStreaming {
@@ -563,7 +574,9 @@ class ChatViewModel: ObservableObject {
             guard let self else { return }
             let result: Bool?
             do {
-                result = try await self.client.respondToApproval(runId: request.runId, requestId: request.requestId, choice: choice)
+                result = try await self.client.respondToApproval(
+                    runId: request.runId, requestId: request.requestId,
+                    executionGeneration: request.executionGeneration, choice: choice)
             } catch {
                 os_log("[notchnotch] approval response failed: %{public}@", type: .error, String(describing: error))
                 result = nil
