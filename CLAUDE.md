@@ -98,7 +98,7 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 - **Lists (Memory, Skills, History, Routines)**: no filled card backgrounds at rest. Hairline dividers between rows, ~32pt min height (`DS.Layout.rowMinHeight`). Hover may use `nnGlass(in:)` on macOS 26+ or a very subtle tint.
 - **Section headers**: uppercase monospaced (`DS.Text.sectionHead`), `DS.Surface.headerLow`, tracking 1.5. Never accent-tinted.
 - **Tab intros**: one French line, `DS.Text.caption` + `AppColors.accent`. Not italic (user rejected italics).
-- **Accent** (`AppColors.accent`, light blue): signature moments only (§ mark, active-state dots, chat toast, primary CTA). Never on headings.
+- **Accent** (`AppColors.accent`, white since 2026-10-12; the light blue is gone): signature moments only (§ mark, active-state dots, chat toast, primary CTA). Never on headings.
 - **Selected button on accent fill → text `.black.opacity(0.85)`**, never white (illegible).
 - **Pill vs button**: `Capsule()` only for tag-like state chips (routine context tag, ExpandedBar chips, floating toasts). Buttons, segments and CTAs use `RoundedRectangle(cornerRadius: DS.Radius.button, style: .continuous)`. The send button is the only Capsule exception.
 - **Icon sizing**: top bar icons are 13pt medium (`DS.Icon.topBar`); bottom input bar icons 14pt medium (`DS.Icon.secondary`); send button 18pt. `xmark.triangle.circle.square` (Tools) gets `sizeBoost: 2` for visual balance.
@@ -172,6 +172,7 @@ The panel is near-black to camouflage the hardware notch. Native macOS editorial
 ## Working rules
 
 - **Hermes v0.21 plan**: read [PLAN-HERMES-V021.md](PLAN-HERMES-V021.md) before an H-session (next session, done work, open questions) and update its table + journal in the same commit at the end.
+- **v3 (agent team) plan**: read [PLAN-V3-EQUIPE.md](PLAN-V3-EQUIPE.md) before an E- or P-session (verified Hermes facts, decisions D1–D7, session order) and update its table + journal in the same commit at the end.
 - **Read first, report back** on multi-file changes: surface assumptions, confirm signatures, list impacted files, then code.
 - Match local idioms (e.g. the `.onChange` closure signature already used in the file).
 - After a change: build with `scripts/run.sh` and manually test the feature; check `git diff` for unexpected edits; document new `@AppStorage` keys above.
