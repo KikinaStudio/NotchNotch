@@ -1,51 +1,51 @@
-# notchnotch v1.4.0
+# notchnotch : nouveautés depuis v1.4.0
 
-## Plus jamais de Terminal pour démarrer Hermes
+Cette version suit Hermes jusqu'à la **v0.22.5** (sortie le 22 octobre 2026). Son nouveau gateway changeait la façon de répondre aux approbations et d'identifier les conversations : sans cette mise à jour, « Autoriser » et « Refuser » ne répondaient plus et l'historique perdait les nouvelles conversations. Les anciennes versions d'Hermes (dès la v0.11) continuent de marcher.
 
-Jusqu'à v1.3.2, après l'install Hermes ne démarrait que si tu lançais `hermes gateway run` à la main dans Terminal — et fallait le garder ouvert. Pour un utilisateur non-tech c'était un dealbreaker : il envoyait son premier message dans le chat, voyait *"Hermes ne répond pas..."*, et n'avait aucune indication de quoi faire.
+## Hermes demande avant d'agir
 
-v1.4.0 corrige ça avec un **LaunchAgent macOS** installé automatiquement.
+Quand ton agent veut lancer une commande risquée (supprimer des fichiers, toucher au système), une carte apparaît dans sa réponse : **Autoriser** une fois, ou **Refuser**. Notch fermé, un toast te prévient qu'il attend. Le mode se règle dans Réglages : demander (manuel), laisser Hermes juger (intelligent) ou désactivé.
 
-### Ce qui change concrètement
+## Un chat plus vivant, et un vrai Stop
 
-- **Onboarding** : à la fin de l'étape *"Setting up your AI agent"*, NotchNotch installe maintenant un LaunchAgent (`~/Library/LaunchAgents/ai.hermes.gateway.plist`) qui démarre Hermes au login et le relance s'il crashe. Tu peux fermer ton Mac, le rouvrir le lendemain — Hermes est déjà là quand tu envoies un message.
+- Sur Hermes v0.21.6 et plus, le chat passe par l'API en direct d'Hermes : tu vois son raisonnement et une ligne d'état pendant qu'il travaille.
+- **Stop** arrête vraiment l'agent, même au milieu d'une commande. Avant, fermer la réponse laissait la commande aller au bout.
+- Une vraie erreur du fournisseur (crédit épuisé, hors ligne) s'affiche comme une erreur, plus comme une réponse.
 
-- **Toast réparable** : si jamais Hermes ne répond pas (process tué à la main, plist supprimée, etc.), le toast *"Hermes ne répond pas. Tape pour réparer."* est maintenant **cliquable**. Un tap installe/relance le LaunchAgent, attend que `/health` réponde, et rejoue ton message. Plus besoin d'ouvrir Terminal.
+## Le modèle de cette conversation
 
-- **Réglages → Hermes** : nouvelle section qui montre l'état du LaunchAgent (actif / en pause / pas installé), avec boutons *Installer*, *Redémarrer*, *Désinstaller*, et *Voir les logs* (qui révèle `~/.hermes/logs/gateway.log` dans Finder).
+Le menu du modèle, dans la barre du notch, liste les fournisseurs que tu as connectés dans Hermes et change le modèle **pour cette conversation seulement**. Le modèle par défaut reste dans Réglages. La barre tient sur une ligne même avec un nom de modèle long, et la jauge de contexte affiche le nombre de jetons au survol.
 
-- **Au démarrage** : si le plist existe mais que launchd ne l'a pas chargé (mise à jour de NotchNotch, edit manuel), l'app le re-charge automatiquement sans rien demander.
+## La palette `/`
 
-### Sous le capot
+Tape `/` dans le champ : les commandes de notchnotch (`/new`, `/model`, `/sessions`, `/stop`) avec leur description, puis tes skills. Flèches, Tab, Entrée, Échap. Les commandes d'Hermes qui ne marchent pas par l'API (`/goal`, `/loop`…) ne partent plus au modèle, qui faisait semblant de les exécuter : notchnotch te dit où elles marchent. Une faute de frappe proche (`/models`) te propose la bonne commande.
 
-Le LaunchAgent utilise le label `ai.hermes.gateway` (convention communauté Hermes), tourne `python3 hermes gateway run --replace`, et garde des logs séparés stdout/stderr dans `~/.hermes/logs/`. Le flag `--replace` évite les conflits de port si une instance manuelle tourne déjà — le LaunchAgent reprend la main proprement.
+## Missions
 
-User-scoped (`~/Library/LaunchAgents/`), donc zéro sudo, zéro mot de passe admin, zéro TCC à accorder. Tu peux toujours le contrôler avec `launchctl bootout/bootstrap gui/$(id -u)/ai.hermes.gateway` si tu veux faire du custom.
+- Pause, reprise et changement d'horaire directement dans l'onglet Missions.
+- Un toast rouge au premier échec d'une série, avec la raison ; une tape ouvre Missions.
+- Le bandeau de coût n'affiche plus un faux « 0,00 $ » quand Hermes ne connaît pas le prix : il dit combien de sessions sont sans tarif.
 
-## API HTTP toujours active
+## Un onboarding en 4 écrans
 
-Hermes n'ouvre le port 8642 que si `API_SERVER_ENABLED=true` est dans `~/.hermes/.env`. Avant v1.4.0 ce flag était implicite quand un messaging platform était configuré, mais pour un user qui n'a ni Telegram, ni Discord, ni Slack, Hermes tournait en mode **cron-only** — actif via le LaunchAgent, mais sans serveur HTTP que NotchNotch puisse joindre. Symptôme : toast jaune permanent *"Hermes ne répond pas"* même après une install propre.
+Bienvenue, Installation, Connexion, Prêt. Hermes s'installe étape par étape, sur sa dernière version stable. La connexion se fait en un clic avec OpenRouter (un modèle gratuit qui sait utiliser des outils est choisi pour toi), ou avec ta propre clé OpenRouter, OpenAI, Anthropic ou MiniMax. Contrôle du Mac passe dans les Réglages.
 
-v1.4.0 écrit `API_SERVER_ENABLED=true` (et `API_SERVER_CORS_ORIGINS=*` pour l'extension Clipper) automatiquement à la fin de l'onboarding. Sur les installs existantes (upgrade depuis v1.3.x via Sparkle), le boot probe NotchNotch vérifie ces deux clés au lancement et les ajoute si absentes — puis kickstart le LaunchAgent pour que Hermes les relise. Toute valeur que tu aurais explicitement posée (`API_SERVER_ENABLED=false` par exemple) est respectée et n'est pas écrasée.
+## Réglages
 
-## Modèles OpenRouter gratuits à jour
+- **Contrôle du Mac** affiche le vrai état des autorisations, lu chez Hermes, et un bouton « Autoriser » qui les demande en une fois.
+- **Mémoire** : le sélecteur liste les fournisseurs de mémoire qu'Hermes trouve vraiment, intégrés ou installés depuis le catalogue.
+- **Confidentialité OpenRouter** : une ligne qui mène à tes réglages de confidentialité chez OpenRouter.
+- **Clés** : `~/.hermes/.env` est créé lisible par toi seul, avec un lien vers les coffres 1Password et Bitwarden pris en charge par Hermes.
 
-La liste des modèles OpenRouter `:free` proposés dans le picker est maintenant **fetch live** depuis l'API OpenRouter au premier lancement, mise en cache 24h dans UserDefaults, et rafraîchie une fois par jour. Plus de liste rancie qui se traîne pendant des mois pendant qu'OpenRouter retire des modèles — au moindre `hermes-3-405b:free` qui disparaît côté serveur, le picker NotchNotch est à jour au prochain refresh.
+## Petits correctifs
 
-Fallback réseau-down : si OpenRouter est injoignable au tout premier lancement, le picker affiche une liste hardcodée de 4 modèles `:free` connus comme stables (DeepSeek V4 Flash, Nemotron 3 Nano Omni, Gemma 4 26B / 31B). Les rafraîchissements suivants tenteront de nouveau silencieusement.
-
-## `max_tokens` adapté aux modèles gratuits
-
-Le tier gratuit d'OpenRouter rejette toute requête où `max_tokens` excède ~13K (plancher de crédits par requête). Hermes calcule `max_tokens` à partir de `context_length` par défaut, ce qui balloon à 65K+ sur des modèles modernes — et chaque chat se fait shooter en HTTP 402 *"You requested up to 65536 tokens, but can only afford 13333"*.
-
-v1.4.0 cap explicitement `model.max_tokens` à **8000** dans `~/.hermes/config.yaml` dès qu'un modèle `:free` est sélectionné dans le picker (marge confortable sous le plancher). Si tu reviens sur un modèle payant, l'override est retiré et Hermes reprend son calcul naturel à partir du context_length. Les users qui upgradent depuis pre-v1.4.0 et qui étaient déjà sur un `:free` se voient appliquer la cap au prochain boot (uniquement si `max_tokens` n'est pas déjà posé manuellement — un override explicite est respecté).
+- Les infobulles s'affichent enfin dans le notch : celles de macOS n'y apparaissaient jamais.
+- Modifier ou supprimer un souvenir marche avec la mémoire d'Hermes v0.22.
+- Plus de fenêtre Réglages vide au lancement.
+- L'accent de l'interface est blanc.
 
 ## Pour mettre à jour
 
-Sparkle te proposera v1.4.0 automatiquement. À la première ouverture après update, NotchNotch détecte qu'il n'y a pas encore de LaunchAgent et tu auras une option *Installer* dans Réglages → Hermes (ou ça s'installera tout seul au premier toast "Hermes ne répond pas" cliquable).
+Sparkle te propose la mise à jour. Pour profiter de tout, mets aussi Hermes à jour (`hermes update`) ; notchnotch reste compatible avec ta version actuelle.
 
-### Le reste
-
-Tout le contenu de v1.3.x reste : Contrôle du Mac (opt-in), trois onglets Memory/Tools/Missions, timeline unifiée du chat, Liquid Glass, SF Symbols 7, Hermes 0.13 (SSE retry, FR locale, fix MiniMax), refine wand sur routines locales, toasts par couleur sémantique, empty-state carousel, 11 providers LLM, sélecteur de memory provider.
-
-Bypass Gatekeeper au premier launch (right-click → Open → Open) — notchnotch n'est pas notarized par Apple.
+Bypass Gatekeeper au premier lancement (clic droit → Ouvrir → Ouvrir) : notchnotch n'est pas notarisé par Apple.

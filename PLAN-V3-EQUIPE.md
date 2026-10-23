@@ -268,7 +268,7 @@ Statut : ⏳ à faire · 🟡 en cours · ✅ fait · ⏸ en attente.
 - ✅ **Régression v2 (v0.22.5), corrigée par H16** (`d6745ec`, testé dans le notch) : `HermesClient.respondToApproval` renvoie `execution_generation` copié de l'événement `approval.request` (sans lui, 400 et tour bloqué).
 - ✅ **Régression v2 (v0.22.5), corrigée par H16** : les nouvelles lignes de `state.db` ont `session_key` = `agent:main:api_server:dm:notchnotch-<uuid>`. `SessionStore.latestRowId` lit d'abord le registre `state_meta` `gateway.api.conversation.v1.<clé>`, puis `session_key` brut ou finissant par `:<clé>` ; l'historique extrait la clé des trois formes. H16 a aussi branché le Stop sur `POST /v1/runs/{id}/stop`.
 - Conversations de test d'E0a dans `~/.hermes/state.db` (4 conversations et une session enfant, ids dans le rapport) : à supprimer au besoin avec `hermes sessions delete`.
-- H14 (onboarding allégé) attend ses questions ouvertes 3, 6 et 7 : à trancher avant E6.
+- ✅ H14 (onboarding en 4 écrans) fusionné dans master le 23/10 (`e0b6186`). E6 s'y greffe : l'équipe se propose après l'écran « Prêt ».
 - Le gateway « canonical » est arrivé dès la v0.22.5 (H16 fait). Reste à revérifier en E5 : avec la nouvelle identité de session, le lien carte → conversation (`tasks.session_id`) et les tours `[kanban]`. Re-probe à la sortie de v0.23.0.
 - Clipper : toujours en 401 (pas de `API_SERVER_KEY`).
 

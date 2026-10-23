@@ -34,16 +34,22 @@ Built with Swift & SwiftUI. Inspired by [BoringNotch](https://github.com/TheBore
 ## Features
 
 ### Chat in the notch
-Hover or click the notch to expand a chat panel. Your agent remembers context across app restarts via server-side conversation persistence. Edit any message you sent, edit any answer, copy, or retry for a fresh response.
+Hover or click the notch to expand a chat panel. Your agent remembers context across app restarts via server-side conversation persistence. Edit any message you sent, edit any answer, copy, or retry for a fresh response. **Stop** really stops the agent, even mid-command.
 
-### Routines
-Create and monitor automated tasks from a visual panel. 25 ready-made templates across 7 categories (Personal, Professional, Research, Travel, Health, Finance, Creator), or describe your own in plain English. Active jobs display as cards with live status, human-readable schedule, run count, and next execution time. Pause, reschedule, or remove with a right-click.
+### Approvals
+When your agent wants to run a dangerous command (delete files, change system settings…), a card appears in its answer: **Autoriser** once or **Refuser**. If the notch is closed, a toast tells you it's waiting. Nothing runs without your click.
+
+### Slash palette
+Type `/` in the composer: notchnotch's commands (`/new`, `/model`, `/sessions`, `/stop`) with French descriptions, then your installed skills. Arrow keys, Tab and Return work like in Claude Code. Hermes-only commands that can't run over HTTP (`/goal`, `/loop`…) point you to where they work instead of being sent to the model.
+
+### Missions
+Create and monitor automated tasks from the Missions tab. 25 ready-made templates across 7 categories (Personal, Professional, Research, Travel, Health, Finance, Creator), or describe your own in plain English. Each mission shows its live status, human-readable schedule, run count and next run. Pause, resume or change the schedule right there; create or remove one by asking your agent. The first failure of a series raises a toast that opens Missions, and a banner shows what your missions cost over the last 30 days.
 
 ### Brain
-Three-tab panel to browse everything your agent knows:
-- **Memory** -- facts, project context, and preferences parsed from Hermes's memory files.
-- **Skills** -- installed agent skills with category badges and descriptions.
-- **Wiki** -- Karpathy-style knowledge base. Articles your agent has written or that you've fed it. "Ask" button on each article to query Hermes directly.
+Three tabs to see what your agent knows and does:
+- **Memory** -- facts, project context and preferences from Hermes's memory, plus the knowledge base it builds from what you feed it.
+- **Tools** -- connected apps, capabilities and installed skills, with the Skills Hub catalogue to add more.
+- **Missions** -- your routines (see above).
 
 ### Brain dumps
 Multiple ways to feed your agent's brain:
@@ -59,7 +65,7 @@ Browse and resume past sessions. Color-coded source icons (orange=CLI, blue=Tele
 notchnotch auto-detects your Telegram session. Same conversation on your Mac and your phone, no manual linking. One agent, two interfaces.
 
 ### Expanded bar
-When the notch is open, a bar shows model name, reasoning effort selector (none to xhigh), context window gauge, and incognito mode toggle.
+When the notch is open, a bar shows the model, a reasoning effort selector (none to xhigh), a context window gauge (hover it for the token count) and an incognito toggle. The model menu lists the providers you've connected in Hermes and switches the model for the current chat only; the default model stays in Settings.
 
 ### Inline images and smart file paths
 Images in responses render as inline thumbnails. File paths render as color-coded cards. Click to open, right-click to reveal in Finder.
@@ -109,14 +115,12 @@ No Xcode required. Command Line Tools only (`xcode-select --install`).
 
 notchnotch handles everything on first open:
 
-1. **Welcome** -- the notchnotch logo
-2. **Privacy** -- what stays local, what goes to your AI provider
-3. **Install** -- Hermes installs automatically in the background
-4. **Model** -- pick a free model (Nous Portal, zero config)
-5. **Telegram** -- optionally connect a Telegram bot for mobile access
-6. **Ready** -- start chatting
+1. **Welcome** -- the notchnotch logo and what stays on your Mac, what goes to your AI provider
+2. **Install** -- Hermes installs in the background, stage by stage (latest stable release)
+3. **Connect** -- sign in with OpenRouter in one click (a free model with tools is picked for you), or paste your own OpenRouter, OpenAI, Anthropic or MiniMax key
+4. **Ready** -- start chatting
 
-If Hermes is already installed (`~/.hermes/config.yaml` exists), the onboarding is skipped.
+Contrôle du Mac (computer use) now lives in Settings, and Telegram is no longer part of the onboarding. If Hermes is already installed (`~/.hermes/config.yaml` exists), the install screen only starts the gateway.
 
 ### 3. Talk to your agent
 
@@ -128,15 +132,16 @@ A few things to try first:
 - Record a voice memo: `Ctrl+Shift+R`, speak, press again to send
 - Clip a web page: install [NotchNotch Clipper](https://github.com/KikinaStudio/NotchNotch-Clipper), click the extension on any page
 - Check what your agent knows: open the Brain panel, browse Memory, Skills, Wiki
-- Continue from your phone: set up Telegram in Settings, same conversation carries over
+- Continue from your phone: connect a Telegram bot to Hermes (`hermes gateway setup`), same conversation carries over
 
 ### 4. Settings
 
 Click the gear icon (top-right):
-- **AI Provider** -- switch between Nous, OpenRouter, OpenAI, Anthropic. Paste API keys.
-- **Agent** -- max iterations (Quick/Normal/Deep), streaming toggle.
-- **Execution** -- terminal backend (local/docker/ssh).
-- **Session** -- Telegram session status.
+- **AI Provider** -- switch between providers, paste API keys, pick the default model. With OpenRouter, a privacy row links to your OpenRouter privacy settings.
+- **Contrôle du Mac** -- let your agent use your Mac (install, then grant Accessibility and Screen Recording with one « Autoriser » button; the status shown is the real one, read from Hermes).
+- **Session** -- whether a Telegram session is linked.
+- **Approvals** -- ask before dangerous commands (manual), let Hermes judge (smart), or off.
+- **Avancé** -- memory provider, agent, execution backend, Hermes service, and where your keys live (`~/.hermes/.env`, owner-only; links to Hermes's 1Password / Bitwarden support).
 
 ---
 
@@ -146,6 +151,8 @@ Click the gear icon (top-right):
 - **MacBook with notch** (works on non-notch Macs too, positioned at top-center)
 
 Hermes is installed automatically on first launch. No terminal required.
+
+**Hermes compatibility** -- notchnotch works with Hermes v0.11 and later. From v0.21.6 it uses Hermes's streaming chat API (live reasoning, status lines, approval cards). Tested up to **Hermes v0.22.5** (released 2026-10-22), whose new gateway changed how approvals and conversations are identified: notchnotch handles both the old and the new behaviour.
 
 ### Permissions
 
@@ -161,7 +168,8 @@ macOS will prompt for:
 - **No local message history on restart** -- the UI starts blank after relaunch, but Hermes preserves full conversation context server-side. Your agent remembers everything.
 - **No per-pixel drag-resize** -- two preset panel sizes ship (680x380pt standard, up to 900x600pt large). Toggle via the resize button in the top bar.
 - **Hardcoded localhost:8642** -- no UI to change the Hermes URL yet.
-- **Read-only cron management** -- routine actions (pause, schedule change, remove) go through chat. No direct API manipulation from the UI.
+- **Creating or removing a mission goes through chat** -- pause, resume and schedule changes are direct, but new missions and removals are asked of your agent.
+- **Some Hermes commands only work elsewhere** -- `/goal`, `/loop` and `/heartbeat` need Telegram or Hermes Desktop; Hermes's HTTP API doesn't run slash commands (checked up to v0.22.5).
 - **Unsigned** -- triggers Gatekeeper. Use `xattr -cr` to clear the quarantine flag.
 
 ---
@@ -179,6 +187,10 @@ macOS will prompt for:
 - [x] Expanded bar (model, reasoning effort, context gauge, incognito)
 - [x] LLM provider picker with brand icons (11 providers, custom OpenAI-compatible endpoints, custom model IDs)
 - [x] Memory provider selection UI (built-in, hindsight, mem0, supermemory, honcho, retaindb, openviking, byterover, holographic)
+- [x] Hermes v0.21–v0.22.5 support: streaming chat, approval cards, real Stop, per-chat model, slash palette
+- [x] Missions: pause, resume and edit schedules in the UI, failure toasts, 30-day cost
+- [x] Lighter onboarding (4 screens, OpenRouter sign-in)
+- [ ] Agent team (v3, in progress): persistent role agents (sales, accounting, communication, admin) orchestrated by your main agent, asking before anything leaves your Mac -- see [PLAN-V3-EQUIPE.md](PLAN-V3-EQUIPE.md)
 - [ ] Dynamic notch height (auto-grow with content, drag handle)
 - [x] Auto-update via Sparkle (EdDSA-signed, ad-hoc release)
 - [x] Universal binary (arm64 + x86_64)
