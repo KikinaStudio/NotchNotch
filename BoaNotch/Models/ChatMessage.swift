@@ -44,6 +44,9 @@ struct AgentEvent: Identifiable {
 struct ApprovalRequest {
     let runId: String
     let requestId: String
+    /// Sent back with the answer on v0.22.5+, which refuses it otherwise (400). Older gateways
+    /// don't emit it (nil).
+    let executionGeneration: Int?
     /// Already redacted by Hermes. Shown in full.
     let command: String
     let description: String

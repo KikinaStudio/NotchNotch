@@ -118,7 +118,7 @@ struct ConversationHistoryView: View {
 
                 Spacer()
 
-                if let date = session.startedAt {
+                if let date = session.lastActiveAt {
                     Text(relativeFormatter.localizedString(for: date, relativeTo: Date()))
                         .font(DS.Text.bodySmall)
                         .foregroundStyle(.tertiary)

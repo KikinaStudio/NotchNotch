@@ -19,6 +19,8 @@ class HermesClient {
     /// Pre-v0.21.6 gateways use it as the state.db row id (`X-Hermes-Session-Id`); v0.21.6+
     /// ignore that header on /v1/responses, mint their own id and record our key in
     /// `sessions.session_key` (`X-Hermes-Session-Key`, inherited by compression children).
+    /// v0.22.5+ store the route `agent:<profile>:api_server:dm:<row id>` there instead, and keep
+    /// key → row in `state_meta` when the two differ (see `SessionStore.latestRowId`).
     /// One key per conversation: Hermes resolves a known key to its latest live row, so a
     /// shared key would merge every new conversation into the previous one.
     var sessionId: String? {
@@ -132,6 +134,9 @@ class HermesClient {
         /// `approval.request` (/v1/chat/completions only): Hermes blocks the turn until
         /// `respondToApproval` answers or `approvals.timeout` denies it.
         case approvalRequested(ApprovalRequest)
+        /// First /v1/chat/completions chunk: its chatcmpl id doubles as the run id that
+        /// `stopRun` interrupts. Fired again by each retry attempt.
+        case runStarted(id: String)
     }
 
     /// Sentinel thrown by `performStreamAttempt` when the SSE stream
@@ -481,6 +486,7 @@ class HermesClient {
         var thinkSplitter = ThinkTagSplitter()
         var inReasoningChannel = false
         var finalChunk: [String: Any]? = nil
+        var runId: String? = nil
         func closeReasoning() {
             if inReasoningChannel { inReasoningChannel = false; onEvent(.thinkingEnded) }
         }
@@ -493,6 +499,10 @@ class HermesClient {
 
             switch event.name ?? "" {
             case "":
+                if runId == nil, let id = payload["id"] as? String, !id.isEmpty {
+                    runId = id
+                    onEvent(.runStarted(id: id))
+                }
                 guard let choice = (payload["choices"] as? [[String: Any]])?.first else { break }
                 let delta = choice["delta"] as? [String: Any] ?? [:]
                 if let reasoning = delta["reasoning_content"] as? String, !reasoning.isEmpty {
@@ -536,6 +546,7 @@ class HermesClient {
                 onEvent(.approvalRequested(ApprovalRequest(
                     runId: runId,
                     requestId: requestId,
+                    executionGeneration: payload["execution_generation"] as? Int,
                     command: payload["command"] as? String ?? "",
                     description: payload["description"] as? String ?? "",
                     choices: payload["choices"] as? [String] ?? []
@@ -785,9 +796,12 @@ class HermesClient {
     // MARK: - Approvals (documented exception: user click only, never "always")
 
     /// Answer a pending `approval.request` of a streaming chat turn (the chatcmpl id doubles as
-    /// the run id). `choice` is "once" or "deny". Returns false on 409 `approval_not_pending`:
-    /// Hermes no longer waits (timeout → denied, or the turn ended).
-    func respondToApproval(runId: String, requestId: String, choice: String) async throws -> Bool {
+    /// the run id). `choice` is "once" or "deny". v0.22.5+ wants exactly `{request_id,
+    /// execution_generation, choice}` (400 otherwise) and answers `status` "resolved" or
+    /// "already_resolved"; older gateways take `{choice, request_id}`. Returns false on 409
+    /// (`approval_not_pending`, `not_found`…) or "already_resolved": Hermes no longer waits
+    /// (timeout → denied, or the turn ended).
+    func respondToApproval(runId: String, requestId: String, executionGeneration: Int?, choice: String) async throws -> Bool {
         guard let encodedId = runId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
               let url = URL(string: "\(baseURL)/v1/runs/\(encodedId)/approval") else {
             throw HermesError.invalidURL
@@ -795,7 +809,9 @@ class HermesClient {
         var request = makeRequest(url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: ["choice": choice, "request_id": requestId])
+        var body: [String: Any] = ["choice": choice, "request_id": requestId]
+        if let executionGeneration { body["execution_generation"] = executionGeneration }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw HermesError.invalidResponse
@@ -808,7 +824,26 @@ class HermesClient {
             }
             throw HermesError.httpErrorWithBody(httpResponse.statusCode, bodyString)
         }
-        return true
+        let status = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["status"] as? String
+        return status != "already_resolved"
+    }
+
+    /// Stop the agent of a streaming chat turn (documented exception: Stop button only). On
+    /// v0.22.5+ closing the stream no longer interrupts the agent: the command keeps running and
+    /// the turn is saved. Older gateways stop on disconnect and answer 404/409 here. Best effort.
+    func stopRun(runId: String) async {
+        guard let encodedId = runId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let url = URL(string: "\(baseURL)/v1/runs/\(encodedId)/stop") else { return }
+        var request = makeRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
+        do {
+            let (_, response) = try await session.data(for: request)
+            os_log("[notchnotch] run stop: HTTP %d", type: .info, (response as? HTTPURLResponse)?.statusCode ?? -1)
+        } catch {
+            os_log("[notchnotch] run stop failed: %{public}@", type: .error, String(describing: error))
+        }
     }
 
     // MARK: - Title generation (ChatGPT-style auto-name)
