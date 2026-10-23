@@ -66,6 +66,8 @@ cp BoaNotch/Resources/*.json "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/PixelIcons/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/BrandIcons/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
+mkdir -p "$APP_DIR/Resources/Roles"
+cp BoaNotch/Resources/Roles/*.yaml "$APP_DIR/Resources/Roles/" 2>/dev/null || true
 
 # Copy Sparkle.framework into the app bundle (Sparkle needs to ship inside Frameworks/)
 SPARKLE_FRAMEWORK=$(find .build/artifacts/sparkle -name "Sparkle.framework" -type d | head -1)

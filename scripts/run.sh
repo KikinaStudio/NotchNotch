@@ -30,6 +30,9 @@ cp BoaNotch/Resources/*.json "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/PixelIcons/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
 cp BoaNotch/Resources/BrandIcons/*.svg "$APP_DIR/Resources/" 2>/dev/null || true
+# Team role catalogue: kept in its own folder, read via Bundle.main (Resources/Roles/)
+mkdir -p "$APP_DIR/Resources/Roles"
+cp BoaNotch/Resources/Roles/*.yaml "$APP_DIR/Resources/Roles/" 2>/dev/null || true
 
 # Note: no SPM resource bundle copy — all loads go through Bundle.main
 # from Contents/Resources.
